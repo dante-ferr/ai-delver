@@ -1,0 +1,18 @@
+[submodule "ai-delver-level"]
+	path = ai-delver-level
+	url = https://github.com/dante-ferr/ai-delver-level.git
+[submodule "ai-delver-intelligence"]
+	path = ai-delver-intelligence
+	url = https://github.com/dante-ferr/ai-delver-intelligence.git
+[submodule "ai-delver-client"]
+	path = ai-delver-client
+	url = https://github.com/dante-ferr/ai-delver-client.git
+[submodule "pytiling-lib"]
+	path = pytiling-lib
+	url = https://github.com/dante-ferr/pytiling.git
+[submodule "pyglet-dragonbones-lib"]
+	path = pyglet-dragonbones-lib
+	url = https://github.com/dante-ferr/pyglet-dragonbones.git
+[submodule "ai-delver-runtime"]
+	path = ai-delver-runtime
+	url = https://github.com/dante-ferr/ai-delver-runtime.git

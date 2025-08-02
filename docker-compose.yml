@@ -17,7 +17,7 @@ services:
       - ./pyglet-dragonbones-lib:/app/pyglet-dragonbones-lib
       - ./ai-delver-runtime:/app/ai-delver-runtime
       - ./ai-delver-level:/app/ai-delver-level
-      - ./assets:/app/assets
+      - ./ai-delver-client/assets:/app/assets
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: ["python3", "src/main.py"]

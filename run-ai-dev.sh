@@ -30,4 +30,4 @@ echo "📖 Using base image: ${BASE_IMAGE_VAR}"
 echo "🚀 Starting Ai Delver Intelligence server..."
 
 # The BUILD_FLAG variable will expand to "--build" or to nothing
-docker-compose ${COMPOSE_FILES} up ${BUILD_FLAG} --remove-orphans
+docker compose ${COMPOSE_FILES} up ${BUILD_FLAG} --remove-orphans

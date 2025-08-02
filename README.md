@@ -21,17 +21,16 @@ This repo encapsulates all of its internal dependencies, serving as a developmen
 
 ## Requirements
 
-- For ai-delver client:
-  - python poetry
-- For ai-delver-intelligence:
-  - A decent NVIDIA GPU
-    - NVIDIA Gpu Drivers
-    - NVIDIA Container Toolkit
-  - OR a decent AMD GPU
-    - (I need to list the requirements when possible)
-  - docker
-  - docker compose
-  - docker buildx
+- pyenv
+- python poetry
+- A decent NVIDIA GPU
+  - NVIDIA Gpu Drivers
+  - NVIDIA Container Toolkit
+- OR a decent AMD GPU
+  - (I need to list the requirements when possible)
+- docker
+- docker compose
+- docker buildx
 
 ## Setup (Local)
 

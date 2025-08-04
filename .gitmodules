@@ -16,3 +16,6 @@
 [submodule "ai-delver-runtime"]
 	path = ai-delver-runtime
 	url = https://github.com/dante-ferr/ai-delver-runtime.git
+[submodule "assets"]
+	path = assets
+	url = https://github.com/dante-ferr/ai-delver-assets.git

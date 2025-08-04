@@ -2,7 +2,7 @@
 
 **AI Delver** is a simulation framework where an AI agent learns to navigate 2D environments filled with obstacles, traps, and goals.
 
-This repo encapsulates all of its internal dependencies, serving as a development environment. So the purpose of working with it is to be able to change the codes of any of those dependencies, with this changes affecting the entire project's behavior in real time. Therefore, you must expect the tutorial sections below to work on a development standpoint, while the production environment should be set up separately on the ai-delver-client and ai-delver-intelligence subprojects (but this is not available yet. The production environment will only be available after the first beta version of Ai Delver).
+This repo encapsulates all of its internal dependencies, serving as a development environment. So the purpose of working with it is to be able to change the codes of any of those dependencies, with those changes affecting the entire project's behavior in real time. Therefore, you must expect the tutorial sections below to work on a development standpoint, while the production environment should be set up separately on the ai-delver-client and ai-delver-intelligence subprojects (but this is not available yet. The production environment will only be available after the first beta version of Ai Delver).
 
 ## Features
 
@@ -23,11 +23,9 @@ This repo encapsulates all of its internal dependencies, serving as a developmen
 
 - pyenv
 - python poetry
-- A decent NVIDIA GPU
+- A decent NVIDIA GPU is highly recommended. If you don't have one, tensorflow will use your CPU's processing power. Otherwise, additionaly you must have in your system:
   - NVIDIA Gpu Drivers
   - NVIDIA Container Toolkit
-- OR a decent AMD GPU
-  - (I need to list the requirements when possible)
 - docker
 - docker compose
 - docker buildx

@@ -20,8 +20,11 @@ services:
       - ./ai-delver-level:/ai-delver-level
       - ./pyglet-dragonbones-lib:/pyglet-dragonbones-lib
       - ./assets:/assets
+      - ./ai-delver-intelligence/logs:/app/logs
     environment:
       - PYTHONPATH=/ai-delver-runtime:/ai-delver-level:/pytiling-lib:/pyglet-dragonbones-lib
-    command: ["python3", "src/main.py"]
+      - CONTAINER_COMMAND
+      
+    command: sh -c "${CONTAINER_COMMAND:-python3 src/main.py}"
     stdin_open: true
     tty: true

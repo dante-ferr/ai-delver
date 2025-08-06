@@ -14,7 +14,7 @@ build-ai-dev: on-run update-submodules
 	./run-ai-dev.sh --build
 
 run-ai-dev: on-run
-	./run-ai-dev.sh
+	./run-ai-dev.sh $(ENTRYPOINT)
 
 build-client-dev: update-submodules
 	cd ai-delver-client && poetry install

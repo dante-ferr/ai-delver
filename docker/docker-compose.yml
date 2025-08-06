@@ -24,7 +24,8 @@ services:
     environment:
       - PYTHONPATH=/ai-delver-runtime:/ai-delver-level:/pytiling-lib:/pyglet-dragonbones-lib
       - CONTAINER_COMMAND
+      - AUTO_TRAIN_ON_STARTUP=${AUTO_TRAIN_ON_STARTUP:-false}
       
-    command: sh -c "${CONTAINER_COMMAND:-python3 src/main.py}"
+    command: sh -c "${CONTAINER_COMMAND}"
     stdin_open: true
     tty: true

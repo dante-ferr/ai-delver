@@ -14,7 +14,7 @@ This repo encapsulates all of its internal dependencies, serving as a developmen
 
 - [`ai-delver-client`](https://github.com/dante-ferr/ai-delver-client): Client-side of the project. It includes every piece of interface the user needs to interact it in order to play Ai Delver.
 - [`ai-delver-intelligence`](https://github.com/dante-ferr/ai_delver_intelligence): Server-side of the project. It manages the ai processing with Tensorflow needed to train the delver.
-- [`ai-delver-level`](): Includes the code with the level's model.
+- [`ai-delver-level`](https://github.com/dante-ferr/ai-delver-level.git): Includes the code with the level's model.
 - [`ai-delver-runtime`](https://github.com/dante-ferr/ai_delver_runtime): Subproject responsible for the runtime. It means that it includes the code behind the simulations that the ai will be trained on, the game and the replay system.
 - [`pytiling`](https://github.com/dante-ferr/pytiling.git): Autotiling library for handling tilemaps.
 - [`pyglet-dragonbones`](https://github.com/dante-ferr/pyglet-dragonbones.git): Renderer for DragonBones animation assets in `pyglet`.
@@ -46,6 +46,9 @@ This repo encapsulates all of its internal dependencies, serving as a developmen
 
 - `run-ai-dev`
   Builds the intelligence container and turns it on.
+
+- `build-client-dev`
+  Builds the client side by installing its dependencies.
 
 - `run-client-dev ENTRYPOINT=<game, ai or editor>`
   Executes the client-side application. This command supports an "ENTRYPOINT" variable with the following options:

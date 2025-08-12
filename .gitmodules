@@ -19,3 +19,6 @@
 [submodule "assets"]
 	path = assets
 	url = https://github.com/dante-ferr/ai-delver-assets.git
+[submodule "ai-delver-agent"]
+	path = ai-delver-agent
+	url = https://github.com/dante-ferr/ai-delver-agent.git

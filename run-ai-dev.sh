@@ -1,20 +1,20 @@
 #!/bin/bash
 set -e
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )
 
-# --- Argument Parsing ---
-ENTRYPOINT="main" # Default is to run the server only
+# Argument Parsing
+ENTRYPOINT="main"
+BUILD_FLAG=""
 for arg in "$@"; do
-  # This script now only accepts the entrypoint argument, not --build
-  if [ "$arg" != "--build" ]; then
+  if [ "$arg" = "--build" ]; then
+    BUILD_FLAG="--build"
+  else
     ENTRYPOINT="$arg"
   fi
 done
 
-# --- Determine container behavior via environment variables ---
-# The command to run inside the container is ALWAYS the same now.
-# export CONTAINER_COMMAND="python3 -m uvicorn src.api.main:app --host 0.0.0.0 --port 8001"
-export CONTAINER_COMMAND="python3 src/main.py"
+# Determine container behavior via environment variables
+export CONTAINER_COMMAND="PYTHONHASHSEED=0 python3 src/main.py"
 export AUTO_TRAIN_ON_STARTUP="false" # Default value
 
 if [ "$ENTRYPOINT" = "auto_train_request" ]; then
@@ -24,8 +24,7 @@ else
   echo "🚦 Entrypoint is 'main'. Server will start and wait for requests."
 fi
 
-# ... (The rest of the script for GPU detection and execution remains the same) ...
-# --- Simplified GPU Detection ---
+# GPU Detection
 if lspci | grep -iq 'vga.*nvidia'; then
   echo "✅ NVIDIA GPU detected. Using NVIDIA environment."
   export BASE_IMAGE_VAR="tensorflow/tensorflow:2.15.0-gpu"
@@ -36,7 +35,18 @@ else
   COMPOSE_FILES="-f docker/docker-compose.yml"
 fi
 
-# --- Execution ---
+# This section creates a .env file
+# Docker Compose will automatically load it to get the UID and GID for setting permissions.
+echo "⚙️  Generating .env file for user permissions..."
+ENV_FILE_PATH="${SCRIPT_DIR}/.env"
+echo "UID=$(id -u)" > ${ENV_FILE_PATH}
+echo "GID=$(id -g)" >> ${ENV_FILE_PATH}
+echo ".env file created at ${ENV_FILE_PATH}"
+
+echo "🔧 Ensuring host log directory exists..."
+mkdir -p "${SCRIPT_DIR}/ai-delver-intelligence/logs"
+
+# Execution
 echo "📖 Using base image: ${BASE_IMAGE_VAR}"
 echo "🚀 Starting the intelligence container..."
 

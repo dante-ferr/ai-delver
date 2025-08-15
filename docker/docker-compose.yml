@@ -8,11 +8,12 @@ services:
       target: builder-dev
       args:
         BASE_IMAGE: ${BASE_IMAGE_VAR}
-        UID: ${UID:-1000}
-        GID: ${GID:-1000}
+        UID: ${UID}
+        GID: ${GID}
     ports:
       - "8001:8001"
     working_dir: /app
+    user: "${UID}:${GID}"
     volumes:
       - ./ai-delver-intelligence:/app
       - ./pytiling-lib:/pytiling-lib

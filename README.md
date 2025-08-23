@@ -8,7 +8,7 @@ This repo encapsulates all of its internal dependencies, serving as a developmen
 
 - 🧠 **AI Integration**: Reinforcement learning support for training agents to solve complex spatial challenges.
 - 🧱 **Level Editor**: A GUI tool for designing levels using a tile-based system powered by Pytiling.
-- 📊 **Replay System**: Save and review agent behaviors across different environments (NOT AVAILABLE YET).
+- 📊 **Replay System**: Save and review agent behaviors. Also see statistics regarding the AI's attempts.
 
 ## Subprojects
 
@@ -34,7 +34,7 @@ This repo encapsulates all of its internal dependencies, serving as a developmen
 
 - Git clone Ai Delver (this repo) with its submodules: `git clone --recurse-submodules -j8 https://github.com/dante-ferr/ai-delver.git`
 - Run `make run-ai-dev`
-- Run `make run-client-dev`. Note that this command has an entrypoint variable, which is explained further in the Commands section.
+- Run `make run-client-dev` (on another terminal).
 
 ## Commands
 
@@ -50,8 +50,8 @@ This repo encapsulates all of its internal dependencies, serving as a developmen
 - `build-client-dev`
   Builds the client side by installing its dependencies.
 
-- `run-client-dev ENTRYPOINT=<game, ai or editor>`
-  Executes the client-side application. This command supports an "ENTRYPOINT" variable with the following options:
-  - game: immediately runs the Ai Delver game on the default-named level (My custom level.dill).
-  - ai: sends a training request to the Intelligence container. Ensure that it's running while this command is executed.
-  - editor: runs the editor application of the project. This is the default behavior of the run-client-dev command, so specifying "editor" as an entrypoint isn't actually needed.
+- `run-client-dev`
+  Executes the client-side application.
+
+## Tweaks
+You can tweak the ai training settings at ai-delver-intelligence/src/ai/config.json. Be careful, because some of them might break the app if changed.

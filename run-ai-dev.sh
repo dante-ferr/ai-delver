@@ -15,14 +15,6 @@ done
 
 # Determine container behavior via environment variables
 export CONTAINER_COMMAND="PYTHONHASHSEED=0 python3 src/main.py"
-export AUTO_TRAIN_ON_STARTUP="false" # Default value
-
-if [ "$ENTRYPOINT" = "auto_train_request" ]; then
-  echo "🚦 Entrypoint is 'auto_train_request'. Server will start training automatically."
-  export AUTO_TRAIN_ON_STARTUP="true"
-else
-  echo "🚦 Entrypoint is 'main'. Server will start and wait for requests."
-fi
 
 # GPU Detection
 if lspci | grep -iq 'vga.*nvidia'; then

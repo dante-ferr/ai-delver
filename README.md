@@ -23,7 +23,7 @@ This repo encapsulates all of its internal dependencies, serving as a developmen
 
 - pyenv
 - python poetry
-- A decent NVIDIA GPU is highly recommended. If you don't have one, tensorflow will use your CPU's processing power. Otherwise, additionaly you must have in your system:
+- A decent NVIDIA GPU is highly recommended. If you don't own one, tensorflow will only use your CPU's processing power. Otherwise, additionaly you must have in your system:
   - NVIDIA Gpu Drivers
   - NVIDIA Container Toolkit
 - docker

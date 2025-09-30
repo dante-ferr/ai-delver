@@ -1,5 +1,7 @@
 services:
-  ai-delver-intelligence:
+  nvidia-test:
+    image: tensorflow/tensorflow:2.15.0-gpu
+    command: nvidia-smi
     deploy:
       resources:
         reservations:

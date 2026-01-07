@@ -8,13 +8,13 @@ update-submodules:
 
 on-run: prepare-scripts
 
-build-ai-dev: on-run update-submodules
+build-ai-dev: on-run
 	./run-ai-dev.sh --build
 
 run-ai-dev: on-run
 	./run-ai-dev.sh
 
-build-client-dev: update-submodules
+build-client-dev:
 	cd ai-delver-client && poetry install
 
 run-client-dev: on-run

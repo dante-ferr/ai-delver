@@ -18,16 +18,17 @@ This repo encapsulates all of its internal dependencies, serving as a developmen
 - [`ai-delver-runtime`](https://github.com/dante-ferr/ai_delver_runtime): Subproject responsible for the runtime. It means that it includes the code behind the simulations that the ai will be trained on, the game and the replay system.
 - [`pytiling`](https://github.com/dante-ferr/pytiling.git): Autotiling library for handling tilemaps.
 - [`pyglet-dragonbones`](https://github.com/dante-ferr/pyglet-dragonbones.git): Renderer for DragonBones animation assets in `pyglet`.
+- [`ai-delver-assets`](https://github.com/dante-ferr/ai-delver-assets.git): Assets for the project.
 
 ## Requirements
 
 - pyenv
 - python poetry
-- A decent NVIDIA GPU is highly recommended. If you don't own one, tensorflow will only use your CPU's processing power. Otherwise, additionaly you must have in your system:
+- A decent NVIDIA GPU is highly recommended. If you don't own one, tensorflow will only use your CPU's processing power, which is super slow. Additionaly you must have in your system:
   - NVIDIA Gpu Drivers
   - NVIDIA Container Toolkit
 - docker
-- docker compose
+- docker-compose
 - docker buildx
 
 ## Setup (Local)
@@ -42,10 +43,17 @@ This repo encapsulates all of its internal dependencies, serving as a developmen
   Initializes and updates git submodules without overwriting local changes. It's automatically triggered on the next commands.
 
 - `build-ai-dev`
-  Builds the intelligence container, enforces the application of changes on docker-related files and turns the container on.
+  - Builds the intelligence container, enforces the application of changes on docker-related files and turns the container on.
+  - Args:
+    - --memory (default: 12G): The amount of RAM dedicated to the container. It's important to set a number compatible to your machine, otherwise your system may freeze.
+    - --batch-size (default: 32): The amount of parallel environments per training session. Setting a low number will make training too slow, as will setting a very high number (which might even freeze your system as well).
+    - --shm (default: 2g): Shared memory size. Essential to prevent Python multiprocessing crashes when using many parallel environments.
+    - --swap (default: 14G): Total memory limit (RAM + Swap). Setting this protects your host OS from OOM locking if the training consumes too much memory.
+    - Ex: make build-ai-dev ARGS="--batch-size=48 --memory=12G --shm=2g --swap=14G"
 
 - `run-ai-dev`
-  Builds the intelligence container and turns it on.
+  Turns the container on. It also builds the container if it hasn't been done yet.
+  - Args: the same as the previous command.
 
 - `build-client-dev`
   Builds the client side by installing its dependencies.

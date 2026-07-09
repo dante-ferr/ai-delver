@@ -49,7 +49,7 @@ class App(ctk.CTk):
         self._try_to_connect_to_server()
 
     def _try_to_connect_to_server(self):
-        from client_requests import gui_training_client
+        from client_requests.gui_training_client import gui_training_client
         import threading
         import asyncio
 

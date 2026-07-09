@@ -23,7 +23,7 @@ class ServerConnectionPanel(ctk.CTkFrame):
 
     async def _attempt_connection(self):
         from state_managers import training_state_manager
-        from client_requests import gui_training_client
+        from client_requests.gui_training_client import gui_training_client
 
         training_state_manager.set_value("connected_to_server", "loading")
 

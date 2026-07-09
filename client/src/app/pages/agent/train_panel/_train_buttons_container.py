@@ -1,8 +1,9 @@
 import customtkinter as ctk
+import sys
 from state_managers import training_state_manager
 import asyncio
 from app.utils import verify_level_issues
-from client_requests import gui_training_client
+from client_requests.gui_training_client import gui_training_client
 import threading
 from app.components import StandardButton
 import subprocess
@@ -77,7 +78,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
         client_dir = os.path.abspath(os.path.join(PROJECT_ROOT, ".."))
 
         cmd = [
-            "poetry", "run", "python", "src/cli/main.py",
+            sys.executable, "src/cli/main.py",
             "train",
             "--levels", levels_str,
             "--cycles", cycles,
@@ -182,7 +183,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
     def _run_cli_interrupt(self):
         client_dir = os.path.abspath(os.path.join(PROJECT_ROOT, ".."))
         cmd = [
-            "poetry", "run", "python", "src/cli/main.py",
+            sys.executable, "src/cli/main.py",
             "interrupt",
             "--session-id", str(gui_training_client.session_id),
             "--server", gui_training_client.server_url

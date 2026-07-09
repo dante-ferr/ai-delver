@@ -1,4 +1,5 @@
 import customtkinter as ctk
+import sys
 import threading
 import subprocess
 import json
@@ -175,7 +176,7 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
         )
 
         stats_logs_panel = LoadingLogsPanel(
-            fetch_container, width=64, fg_color="transparent"
+            fetch_container, width=180, fg_color="transparent"
         )
         stats_logs_panel.pack_propagate(False)
         stats_logs_panel.grid(row=0, column=1, padx=(8, 0), sticky="ns")
@@ -243,7 +244,7 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
         client_dir = os.path.abspath(os.path.join(PROJECT_ROOT, ".."))
 
         cmd = [
-            "poetry", "run", "python", "src/cli/main.py",
+            sys.executable, "src/cli/main.py",
             "stats",
             "--agent", agent_name
         ]

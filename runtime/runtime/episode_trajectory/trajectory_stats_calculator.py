@@ -17,13 +17,24 @@ class TrajectoryStatsCalculator:
 
         self.metadata_manager = TrajectoryMetadataManager(agent_name)
 
-    async def get_stats(self) -> Dict[str, int]:
+    async def get_stats(self) -> Dict[str, Any]:
         """
         Calculates trajectory statistics, incrementally updating from the last run.
         Stats are read from and saved to the metadata file to avoid re-reading all files.
         """
         metadata = await self.metadata_manager.read_metadata()
-        stats = metadata.get("stats", {"amount": 0, "victories": 0})
+        stats = metadata.get("stats", {
+            "amount": 0,
+            "victories": 0,
+            "victories_history": [],
+            "steps_history": []
+        })
+
+        if "victories_history" not in stats:
+            stats["victories_history"] = []
+        if "steps_history" not in stats:
+            stats["steps_history"] = []
+
         last_processed_count = stats.get("amount", 0)
         total_trajectories = metadata.get("trajectory_count", 0)
 
@@ -45,15 +56,27 @@ class TrajectoryStatsCalculator:
 
         return stats
 
-    async def get_stats_legacy(self) -> Dict[str, int]:
+    async def get_stats_legacy(self) -> Dict[str, Any]:
         """
         Calculates trajectory statistics by reading all trajectory files every time.
         This is a "legacy" method for testing and validation purposes.
         """
-        stats = {"amount": 0, "victories": 0}
+        stats = {
+            "amount": 0,
+            "victories": 0,
+            "victories_history": [],
+            "steps_history": []
+        }
         trajectory_files = await asyncio.to_thread(
             list, self.trajectory_dir.glob("trajectory_*.json")
         )
+
+        def get_index_from_path(p):
+            try:
+                return int(p.stem.split("_")[1])
+            except Exception:
+                return 999999
+        trajectory_files.sort(key=get_index_from_path)
 
         tasks = [
             asyncio.create_task(self._read_and_parse_trajectory(path))
@@ -82,16 +105,37 @@ class TrajectoryStatsCalculator:
 
     @staticmethod
     async def _process_trajectory_tasks(
-        tasks: List[asyncio.Task], stats: Dict[str, int]
+        tasks: List[asyncio.Task], stats: Dict[str, Any]
     ):
-        """Processes completed trajectory tasks and updates the victory count."""
-        for future in asyncio.as_completed(tasks):
-            trajectory = await future
-            if trajectory and trajectory.victorious:
-                stats["victories"] += 1
+        """Processes completed trajectory tasks and updates the victory count and histories."""
+        results = await asyncio.gather(*tasks)
+
+        if "victories_history" not in stats:
+            stats["victories_history"] = []
+        if "steps_history" not in stats:
+            stats["steps_history"] = []
+
+        current_accum_victories = stats.get("victories", 0)
+
+        for trajectory in results:
+            if trajectory is None:
+                stats["steps_history"].append(0)
+                stats["victories_history"].append(current_accum_victories)
+                continue
+
+            is_victory = trajectory.victorious
+            if is_victory:
+                current_accum_victories += 1
+
+            stats["victories_history"].append(current_accum_victories)
+
+            steps = len(trajectory.frame_snapshots) if trajectory.frame_snapshots else len(trajectory.delver_actions)
+            stats["steps_history"].append(steps)
+
+        stats["victories"] = current_accum_victories
 
     async def _update_and_save_stats(
-        self, stats: Dict[str, int], total_trajectories: int, metadata: Dict[str, Any]
+        self, stats: Dict[str, Any], total_trajectories: int, metadata: Dict[str, Any]
     ):
         """Updates the stats dictionary and writes it back to the metadata file."""
         stats["amount"] = total_trajectories

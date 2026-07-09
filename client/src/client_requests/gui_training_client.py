@@ -63,6 +63,8 @@ class GuiTrainingClient(TrainingClient):
                 training_state_manager.set_value("level_episode_count", level_episode_count)
                 self._current_cycle += 1
                 training_state_manager.update_training_process_log(self._current_cycle)
+                from state_managers import trajectory_stats_state_manager
+                trajectory_stats_state_manager.notify_trajectory_added()
 
             def on_level_transition(levels_trained):
                 training_state_manager.set_value("levels_trained", levels_trained)

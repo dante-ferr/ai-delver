@@ -80,6 +80,7 @@ class TrajectoryListener:
 
         self.current_cycle += 1
         training_state_manager.update_training_process_log(self.current_cycle)
+        trajectory_stats_state_manager.notify_trajectory_added()
 
     def _handle_end_signal(self):
         duration = time.time() - self.start_time

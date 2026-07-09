@@ -138,6 +138,20 @@ async def main_async(args):
         if not completed_normally:
             await interrupt_training()
 
+        # Calculate final stats locally to update metadata.json and output to stdout
+        try:
+            from runtime.episode_trajectory import TrajectoryStatsCalculator
+            calculator = TrajectoryStatsCalculator(args.agent)
+            stats = await calculator.get_stats()
+            print_json(
+                "stats",
+                amount=stats.get("amount", 0),
+                victories=stats.get("victories", 0),
+                message=f"Final stats: {stats.get('victories', 0)} victories out of {stats.get('amount', 0)} episodes."
+            )
+        except Exception as e:
+            print_json("error", message=f"Failed to calculate stats: {e}")
+
 def main():
     parser = argparse.ArgumentParser(description="AI Delver CLI Training Client")
     parser.add_argument("--levels", required=True, help="Comma-separated level names")

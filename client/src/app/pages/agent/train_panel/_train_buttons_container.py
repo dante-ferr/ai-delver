@@ -138,6 +138,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
                 level_episode_count = data.get("level_episode_count", 0)
                 training_state_manager.set_value("level_episode_count", level_episode_count)
                 training_state_manager.update_training_process_log(cycle)
+                trajectory_stats_state_manager.notify_trajectory_added()
             elif event == "level_transition":
                 levels_trained = data.get("levels_trained", 0)
                 training_state_manager.set_value("levels_trained", levels_trained)

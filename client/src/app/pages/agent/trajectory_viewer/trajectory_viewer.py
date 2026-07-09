@@ -17,15 +17,15 @@ class TrajectoryViewer(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
-        header = TrajectoryHeader(self)
-        header.grid(row=0, column=0, padx=8, pady=(0, 4), sticky="w")
-
         self.data_display = ctk.CTkTextbox(self, wrap="none")
         self.data_display.grid(row=1, column=0, padx=8, pady=(4, 8), sticky="nsew")
         self._set_data_display_to_default()
         self.data_display.configure(state="disabled")
 
         self.trajectory: "EpisodeTrajectory | None" = None
+
+        header = TrajectoryHeader(self)
+        header.grid(row=0, column=0, padx=8, pady=(0, 4), sticky="w")
 
     def display_trajectory(self):
         if self.DISPLAY_TRAJECTORY_JSON:

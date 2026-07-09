@@ -13,6 +13,7 @@ class TrajectoryStatsStateManager(StateManager):
         self.disable_on_get_stats_elements: "set[ctk.CTkBaseClass]" = set()
         self.stats_logs_panel: "LoadingLogsPanel | None" = None
         self.on_refresh_stats_callbacks: list[Callable[[], None]] = []
+        self.on_trajectory_added_callbacks: list[Callable[[], None]] = []
 
         self.add_variable("getting_stats", ctk.BooleanVar, False)
         self.add_callback("getting_stats", lambda _: self._update_ui_state())
@@ -22,6 +23,13 @@ class TrajectoryStatsStateManager(StateManager):
 
     def refresh_stats(self):
         for callback in self.on_refresh_stats_callbacks:
+            callback()
+
+    def add_on_trajectory_added_callback(self, callback: Callable[[], None]):
+        self.on_trajectory_added_callbacks.append(callback)
+
+    def notify_trajectory_added(self):
+        for callback in self.on_trajectory_added_callbacks:
             callback()
 
     def set_stats_logs_panel(self, panel: "LoadingLogsPanel"):

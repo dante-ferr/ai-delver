@@ -20,3 +20,8 @@ build-client-dev:
 
 run-client-dev: on-run
 	cd client && ./run.sh
+
+docs-serve:
+	@which mdbook > /dev/null || (echo "❌ mdBook is not installed. Please install it first (e.g. 'cargo install mdbook' or download the binary from https://github.com/rust-lang/mdBook/releases)" && exit 1)
+	@echo "🖥️ Starting local documentation server at http://localhost:3000..."
+	mdbook serve docs

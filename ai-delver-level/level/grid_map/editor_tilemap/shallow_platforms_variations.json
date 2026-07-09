@@ -1,0 +1,18 @@
+[
+  {
+    "display": [0, 3],
+    "chance": 0.55
+  },
+  {
+    "display": [0, 4],
+    "chance": 0.15
+  },
+  {
+    "display": [1, 4],
+    "chance": 0.15
+  },
+  {
+    "display": [2, 4],
+    "chance": 0.15
+  }
+]

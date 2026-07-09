@@ -1,0 +1,2 @@
+- Apply seed in the ai
+- Delete ai_delver exclusive submodules, converting them to folders inside the main project's repo

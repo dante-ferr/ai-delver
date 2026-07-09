@@ -1,0 +1,2 @@
+from .static_train_process_log import StaticTrainProcessLog
+from .dynamic_train_process_log import DynamicTrainProcessLog

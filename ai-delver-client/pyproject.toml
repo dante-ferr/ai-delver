@@ -1,0 +1,39 @@
+[tool.poetry]
+name = "ai-delver"
+version = "0.1.0"
+description = ""
+authors = ["Dante Ferreira"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.10.0"
+customtkinter = "*"
+pillow = "*"
+cairosvg = "*"
+blinker = "*"
+dill = "==0.4.0"
+numpy = "==1.26.4"
+six = "*"
+pyglet = "*"
+matplotlib = "*"
+fastapi = "*"
+uvicorn = "*"
+requests = "*"
+httpx = "*"
+websockets = "*"
+inflect = "*"
+
+# Local editable packages
+pytiling = { path = "../pytiling-lib", develop = true }
+runtime = { path = "../ai-delver-runtime", develop = true }
+level = { path = "../ai-delver-level", develop = true }
+agent = { path = "../ai-delver-agent", develop = true }
+
+
+[tool.poetry.group.dev.dependencies]
+# e.g. pytest = "*"
+
+[build-system]
+requires = ["poetry-core>=2.0.0"]
+build-backend = "poetry.core.masonry.api"

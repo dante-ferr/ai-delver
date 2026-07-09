@@ -1,0 +1,10 @@
+{
+  "include": ["."],
+  // "exclude": ["venv", "**/__pycache__"],
+  "extraPaths": [
+        "./src",
+        "./src/core",
+        "./src/core/loaders",
+        "./src/core/state_managers"
+    ]
+}

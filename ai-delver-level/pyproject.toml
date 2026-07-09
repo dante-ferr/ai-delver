@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "level"
+version = "0.1.0"
+description = ""
+authors = ["Dante Ferreira"]
+packages = [{ include = "level" }]
+
+[tool.poetry.dependencies]
+python = ">=3.10.0"
+pytiling = { path = "../pytiling-lib", develop = true }
+customtkinter = "*"
+dill = "*"
+
+[build-system]
+requires = ["poetry-core>=2.0.0"]
+build-backend = "poetry.core.masonry.api"

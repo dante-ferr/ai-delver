@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "agent"
+version = "0.1.0"
+description = "Model subproject for Ai Delver's agent."
+authors = ["Dante Ferreira"]
+readme = "README.md"
+packages = [{include = "agent"}]
+
+[tool.poetry.dependencies]
+python = ">=3.10.0"
+runtime = {path = "../ai-delver-runtime", develop = true}
+
+[build-system]
+requires = ["poetry-core>=2.0.0"]
+build-backend = "poetry.core.masonry.api"

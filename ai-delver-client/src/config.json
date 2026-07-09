@@ -1,0 +1,25 @@
+{
+  "tilemap_layer_names": ["platforms"],
+  "window_width": 1280,
+  "window_height": 720,
+  "window_title": "AI Delver",
+  "fps": 60,
+  "min_canvas_zoom": 2,
+  "max_canvas_zoom": 5,
+  "initial_canvas_zoom": 2,
+  "camera": {
+    "start_zoom": 2.0,
+    "min_zoom": 1.0,
+    "max_zoom": 4.0,
+    "scroll_speed": 1.0,
+    "zoom_speed": 0.3
+  },
+  "style": {
+    "font": {
+      "small_size": 12,
+      "standard_size": 14,
+      "subtitle_size": 18
+    },
+    "section_spacing": 48
+  }
+}

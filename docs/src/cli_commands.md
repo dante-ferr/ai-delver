@@ -1,0 +1,128 @@
+# CLI Commands Reference
+
+All commands live in `client/src/cli/commands/` and are routed via `client/src/cli/main.py`.
+
+---
+
+## Commands
+
+### `train`
+Runs a full training session by submitting a training request to the intelligence server and streaming trajectory replays over a WebSocket.
+
+```bash
+poetry run python src/cli/main.py train \
+    --levels "Ai Test #1" \
+    --cycles 10 \
+    --episodes-per-cycle 32 \
+    --mode static \
+    --agent ppo_delver
+```
+
+**GUI Trigger**: The "Train" button in `_train_buttons_container.py`.
+
+---
+
+### `stats`
+Reads the agent's local `metadata.json` and trajectory files, calculates aggregate statistics, and outputs them as a `stats` JSON event.
+
+```bash
+poetry run python src/cli/main.py stats --agent ppo_delver
+```
+
+**GUI Trigger**: The "Get stats" button in `trajectory_stats_panel.py`.
+
+---
+
+### `interrupt`
+Sends an HTTP `POST` to the intelligence server to interrupt an active training session by its session ID.
+
+```bash
+poetry run python src/cli/main.py interrupt \
+    --session-id <uuid> \
+    --server localhost:8001
+```
+
+**GUI Trigger**: The "Interrupt Training" button in `_train_buttons_container.py`.
+
+---
+
+### `create-agent`
+Creates a new agent on disk with a default name.
+
+```bash
+poetry run python src/cli/main.py create-agent --name "Brave Delver"
+```
+
+**GUI Trigger**: CLI command only, or implicit during startup/reset.
+
+---
+
+### `save-agent`
+Saves/persists the agent state on disk under the agent's name directory.
+
+```bash
+poetry run python src/cli/main.py save-agent --name "Brave Delver"
+```
+
+**GUI Trigger**: The "Save" icon button in `_agent_save_button.py`.
+
+---
+
+### `load-agent`
+Loads an existing agent from a specified path directory on disk.
+
+```bash
+poetry run python src/cli/main.py load-agent --path "data/agents/Brave Delver"
+```
+
+**GUI Trigger**: The "Load" folder button in `_agent_load_button.py` via `_AgentLoaderOverlay`.
+
+---
+
+## Output and Event Formats
+
+The GUI runs the CLI as a subprocess (using `subprocess.Popen`) with `stdout=subprocess.PIPE`. It reads lines from stdout in real-time on a background thread and parses each line as a JSON event:
+
+```python
+for line in iter(self.train_process.stdout.readline, ""):
+    data = json.loads(line)
+    event = data.get("event")
+    if event == "session_created":
+        training_state_manager.set_value("training", True)
+    elif event == "progress":
+        ...
+    elif event == "metrics":
+        training_state_manager.update_nerd_metrics(...)
+```
+
+### Event Types
+
+| Event | Source Command | Description |
+|:---|:---|:---|
+| `info` | `train` | Informational messages (e.g. batch-size adjustment) |
+| `init_started` | `train` | Levels are being prepared |
+| `request_sent` | `train` | Training request sent to server |
+| `session_created` | `train` | Server accepted and registered the session |
+| `progress` | `train` | A cycle completed (includes cycle number and episode count) |
+| `level_transition` | `train` | Agent graduated to a new level |
+| `metrics` | `train` | Deep learning metrics snapshot (loss, average return, step, episodes) |
+| `completed` | `train` | All cycles finished successfully |
+| `interrupted` | `train` | Training was interrupted gracefully |
+| `stats` | `stats` | Aggregate statistics for the agent |
+| `agent_created` | `create-agent` | Emitted when a new agent is successfully created |
+| `agent_saved` | `save-agent` | Emitted when an agent's state is successfully saved |
+| `agent_loaded` | `load-agent` | Emitted when an agent is successfully loaded |
+| `error` | any | An unrecoverable error occurred |
+
+### `metrics` Event (Nerd Stats)
+The `metrics` event is emitted at each `LOG_INTERVAL` steps during training. It carries:
+```json
+{
+  "event": "metrics",
+  "step": 500,
+  "loss": 0.042183,
+  "average_return": -1.2345,
+  "episodes": 64
+}
+```
+The GUI's `TrainingStateManager.update_nerd_metrics()` appends these to running history lists and notifies any open `NerdStatsWindow` via its registered listener callback.

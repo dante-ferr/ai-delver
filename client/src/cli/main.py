@@ -32,6 +32,18 @@ def main():
     int_p.add_argument("--session-id", required=True, help="Training session ID to interrupt")
     int_p.add_argument("--server", default="localhost:8001", help="Training server URL")
 
+    # Subcommand: create-agent
+    create_p = subparsers.add_parser("create-agent", help="Creates a new agent on disk")
+    create_p.add_argument("--name", required=True, help="Agent name")
+
+    # Subcommand: save-agent
+    save_p = subparsers.add_parser("save-agent", help="Saves an agent on disk")
+    save_p.add_argument("--name", required=True, help="Agent name")
+
+    # Subcommand: load-agent
+    load_p = subparsers.add_parser("load-agent", help="Loads an agent from a path")
+    load_p.add_argument("--path", required=True, help="Path to the agent directory")
+
     args = parser.parse_args()
 
     if args.command == "train":
@@ -40,6 +52,15 @@ def main():
         run_stats(args.agent)
     elif args.command == "interrupt":
         run_interrupt(args.session_id, args.server)
+    elif args.command == "create-agent":
+        from cli.commands.agent_create import run_create_agent
+        run_create_agent(args.name)
+    elif args.command == "save-agent":
+        from cli.commands.agent_save import run_save_agent
+        run_save_agent(args.name)
+    elif args.command == "load-agent":
+        from cli.commands.agent_load import run_load_agent
+        run_load_agent(args.path)
 
 if __name__ == "__main__":
     main()

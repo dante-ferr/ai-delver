@@ -22,6 +22,12 @@ class MessageOverlay(Overlay):
     ):
         super().__init__(cast(str, subject))
 
+        # Propagate the message to the terminal stdout
+        print(f"[{subject}] {message}")
+        if paragraphs:
+            for paragraph in paragraphs:
+                print(f" - {paragraph}")
+
         text_container = ctk.CTkFrame(self, fg_color="transparent", width=300)
         text_container.pack(pady=4, fill="x", expand=True)
 

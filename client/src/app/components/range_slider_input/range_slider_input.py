@@ -137,6 +137,8 @@ class RangeSliderInput(ctk.CTkFrame):
 
         self.slider.set(value)
         self._update_entry_text(value)
+        if self._on_update:
+            self._on_update(value)
 
     def _validate_input(self, event=None):
         """

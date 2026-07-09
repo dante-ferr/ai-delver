@@ -7,6 +7,9 @@ def verify_level_issues():
 
     issues = level_loader.level.issues
     if len(issues) > 0:
+        print("[Level Issues] There are some issues with the level:")
+        for issue in issues:
+            print(f" - {issue}")
         MessageOverlay(
             f"There are some issues with the level:", paragraphs=issues, subject="Error"
         )

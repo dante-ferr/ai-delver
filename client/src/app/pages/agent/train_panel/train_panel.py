@@ -20,6 +20,10 @@ class TrainPanel(ctk.CTkFrame):
             padx=2, pady=(0, config.STYLE.SECTION_SPACING), fill="x"
         )
 
+        self.level_selector = LevelSelector(
+            self, on_amount_of_episodes_change=self._set_amount_of_episodes
+        )
+
         self.episodes_setting_panel = EpisodesSettingPanel(
             self,
             on_amount_of_episodes_change=self._set_amount_of_episodes,
@@ -43,9 +47,6 @@ class TrainPanel(ctk.CTkFrame):
         )
         self.episodes_label.pack(anchor="w")
 
-        self.level_selector = LevelSelector(
-            self, on_amount_of_episodes_change=self._set_amount_of_episodes
-        )
         self.level_selector.pack(
             pady=(config.STYLE.SECTION_SPACING, config.STYLE.SECTION_SPACING), fill="x"
         )
@@ -73,6 +74,9 @@ class TrainPanel(ctk.CTkFrame):
         self._set_amount_of_episodes()
 
     def _set_amount_of_episodes(self):
+        if not hasattr(self, "level_selector") or not hasattr(self, "episodes_setting_panel"):
+            return
+
         amount_of_levels = len(self.level_selector.level_list.get_order())
 
         cycles_per_level = int(self.episodes_setting_panel.training_cycles_input.get())

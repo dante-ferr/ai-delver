@@ -16,7 +16,8 @@ class Agent:
 
     def save(self):
         if not self.save_file_path:
-            raise ValueError("Save file path is not set for the agent.")
+            from .exceptions import AgentError
+            raise AgentError("Save file path is not set for the agent.")
 
         self.save_file_path.parent.mkdir(parents=True, exist_ok=True)
 

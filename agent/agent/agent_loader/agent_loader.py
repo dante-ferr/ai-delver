@@ -32,7 +32,8 @@ class AgentLoader:
     @property
     def agent(self):
         if self._agent is None:
-            raise ValueError("The agent doesn't exist.")
+            from ..exceptions import AgentLoadError
+            raise AgentLoadError("The agent doesn't exist.")
         return self._agent
 
     def _create_new_agent(self):

@@ -18,17 +18,25 @@ class TrainingClient:
     async def get_initial_info(self) -> dict:
         """Pings the server init endpoint to retrieve environment configurations."""
         uri = f"http://{self.server_url}/init"
-        async with httpx.AsyncClient() as client:
-            response = await client.get(uri, timeout=10.0)
-            response.raise_for_status()
-            return response.json()
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(uri, timeout=10.0)
+                response.raise_for_status()
+                return response.json()
+        except httpx.HTTPStatusError as e:
+            from .exceptions import APIError
+            raise APIError("/init", e.response.status_code, e.response.text) from e
+        except httpx.RequestError as e:
+            from .exceptions import ClientError
+            raise ClientError(f"Failed to connect to training server at {uri}: {e}") from e
 
     def ensure_levels_saved(self, levels: list[str], agent_name: str):
         """Hashes and saves referenced training levels under the agent's folder structure."""
         for level_name in levels:
             level_path = f"{level_config.LEVEL_SAVE_FOLDER_PATH}/{level_name}/level.json"
             if not os.path.exists(level_path):
-                raise FileNotFoundError(f"Level file not found at: {level_path}")
+                from level.exceptions import LevelLoadError
+                raise LevelLoadError(level_path, "Level file not found.")
             level = Level.load(level_path)
             level_hash = level.to_hash()
             save_dir = f"data/agents/{agent_name}/level_saves"
@@ -42,8 +50,12 @@ class TrainingClient:
         level_jsons = []
         for level_name in levels:
             level_path = f"{level_config.LEVEL_SAVE_FOLDER_PATH}/{level_name}/level.json"
-            with open(level_path, "r") as file:
-                level_jsons.append(json.load(file))
+            try:
+                with open(level_path, "r") as file:
+                    level_jsons.append(json.load(file))
+            except Exception as e:
+                from level.exceptions import LevelLoadError
+                raise LevelLoadError(level_path, f"Failed to read level JSON: {e}", original_exception=e) from e
 
         payload = {
             "levels": level_jsons,
@@ -56,18 +68,32 @@ class TrainingClient:
     async def submit_training(self, payload: dict) -> dict:
         """Submits a training request to the server and returns the response."""
         uri = f"http://{self.server_url}/train"
-        async with httpx.AsyncClient() as client:
-            response = await client.post(uri, json=payload, timeout=30.0)
-            response.raise_for_status()
-            return response.json()
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(uri, json=payload, timeout=30.0)
+                response.raise_for_status()
+                return response.json()
+        except httpx.HTTPStatusError as e:
+            from .exceptions import APIError
+            raise APIError("/train", e.response.status_code, e.response.text) from e
+        except httpx.RequestError as e:
+            from .exceptions import ClientError
+            raise ClientError(f"Failed to submit training to {uri}: {e}") from e
 
     async def interrupt_training(self, session_id: str) -> dict:
         """Requests training session interruption on the server."""
         uri = f"http://{self.server_url}/interrupt-training/{session_id}"
-        async with httpx.AsyncClient() as client:
-            response = await client.post(uri, json={}, timeout=10.0)
-            response.raise_for_status()
-            return response.json()
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(uri, json={}, timeout=10.0)
+                response.raise_for_status()
+                return response.json()
+        except httpx.HTTPStatusError as e:
+            from .exceptions import APIError
+            raise APIError(f"/interrupt-training/{session_id}", e.response.status_code, e.response.text) from e
+        except httpx.RequestError as e:
+            from .exceptions import ClientError
+            raise ClientError(f"Failed to interrupt training at {uri}: {e}") from e
 
     async def listen_to_trajectory(
         self,
@@ -81,31 +107,39 @@ class TrainingClient:
         uri = f"ws://{self.server_url}/episode-trajectory/{session_id}"
         trajectory_factory = EpisodeTrajectoryFactory()
         
-        async with websockets.connect(uri) as websocket:
-            async for message in websocket:
-                try:
-                    response_json = json.loads(message)
-                except json.JSONDecodeError:
-                    on_error("Received invalid JSON from server websocket.")
-                    continue
+        try:
+            async with websockets.connect(uri) as websocket:
+                async for message in websocket:
+                    try:
+                        response_json = json.loads(message)
+                    except json.JSONDecodeError:
+                        on_error("Received invalid JSON from server websocket.")
+                        continue
                 
-                if response_json.get("end"):
-                    on_completed()
-                    break
-                    
-                response_type = response_json.get("type")
-                if response_type == "showcase":
-                    trajectory_data = response_json.get("trajectory")
-                    trajectory = None
-                    if trajectory_data:
-                        trajectory = trajectory_factory.from_json(trajectory_data)
-                    level_episode_count = response_json.get("level_episode_count")
-                    if level_episode_count is not None:
-                        level_episode_count = int(level_episode_count)
-                    await on_trajectory(trajectory, level_episode_count)
-                    
-                elif response_type == "level_transition":
-                    levels_trained = response_json.get("levels_trained")
-                    if levels_trained is not None:
-                        levels_trained = int(levels_trained)
-                    on_level_transition(levels_trained)
+                    if response_json.get("end"):
+                        on_completed()
+                        break
+                        
+                    response_type = response_json.get("type")
+                    if response_type == "error":
+                        err_msg = f"{response_json.get('error_class')}: {response_json.get('message')}"
+                        on_error(err_msg)
+                        break
+                        
+                    elif response_type == "showcase":
+                        trajectory_data = response_json.get("trajectory")
+                        trajectory = None
+                        if trajectory_data:
+                            trajectory = trajectory_factory.from_json(trajectory_data)
+                        level_episode_count = response_json.get("level_episode_count")
+                        if level_episode_count is not None:
+                            level_episode_count = int(level_episode_count)
+                        await on_trajectory(trajectory, level_episode_count)
+                        
+                    elif response_type == "level_transition":
+                        levels_trained = response_json.get("levels_trained")
+                        if levels_trained is not None:
+                            levels_trained = int(levels_trained)
+                        on_level_transition(levels_trained)
+        except Exception as e:
+            on_error(f"WebSocket stream failed: {e}")

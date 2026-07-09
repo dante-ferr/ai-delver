@@ -27,9 +27,22 @@ def run_training_in_background(session_id: str):
         session.trainer.setup_env_and_agent()
         session.trainer.train()
     except Exception as e:
+        import traceback
         logging.error(
             f"Error during training for session {session_id}: {e}", exc_info=True
         )
+        error_payload = {
+            "type": "error",
+            "error_class": e.__class__.__name__,
+            "message": str(e),
+            "traceback": traceback.format_exc(),
+        }
+        if session.trainer and session.trainer.loop:
+            session.trainer.loop.call_soon_threadsafe(
+                session.replay_queue.put_nowait, error_payload
+            )
+        else:
+            session.replay_queue.put_nowait(error_payload)
     finally:
         with REGISTRY_LOCK:
             if session_id in SESSION_REGISTRY:

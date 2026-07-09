@@ -71,6 +71,8 @@ class Trainer:
                 self.model_manager.load_serialized_model(self.model_bytes)
             except Exception as e:
                 logging.error(f"Failed to load model: {e}")
+                from ai.exceptions import TrainerError
+                raise TrainerError(f"Failed to initialize trainer: model loading failed: {e}") from e
 
     def train(self) -> None:
         """Main Loop."""
@@ -228,11 +230,13 @@ class Trainer:
     @property
     def metrics(self) -> TrainingMetrics:
         if not self._metrics:
-            raise Exception("Metrics not initialized.")
+            from ai.exceptions import TrainerError
+            raise TrainerError("Metrics not initialized.")
         return self._metrics
 
     @property
     def evaluator(self) -> Evaluator:
         if not self._evaluator:
-            raise Exception("Evaluator not initialized.")
+            from ai.exceptions import TrainerError
+            raise TrainerError("Evaluator not initialized.")
         return self._evaluator

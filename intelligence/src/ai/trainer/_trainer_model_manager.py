@@ -47,7 +47,8 @@ class TrainerModelManager:
                 return model_bytes
         except Exception as e:
             logging.error(f"Failed to serialize model: {e}")
-            return None
+            from agent.exceptions import ModelSerializationError
+            raise ModelSerializationError(f"Failed to serialize model: {e}") from e
 
     def load_serialized_model(self, model_bytes: bytes) -> None:
         try:
@@ -84,3 +85,5 @@ class TrainerModelManager:
                 )
         except Exception as e:
             logging.error(f"Failed to load serialized model: {e}")
+            from agent.exceptions import ModelLoadError
+            raise ModelLoadError(f"Failed to load serialized model: {e}") from e

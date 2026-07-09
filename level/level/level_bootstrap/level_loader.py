@@ -31,12 +31,14 @@ class LevelLoader:
 
             return Level.load(str(file_path))
         else:
-            raise FileNotFoundError(f"Level file {file_path} not found.")
+            from ..exceptions import LevelLoadError
+            raise LevelLoadError(str(file_path), "File not found.")
 
     @property
     def level(self):
         if self._level is None:
-            raise ValueError("The level doesn't exist.")
+            from ..exceptions import LevelLoadError
+            raise LevelLoadError("", "The level has not been loaded or created.")
         return self._level
 
     @level.setter

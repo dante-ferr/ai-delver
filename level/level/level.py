@@ -86,10 +86,14 @@ class Level:
 
     @staticmethod
     def load(filepath: str):
-        with open(filepath, "r") as file:
-            data = json.load(file)
-        level = Level.from_dict(data)
-        return level
+        try:
+            with open(filepath, "r") as file:
+                data = json.load(file)
+            level = Level.from_dict(data)
+            return level
+        except Exception as e:
+            from .exceptions import LevelLoadError
+            raise LevelLoadError(filepath, str(e), original_exception=e) from e
 
     @property
     def save_file_path(self):
@@ -104,7 +108,8 @@ class Level:
 
     def save(self, custom_path: Path | str | None = None):
         if not custom_path and not self.save_file_path:
-            raise ValueError("Save file path is not set for the level.")
+            from .exceptions import LevelError
+            raise LevelError("Save file path is not set for the level.")
 
         if isinstance(custom_path, str):
             custom_path = Path(custom_path)

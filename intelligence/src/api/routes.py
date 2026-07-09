@@ -82,9 +82,9 @@ async def websocket_training_endpoint(websocket: WebSocket, session_id: str):
                 await websocket.close()
                 break
 
-            if isinstance(replay_data, dict) and "error" in replay_data:
+            if isinstance(replay_data, dict) and (replay_data.get("type") == "error" or "error" in replay_data):
                 await websocket.send_json(replay_data)
-                await websocket.close()
+                await websocket.close(code=4000, reason=replay_data.get("message", "Training error")[:100])
                 break
 
             await websocket.send_json(replay_data)

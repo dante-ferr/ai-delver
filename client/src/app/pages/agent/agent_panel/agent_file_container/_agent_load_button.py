@@ -20,5 +20,5 @@ class AgentLoadButton(LoadButton):
     def __init__(self, master, **kwargs):
         super().__init__(master, command=self._on_click, **kwargs)
 
-    def _on_click(self, event):
+    def _on_click(self):
         FileLoaderOverlaySpawner(AGENT_SAVE_FOLDER_PATH, "agent", _AgentLoaderOverlay)

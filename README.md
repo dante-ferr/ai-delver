@@ -2,7 +2,7 @@
 
 **AI Delver** is a simulation framework where an AI agent learns to navigate 2D environments filled with obstacles, traps, and goals.
 
-This repo encapsulates all of its internal dependencies, serving as a development environment. So the purpose of working with it is to be able to change the codes of any of those dependencies, with those changes affecting the entire project's behavior in real time. Therefore, you must expect the tutorial sections below to work on a development standpoint, while the production environment should be set up separately on the ai-delver-client and ai-delver-intelligence subprojects (but this is not available yet. The production environment will only be available after the first beta version of Ai Delver).
+This repo encapsulates all of its internal dependencies, serving as a development environment. So the purpose of working with it is to be able to change the codes of any of those dependencies, with those changes affecting the entire project's behavior in real time. Therefore, you must expect the tutorial sections below to work on a development standpoint, while the production environment should be set up separately on the client and intelligence projects (but this is not available yet. The production environment will only be available after the first beta version of Ai Delver).
 
 ## Features
 
@@ -10,15 +10,16 @@ This repo encapsulates all of its internal dependencies, serving as a developmen
 - 🧱 **Level Editor**: A GUI tool for designing levels using a tile-based system powered by Pytiling.
 - 📊 **Replay System**: Save and review agent behaviors. Also see statistics regarding the AI's attempts.
 
-## Subprojects
+## Modules
 
-- [`ai-delver-client`](https://github.com/dante-ferr/ai-delver-client): Client-side of the project. It includes every piece of interface the user needs to interact it in order to play Ai Delver.
-- [`ai-delver-intelligence`](https://github.com/dante-ferr/ai_delver_intelligence): Server-side of the project. It manages the ai processing with Tensorflow needed to train the delver.
-- [`ai-delver-level`](https://github.com/dante-ferr/ai-delver-level.git): Includes the code with the level's model.
-- [`ai-delver-runtime`](https://github.com/dante-ferr/ai_delver_runtime): Subproject responsible for the runtime. It means that it includes the code behind the simulations that the ai will be trained on, the game and the replay system.
-- [`pytiling`](https://github.com/dante-ferr/pytiling.git): Autotiling library for handling tilemaps.
-- [`pyglet-dragonbones`](https://github.com/dante-ferr/pyglet-dragonbones.git): Renderer for DragonBones animation assets in `pyglet`.
-- [`ai-delver-assets`](https://github.com/dante-ferr/ai-delver-assets.git): Assets for the project.
+- `client`: Client-side of the project. It includes every piece of interface the user needs to interact with in order to play AI Delver.
+- `intelligence`: Server-side of the project. It manages the AI processing with TensorFlow needed to train the delver.
+- `level`: Includes the code for the level model and grid map serialization.
+- `runtime`: Responsible for the simulation runtime, game loop, physics engine, and replay systems.
+- `agent`: Wrapper for agent metadata, loading, and saving functionality.
+- `assets`: Graphical and game resources.
+- [`pytiling`](https://github.com/dante-ferr/pytiling.git) (Submodule): Autotiling library for handling tilemaps.
+- [`pyglet-dragonbones`](https://github.com/dante-ferr/pyglet-dragonbones.git) (Submodule): Renderer for DragonBones animation assets in `pyglet`.
 
 ## Requirements
 
@@ -62,4 +63,4 @@ This repo encapsulates all of its internal dependencies, serving as a developmen
   Executes the client-side application.
 
 ## Tweaks
-You can tweak the ai training settings at ai-delver-intelligence/src/ai/config.json. Be careful, because some of them might break the app if changed.
+You can tweak the ai training settings at intelligence/src/ai/config.json. Be careful, because some of them might break the app if changed.

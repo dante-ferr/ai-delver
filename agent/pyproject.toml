@@ -8,7 +8,7 @@ packages = [{include = "agent"}]
 
 [tool.poetry.dependencies]
 python = ">=3.10.0"
-runtime = {path = "../ai-delver-runtime", develop = true}
+runtime = {path = "../runtime", develop = true}
 
 [build-system]
 requires = ["poetry-core>=2.0.0"]

@@ -31,15 +31,15 @@ FROM base AS builder-dev
 
 WORKDIR /app
 
-COPY --chown=appuser:appgroup ai-delver-runtime ./ai-delver-runtime
-COPY --chown=appuser:appgroup ai-delver-level ./ai-delver-level
+COPY --chown=appuser:appgroup runtime ./runtime
+COPY --chown=appuser:appgroup level ./level
 COPY --chown=appuser:appgroup pytiling-lib ./pytiling-lib
 COPY --chown=appuser:appgroup pyglet-dragonbones-lib ./pyglet-dragonbones-lib
 COPY --chown=appuser:appgroup assets ./assets
 
-WORKDIR /app/ai-delver-intelligence
-COPY --chown=appuser:appgroup ai-delver-intelligence/pyproject.toml ./
-COPY --chown=appuser:appgroup ai-delver-intelligence/poetry.lock ./
+WORKDIR /app/intelligence
+COPY --chown=appuser:appgroup intelligence/pyproject.toml ./
+COPY --chown=appuser:appgroup intelligence/poetry.lock ./
 
 # Remove system-level 'blinker' to avoid conflicts with Poetry's version on Debian
 RUN apt-get update && apt-get remove -y python3-blinker || true

@@ -77,7 +77,7 @@ echo "   - Swap Limit (Total): ${SWAP_LIMIT}"
 echo "   - SHM Size: ${SHM_SIZE}"
 
 echo "🔧 Ensuring host log directory exists..."
-mkdir -p "${SCRIPT_DIR}/ai-delver-intelligence/logs"
+mkdir -p "${SCRIPT_DIR}/intelligence/logs"
 
 # Execution
 echo "📖 Using base image: ${BASE_IMAGE_VAR}"

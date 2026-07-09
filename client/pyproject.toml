@@ -26,9 +26,9 @@ inflect = "*"
 
 # Local editable packages
 pytiling = { path = "../pytiling-lib", develop = true }
-runtime = { path = "../ai-delver-runtime", develop = true }
-level = { path = "../ai-delver-level", develop = true }
-agent = { path = "../ai-delver-agent", develop = true }
+runtime = { path = "../runtime", develop = true }
+level = { path = "../level", develop = true }
+agent = { path = "../agent", develop = true }
 
 
 [tool.poetry.group.dev.dependencies]

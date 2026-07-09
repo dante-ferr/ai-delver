@@ -6,7 +6,7 @@ services:
     container_name: ai-delver-intelligence
     build:
       context: .
-      dockerfile: ai-delver-intelligence/docker/Dockerfile
+      dockerfile: intelligence/docker/Dockerfile
       target: builder-dev
       args:
         BASE_IMAGE: ${BASE_IMAGE}
@@ -19,15 +19,15 @@ services:
     shm_size: ${AI_SHM_SIZE}
 
     volumes:
-      - ./ai-delver-intelligence:/app
+      - ./intelligence:/app
       - ./pytiling-lib:/pytiling-lib
-      - ./ai-delver-runtime:/ai-delver-runtime
-      - ./ai-delver-level:/ai-delver-level
+      - ./runtime:/runtime
+      - ./level:/level
       - ./pyglet-dragonbones-lib:/pyglet-dragonbones-lib
       - ./assets:/assets
-      - ./ai-delver-intelligence/logs:/app/logs
+      - ./intelligence/logs:/app/logs
     environment:
-      - PYTHONPATH=/ai-delver-runtime:/ai-delver-runtime/runtime:/ai-delver-level:/pytiling-lib:/pyglet-dragonbones-lib
+      - PYTHONPATH=/runtime:/runtime/runtime:/level:/pytiling-lib:/pyglet-dragonbones-lib
       - CONTAINER_COMMAND
       - AI_BATCH_SIZE=${AI_BATCH_SIZE}
       

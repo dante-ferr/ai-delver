@@ -1,6 +1,6 @@
 prepare-scripts:
 	chmod +x run-ai-dev.sh
-	chmod +x ai-delver-client/run.sh
+	chmod +x client/run.sh
 
 update-submodules:
 	@echo "🔁 Initializing submodules without overwriting changes..."
@@ -16,7 +16,7 @@ run-ai-dev: on-run
 	./run-ai-dev.sh $(ARGS)
 
 build-client-dev:
-	cd ai-delver-client && poetry env use 3.13 && poetry install
+	cd client && poetry env use 3.13 && poetry install
 
 run-client-dev: on-run
-	cd ai-delver-client && ./run.sh
+	cd client && ./run.sh

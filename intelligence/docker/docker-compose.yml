@@ -14,7 +14,7 @@ services:
       - "8001:8001"
     working_dir: /app
     environment:
-      - PYTHONPATH=/ai-delver-runtime:/ai-delver-level:/pytiling-lib:/pyglet-dragonbones-lib
+      - PYTHONPATH=/runtime:/level:/pytiling-lib:/pyglet-dragonbones-lib
     command: ["python3", "src/main.py"]
     stdin_open: true
     tty: true

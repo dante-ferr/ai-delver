@@ -12,7 +12,7 @@ pymunk = "==6.11.1"
 pyglet = "*"
 pytiling = { path = "../pytiling-lib", develop = true }
 pyglet_dragonbones = { path = "../pyglet-dragonbones-lib", develop = true }
-level = { path = "../ai-delver-level", develop = true }
+level = { path = "../level", develop = true }
 aiofiles = "*"
 
 # [tool.poetry.group.dev.dependencies]

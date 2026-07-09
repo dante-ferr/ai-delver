@@ -77,7 +77,8 @@ class TrainButtonsContainer(ctk.CTkFrame):
         client_dir = os.path.abspath(os.path.join(PROJECT_ROOT, ".."))
 
         cmd = [
-            "poetry", "run", "python", "src/cli/train_cli.py",
+            "poetry", "run", "python", "src/cli/main.py",
+            "train",
             "--levels", levels_str,
             "--cycles", cycles,
             "--episodes-per-cycle", episodes_per_cycle,
@@ -133,6 +134,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
             elif event == "session_created":
                 training_state_manager.set_value("sending_training_request", False)
                 training_state_manager.set_value("training", True)
+                gui_training_client.session_id = data.get("session_id")
             elif event == "progress":
                 cycle = data.get("cycle", 0)
                 level_episode_count = data.get("level_episode_count", 0)
@@ -173,9 +175,20 @@ class TrainButtonsContainer(ctk.CTkFrame):
                 self.train_process.send_signal(signal.SIGINT)
             except Exception as e:
                 print(f"Failed to send SIGINT to subprocess: {e}")
-                # Fallback to direct HTTP request
-                asyncio.run(gui_training_client.send_interrupt_training_request())
+                self._run_cli_interrupt()
         else:
-            # Fallback to direct HTTP request
-            asyncio.run(gui_training_client.send_interrupt_training_request())
+            self._run_cli_interrupt()
+
+    def _run_cli_interrupt(self):
+        client_dir = os.path.abspath(os.path.join(PROJECT_ROOT, ".."))
+        cmd = [
+            "poetry", "run", "python", "src/cli/main.py",
+            "interrupt",
+            "--session-id", str(gui_training_client.session_id),
+            "--server", gui_training_client.server_url
+        ]
+        try:
+            subprocess.run(cmd, cwd=client_dir)
+        except Exception as e:
+            print(f"Failed to run CLI interrupt: {e}")
 

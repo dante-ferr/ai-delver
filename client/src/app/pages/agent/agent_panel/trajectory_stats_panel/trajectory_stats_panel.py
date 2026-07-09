@@ -1,22 +1,14 @@
-from runtime.episode_trajectory import TrajectoryStatsCalculator
 import customtkinter as ctk
-import asyncio
 import threading
-from concurrent.futures import ProcessPoolExecutor
+import subprocess
+import json
+import os
 from state_managers import trajectory_stats_state_manager
 from src.app.components import LoadingLogsPanel, SectionTitle
 from loaders import agent_loader
 from app.components import StandardButton
 from src.config import config
-
-
-def run_async_stats_in_process(agent_name: str) -> dict:
-    """
-    This function is executed in a separate process. It's responsible for
-    creating a new asyncio event loop and running the required async task.
-    """
-    stats_calculator = TrajectoryStatsCalculator(agent_name)
-    return asyncio.run(stats_calculator.get_stats())
+from bootstrap import PROJECT_ROOT
 
 
 class StatsMiniGraph(ctk.CTkCanvas):
@@ -162,8 +154,6 @@ class StatsMiniGraph(ctk.CTkCanvas):
 
 
 class TrajectoryStatsPanel(ctk.CTkFrame):
-    executor = ProcessPoolExecutor(max_workers=2)
-
     def __init__(self, master):
         super().__init__(master, fg_color="transparent", width=0, height=0)
 
@@ -238,32 +228,58 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
 
     def _start_stats_job(self):
         """
-        Submits the CPU-bound async task to the process pool and starts a
-        thread to wait for the result without blocking the UI.
+        Starts a background thread to run the CLI stats command and update the UI.
         """
         trajectory_stats_state_manager.getting_stats = True
 
-        future = self.executor.submit(
-            run_async_stats_in_process, agent_loader.agent.name
-        )
-
         wait_thread = threading.Thread(
-            target=self._await_future_result, args=(future,), daemon=True
+            target=self._run_stats_subprocess, daemon=True
         )
         wait_thread.start()
 
-    def _await_future_result(self, future):
-        """
-        Runs in a background thread, waits for the result from the
-        separate process, and then schedules the UI update on the main thread.
-        """
+    def _run_stats_subprocess(self):
+        """Executes the CLI stats command and updates the UI with the output."""
+        agent_name = agent_loader.agent.name
+        client_dir = os.path.abspath(os.path.join(PROJECT_ROOT, ".."))
+
+        cmd = [
+            "poetry", "run", "python", "src/cli/main.py",
+            "stats",
+            "--agent", agent_name
+        ]
+
         try:
-            stats_result = future.result()
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                cwd=client_dir
+            )
+            stdout_out, stderr_out = process.communicate()
+
+            if process.returncode != 0:
+                raise RuntimeError(stderr_out.strip() or f"Subprocess exited with code {process.returncode}")
+
+            stats_result = None
+            for line in stdout_out.splitlines():
+                line = line.strip()
+                if line.startswith("{"):
+                    try:
+                        data = json.loads(line)
+                        if data.get("event") == "stats":
+                            stats_result = data.get("stats")
+                            break
+                    except json.JSONDecodeError:
+                        continue
+
+            if stats_result is None:
+                raise ValueError("No stats output found in CLI response.")
 
             self.after(0, self._update_ui, stats_result)
-        except Exception as e:
-            print(f"An error occurred in the stats calculation process: {e}")
 
+        except Exception as e:
+            print(f"An error occurred in the stats CLI calculation: {e}")
             self.after(0, self._update_ui, {"error": str(e)})
 
     def _update_ui(self, stats: dict):

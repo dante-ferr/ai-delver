@@ -9,6 +9,9 @@ All commands live in `client/src/cli/commands/` and are routed via `client/src/c
 ### `train`
 Runs a full training session by submitting a training request to the intelligence server and streaming trajectory replays over a WebSocket.
 
+> [!NOTE]
+> For a deep dive into parameter constraints, structured JSON stdout log formats, and signal handling for training orchestration, see the [CLI Training Client](cli_training_client.md) documentation page.
+
 ```bash
 poetry run python src/cli/main.py train \
     --levels "Ai Test #1" \

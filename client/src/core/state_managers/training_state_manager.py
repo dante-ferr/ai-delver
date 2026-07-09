@@ -30,6 +30,18 @@ class TrainingStateManager(StateManager):
         self.amount_of_cycles: int = 0
         self.episodes_per_cycle: int = 0
 
+        # Real-time deep learning metrics accumulated during training
+        self.nerd_loss_history: list[float] = []
+        self.nerd_return_history: list[float] = []
+        self.nerd_step_history: list[int] = []
+
+        # All-time historical metrics loaded from metadata
+        self.all_time_loss_history: list[float] = []
+        self.all_time_return_history: list[float] = []
+        self.all_time_step_history: list[int] = []
+
+        self._nerd_stats_listeners: list[callable] = []
+
         self.add_variable(
             "connected_to_server", ctk.StringVar, "no"
         )  # no, yes, loading
@@ -163,6 +175,50 @@ class TrainingStateManager(StateManager):
         if self.get_value("sending_interrupt_training_request") == value:
             return
         self.set_value("sending_interrupt_training_request", value)
+
+    # ------------------------------------------------------------------
+    # Nerd Stats (deep learning metrics streamed during training)
+    # ------------------------------------------------------------------
+
+    def register_nerd_stats_listener(self, callback: callable):
+        """Registers a callback to receive real-time nerd metric updates."""
+        self._nerd_stats_listeners.append(callback)
+
+    def unregister_nerd_stats_listener(self, callback: callable):
+        """Removes a previously registered nerd stats listener."""
+        try:
+            self._nerd_stats_listeners.remove(callback)
+        except ValueError:
+            pass
+
+    def update_nerd_metrics(self, step, loss, average_return, episodes):
+        """
+        Receives a new metrics snapshot from the training subprocess and
+        appends it to the histories, then notifies all registered listeners.
+        Called from the background thread reading the CLI subprocess stdout.
+        """
+        if step is None:
+            return
+        self.nerd_loss_history.append(loss if loss is not None else 0.0)
+        self.nerd_return_history.append(average_return if average_return is not None else 0.0)
+        self.nerd_step_history.append(step)
+
+        # Also append to the all-time history so that the all-time chart updates live during training
+        self.all_time_loss_history.append(loss if loss is not None else 0.0)
+        self.all_time_return_history.append(average_return if average_return is not None else 0.0)
+        self.all_time_step_history.append(step)
+
+        for cb in list(self._nerd_stats_listeners):
+            try:
+                cb(self.nerd_step_history, self.nerd_loss_history, self.nerd_return_history)
+            except Exception as e:
+                print(f"[NerdStats] Listener error: {e}")
+
+    def clear_nerd_metrics(self):
+        """Clears all accumulated nerd metrics (called at training start)."""
+        self.nerd_loss_history.clear()
+        self.nerd_return_history.clear()
+        self.nerd_step_history.clear()
 
 
 training_state_manager = TrainingStateManager()

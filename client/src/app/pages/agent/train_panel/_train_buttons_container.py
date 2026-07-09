@@ -67,6 +67,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
     def _run_subprocess_train(self):
         # Clear state/set sending
         training_state_manager.set_value("sending_training_request", True)
+        training_state_manager.clear_nerd_metrics()
         
         # Build command args
         levels_str = ",".join(training_state_manager.training_levels)
@@ -145,6 +146,12 @@ class TrainButtonsContainer(ctk.CTkFrame):
             elif event == "level_transition":
                 levels_trained = data.get("levels_trained", 0)
                 training_state_manager.set_value("levels_trained", levels_trained)
+            elif event == "metrics":
+                step = data.get("step")
+                loss = data.get("loss")
+                average_return = data.get("average_return")
+                episodes = data.get("episodes")
+                training_state_manager.update_nerd_metrics(step, loss, average_return, episodes)
             elif event == "completed":
                 duration = time.time() - start_time
                 minutes, seconds = divmod(duration, 60)

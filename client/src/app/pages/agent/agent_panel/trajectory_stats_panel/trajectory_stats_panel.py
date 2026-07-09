@@ -4,7 +4,7 @@ import threading
 import subprocess
 import json
 import os
-from state_managers import trajectory_stats_state_manager
+from state_managers import trajectory_stats_state_manager, training_state_manager
 from src.app.components import LoadingLogsPanel, SectionTitle
 from loaders import agent_loader
 from app.components import StandardButton
@@ -17,10 +17,14 @@ class StatsMiniGraph(ctk.CTkCanvas):
     A custom, high-performance canvas-based mini graph to plot trajectory
     metrics (like victories or step counts) inline without using matplotlib.
     """
-    def __init__(self, master, title: str, line_color: str, **kwargs):
-        bg_color = master.cget("fg_color")
-        if not bg_color or bg_color == "transparent":
-            bg_color = "#2b2b2b"
+    def __init__(self, master, title: str, line_color: str, empty_text: str = "No data", **kwargs):
+        # Resolve a real single Tk color for the canvas bg.
+        # CTk's fg_color can be:
+        #   - A (light, dark) tuple
+        #   - A space-separated "light dark" string (Toplevel/App quirk)
+        #   - "transparent" (must walk up to find a real color)
+        #   - A plain hex string
+        bg_color = self._resolve_bg_color(master)
 
         super().__init__(
             master,
@@ -30,8 +34,46 @@ class StatsMiniGraph(ctk.CTkCanvas):
         )
         self.title = title
         self.line_color = line_color
+        self.empty_text = empty_text
         self.data = []
         self.bind("<Configure>", lambda e: self.redraw())
+
+    @staticmethod
+    def _resolve_bg_color(widget, fallback: str = "#2b2b2b") -> str:
+        """
+        Walks up the widget tree to resolve a real Tk-compatible background color.
+        Handles CTk's internal (light, dark) tuple, space-separated strings, and
+        'transparent' by climbing to the nearest ancestor with a concrete color.
+        """
+        mode_index = 0 if ctk.get_appearance_mode() == "Light" else 1
+
+        current = widget
+        while current is not None:
+            try:
+                raw = current.cget("fg_color")
+            except Exception:
+                break
+
+            # Tuple form: ("light_color", "dark_color")
+            if isinstance(raw, (list, tuple)) and len(raw) == 2:
+                color = raw[mode_index]
+            elif isinstance(raw, str) and " " in raw:
+                parts = raw.split()
+                color = parts[min(mode_index, len(parts) - 1)]
+            else:
+                color = raw
+
+            if color and color != "transparent":
+                return color
+
+            # Climb one level
+            try:
+                current = current.master
+            except AttributeError:
+                break
+
+        return fallback
+
 
     def set_data(self, data: list):
         self.data = data
@@ -78,7 +120,7 @@ class StatsMiniGraph(ctk.CTkCanvas):
         if not self.data:
             self.create_text(
                 width / 2, height / 2,
-                text="No data",
+                text=self.empty_text,
                 fill="#888888",
                 font=("Arial", 9)
             )
@@ -263,6 +305,7 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
                 raise RuntimeError(stderr_out.strip() or f"Subprocess exited with code {process.returncode}")
 
             stats_result = None
+            nerd_stats_result = None
             for line in stdout_out.splitlines():
                 line = line.strip()
                 if line.startswith("{"):
@@ -270,12 +313,19 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
                         data = json.loads(line)
                         if data.get("event") == "stats":
                             stats_result = data.get("stats")
+                            nerd_stats_result = data.get("nerd_stats", {})
                             break
                     except json.JSONDecodeError:
                         continue
 
             if stats_result is None:
                 raise ValueError("No stats output found in CLI response.")
+
+            # Populate nerd stats state from the CLI response (protocol-compliant)
+            if nerd_stats_result:
+                training_state_manager.all_time_loss_history = nerd_stats_result.get("loss_history", []) or []
+                training_state_manager.all_time_return_history = nerd_stats_result.get("return_history", []) or []
+                training_state_manager.all_time_step_history = nerd_stats_result.get("step_history", []) or []
 
             self.after(0, self._update_ui, stats_result)
 
@@ -335,25 +385,151 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
             trajectory_stats_state_manager.getting_stats = False
 
     def _open_nerd_stats(self):
-        """Opens a Toplevel window showing Nerd Stats placeholders."""
-        nerd_win = ctk.CTkToplevel(self)
-        nerd_win.title("Dojo Nerd Stats")
-        nerd_win.geometry("600x400")
+        """Opens the Nerd Stats window, reusing an existing one if still open."""
+        if hasattr(self, "_nerd_win") and self._nerd_win.winfo_exists():
+            self._nerd_win.lift()
+            self._nerd_win.focus_set()
+            return
+        self._nerd_win = NerdStatsWindow(self)
 
-        nerd_win.lift()
-        nerd_win.focus_set()
 
-        label = ctk.CTkLabel(
-            nerd_win,
-            text="Training Nerd Stats (Deep Learning Metrics)",
-            font=ctk.CTkFont(size=16, weight="bold")
+class NerdStatsWindow(ctk.CTkToplevel):
+    """
+    A Toplevel window that displays real-time deep learning training metrics
+    (Loss and Average Return) as mini line charts, updated live during training.
+    """
+
+    def __init__(self, master):
+        super().__init__(master)
+        self.title("Dojo Nerd Stats")
+        self.geometry("900x550")
+        self.resizable(True, True)
+        self.lift()
+        self.focus_set()
+
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(2, weight=1)
+
+        # Header
+        header = ctk.CTkLabel(
+            self,
+            text="Dojo Nerd Stats",
+            font=ctk.CTkFont(size=20, weight="bold"),
         )
-        label.pack(pady=16, padx=16, anchor="w")
+        header.grid(row=0, column=0, columnspan=2, padx=20, pady=(16, 4), sticky="w")
 
-        placeholder = ctk.CTkLabel(
-            nerd_win,
-            text="This panel will contain detailed deep learning-related training stats\nsent by the server (e.g. loss, learning rate, and average returns) plotted in detail.\n\n(Nerd stats design in discussion)",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
-            justify="left"
+        subtitle = ctk.CTkLabel(
+            self,
+            text="Comparing all-time training history with the active session metrics.",
+            font=ctk.CTkFont(size=11),
+            text_color="#888888",
         )
-        placeholder.pack(pady=20, padx=16, anchor="w")
+        subtitle.grid(row=1, column=0, columnspan=2, padx=20, pady=(0, 16), sticky="w")
+
+        # All-Time History Panel (Left Column)
+        self.all_time_panel = ctk.CTkFrame(self, corner_radius=12)
+        self.all_time_panel.grid(row=2, column=0, padx=(20, 10), pady=(0, 20), sticky="nsew")
+        self.all_time_panel.grid_columnconfigure(0, weight=1)
+        self.all_time_panel.grid_rowconfigure(2, weight=1)
+        self.all_time_panel.grid_rowconfigure(4, weight=1)
+
+        # All-Time Header
+        all_time_title = ctk.CTkLabel(
+            self.all_time_panel,
+            text="All-Time History",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        )
+        all_time_title.grid(row=0, column=0, padx=15, pady=(12, 2), sticky="w")
+
+        # All-Time Loss Graph
+        all_time_loss_label = ctk.CTkLabel(
+            self.all_time_panel, text="Loss", font=ctk.CTkFont(size=12, weight="bold")
+        )
+        all_time_loss_label.grid(row=1, column=0, padx=15, pady=(4, 2), sticky="sw")
+
+        self.all_time_loss_graph = StatsMiniGraph(
+            self.all_time_panel, title="", line_color="#ef4444"  # Red
+        )
+        self.all_time_loss_graph.grid(row=2, column=0, padx=15, pady=(0, 10), sticky="nsew")
+
+        # All-Time Average Return Graph
+        all_time_ret_label = ctk.CTkLabel(
+            self.all_time_panel, text="Average Return", font=ctk.CTkFont(size=12, weight="bold")
+        )
+        all_time_ret_label.grid(row=3, column=0, padx=15, pady=(4, 2), sticky="sw")
+
+        self.all_time_return_graph = StatsMiniGraph(
+            self.all_time_panel, title="", line_color="#3b82f6"  # Blue
+        )
+        self.all_time_return_graph.grid(row=4, column=0, padx=15, pady=(0, 15), sticky="nsew")
+
+        # Current Session Panel (Right Column)
+        self.current_panel = ctk.CTkFrame(self, corner_radius=12)
+        self.current_panel.grid(row=2, column=1, padx=(10, 20), pady=(0, 20), sticky="nsew")
+        self.current_panel.grid_columnconfigure(0, weight=1)
+        self.current_panel.grid_rowconfigure(2, weight=1)
+        self.current_panel.grid_rowconfigure(4, weight=1)
+
+        # Current Session Header
+        current_title = ctk.CTkLabel(
+            self.current_panel,
+            text="Current/Last Session",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        )
+        current_title.grid(row=0, column=0, padx=15, pady=(12, 2), sticky="w")
+
+        # Current Session Loss Graph
+        current_loss_label = ctk.CTkLabel(
+            self.current_panel, text="Loss", font=ctk.CTkFont(size=12, weight="bold")
+        )
+        current_loss_label.grid(row=1, column=0, padx=15, pady=(4, 2), sticky="sw")
+
+        self.current_loss_graph = StatsMiniGraph(
+            self.current_panel, title="", line_color="#ec4899", empty_text="No active session"  # Pink
+        )
+        self.current_loss_graph.grid(row=2, column=0, padx=15, pady=(0, 10), sticky="nsew")
+
+        # Current Session Average Return Graph
+        current_ret_label = ctk.CTkLabel(
+            self.current_panel, text="Average Return", font=ctk.CTkFont(size=12, weight="bold")
+        )
+        current_ret_label.grid(row=3, column=0, padx=15, pady=(4, 2), sticky="sw")
+
+        self.current_return_graph = StatsMiniGraph(
+            self.current_panel, title="", line_color="#10b981", empty_text="No active session"  # Green
+        )
+        self.current_return_graph.grid(row=4, column=0, padx=15, pady=(0, 15), sticky="nsew")
+
+        # Populate with any already-accumulated metrics from state
+        self._refresh_from_state()
+
+        # Register as a live listener for updates during training
+        self._on_update = self._handle_metrics_update
+        training_state_manager.register_nerd_stats_listener(self._on_update)
+
+        # Unregister when the window closes
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _refresh_from_state(self):
+        """Populates graphs with any metrics already accumulated in state."""
+        self.all_time_loss_graph.set_data(list(training_state_manager.all_time_loss_history))
+        self.all_time_return_graph.set_data(list(training_state_manager.all_time_return_history))
+        self.current_loss_graph.set_data(list(training_state_manager.nerd_loss_history))
+        self.current_return_graph.set_data(list(training_state_manager.nerd_return_history))
+
+    def _handle_metrics_update(self, steps, losses, returns):
+        """Called from the background thread — schedule UI update on the main thread."""
+        self.after(0, self._apply_metrics_update)
+
+    def _apply_metrics_update(self):
+        """Applies the new data to the charts (always called on main thread)."""
+        if not self.winfo_exists():
+            return
+        self._refresh_from_state()
+
+    def _on_close(self):
+        """Unregisters listener and destroys the window."""
+        training_state_manager.unregister_nerd_stats_listener(self._on_update)
+        self.destroy()
+

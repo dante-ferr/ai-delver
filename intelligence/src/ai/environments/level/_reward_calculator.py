@@ -26,10 +26,13 @@ class RewardCalculator:
     def _get_current_dijkstra_distance(self, simulation: "Simulation") -> float:
         """Helper to get current distance from the goal in tile coordinates."""
         tile_w, tile_h = self._level.map.tile_size
+        grid_h = self._level.map.grid_size[1]
+        map_height_px = grid_h * tile_h
 
-        # Convert Pixel Position -> Tile Position
+        # Convert Physics Position -> Tile Position with Y-axis inversion.
+        # Physics Y is bottom-up (Y=0 at bottom), grid rows are top-down (row 0 at top).
         curr_tx = simulation.delver.position[0] / tile_w
-        curr_ty = simulation.delver.position[1] / tile_h
+        curr_ty = (map_height_px - simulation.delver.position[1]) / tile_h
 
         return self.dijkstra_grid.get_distance(curr_tx, curr_ty)
 

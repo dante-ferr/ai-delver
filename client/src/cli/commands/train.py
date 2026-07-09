@@ -6,6 +6,7 @@ import logging
 from client_requests.training_client import TrainingClient
 from runtime.episode_trajectory import EpisodeTrajectoryFactory
 from .stats import run_stats
+from .nerd_stats_persistence import save_nerd_stats
 
 # Global container for signal handler / graceful interrupt
 client_instance = None
@@ -44,6 +45,11 @@ def run_train(args):
     global client_instance, session_id, interrupted, completed_normally
     interrupted = False
     completed_normally = False
+
+    # Accumulated nerd stats (reset each run)
+    nerd_step_history: list = []
+    nerd_loss_history: list = []
+    nerd_return_history: list = []
 
     # Register system signals for graceful shutdown
     signal.signal(signal.SIGINT, raise_keyboard_interrupt)
@@ -117,13 +123,27 @@ def run_train(args):
         def on_error(err):
             print_json("error", message=err)
 
+        def on_metrics(step, loss, average_return, episodes):
+            if step is not None:
+                nerd_step_history.append(step)
+                nerd_loss_history.append(round(loss, 6) if loss is not None else 0.0)
+                nerd_return_history.append(round(average_return, 4) if average_return is not None else 0.0)
+            print_json(
+                "metrics",
+                step=step,
+                loss=round(loss, 6) if loss is not None else None,
+                average_return=round(average_return, 4) if average_return is not None else None,
+                episodes=episodes,
+            )
+
         try:
             await client_instance.listen_to_trajectory(
                 session_id=session_id,
                 on_trajectory=on_trajectory,
                 on_level_transition=on_level_transition,
                 on_completed=on_completed,
-                on_error=on_error
+                on_error=on_error,
+                on_metrics=on_metrics,
             )
         except Exception as e:
             print_json("error", message=f"WebSocket stream error: {e}")
@@ -141,3 +161,9 @@ def run_train(args):
             run_stats(args.agent)
         except Exception as e:
             print_json("error", message=f"Failed to calculate final stats: {e}")
+        # Persist nerd stats so the Nerd Stats window has data on next session
+        if nerd_loss_history:
+            try:
+                save_nerd_stats(args.agent, nerd_step_history, nerd_loss_history, nerd_return_history)
+            except Exception as e:
+                print_json("error", message=f"Failed to save nerd stats: {e}")

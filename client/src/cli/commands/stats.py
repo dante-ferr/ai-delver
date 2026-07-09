@@ -3,12 +3,18 @@ import json
 from runtime.episode_trajectory import TrajectoryStatsCalculator
 
 def run_stats(agent_name: str):
-    """Calculates agent stats locally and prints them as JSON to stdout."""
+    """Calculates agent stats and nerd stats, printing them as a single JSON event to stdout."""
     calculator = TrajectoryStatsCalculator(agent_name)
-    # run asyncio loop to calculate stats
-    stats = asyncio.run(calculator.get_stats())
-    
+
+    async def _get_all():
+        stats = await calculator.get_stats()
+        nerd_stats = await calculator.get_nerd_stats()
+        return stats, nerd_stats
+
+    stats, nerd_stats = asyncio.run(_get_all())
+
     print(json.dumps({
         "event": "stats",
-        "stats": stats
+        "stats": stats,
+        "nerd_stats": nerd_stats,
     }), flush=True)

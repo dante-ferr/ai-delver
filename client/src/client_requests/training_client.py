@@ -101,7 +101,8 @@ class TrainingClient:
         on_trajectory: callable,
         on_level_transition: callable,
         on_completed: callable,
-        on_error: callable
+        on_error: callable,
+        on_metrics: callable = None,
     ):
         """Connects to the WebSocket endpoint and streams trajectory results via callbacks."""
         uri = f"ws://{self.server_url}/episode-trajectory/{session_id}"
@@ -141,5 +142,15 @@ class TrainingClient:
                         if levels_trained is not None:
                             levels_trained = int(levels_trained)
                         on_level_transition(levels_trained)
+
+                    elif response_type == "metrics":
+                        if on_metrics:
+                            on_metrics(
+                                step=response_json.get("step"),
+                                loss=response_json.get("loss"),
+                                average_return=response_json.get("average_return"),
+                                episodes=response_json.get("episodes"),
+                            )
         except Exception as e:
             on_error(f"WebSocket stream failed: {e}")
+

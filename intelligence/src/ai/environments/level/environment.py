@@ -71,9 +71,9 @@ class LevelEnvironment(PyEnvironment):
         """Sets up the Dijkstra grid and the reward calculator."""
         # Instantiate Dijkstra Map locally.
         # Computing BFS for tilemaps is extremely fast (<1ms), so no need for complex JSON serialization overhead.
-        tile_w, tile_h = self._level.map.tile_size
+        tile_w, _ = self._level.map.tile_size
         goal_tx = int(self.goal_position[0] // tile_w)
-        goal_ty = int(self.goal_position[1] // tile_h)
+        goal_ty = self._physics_y_to_grid_y(self.goal_position[1])
 
         self.dijkstra = DijkstraGrid(self._level.map.tilemap, (goal_tx, goal_ty))
         self.reward_calculator = RewardCalculator(self._level, self.dijkstra)
@@ -222,13 +222,27 @@ class LevelEnvironment(PyEnvironment):
         run = run_raw - 1
         return DelverAction(run=run, jump=jump)
 
+    def _physics_y_to_grid_y(self, physics_y: float) -> int:
+        """
+        Converts a physics-space Y coordinate to a tile-grid row index.
+
+        Physics coordinates use bottom-up Cartesian convention (Y=0 at the bottom),
+        while the tilemap/grid uses top-down indexing (row 0 at the top). This helper
+        performs the inversion so that reward and observation computations use the
+        correct grid position instead of a mirrored one.
+        """
+        _, tile_h = self._level.map.tile_size
+        grid_h = self._level.map.grid_size[1]
+        map_height_px = grid_h * tile_h
+        return int((map_height_px - physics_y) // tile_h)
+
     def _get_local_view(self):
         """Extracts a cropped grid centered on the agent's current position."""
         grid = self.platforms_grid
         h, w = grid.shape
 
         tx = int(self.delver_position[0] // self._level.map.tile_size[0])
-        ty = int(self.delver_position[1] // self._level.map.tile_size[1])
+        ty = self._physics_y_to_grid_y(self.delver_position[1])
 
         half = self.WINDOW_SIZE // 2
 

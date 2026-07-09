@@ -159,6 +159,19 @@ class TrajectoryStatsCalculator:
             logging.warning(f"Could not read or parse trajectory {file_path}: {e}")
             return None
 
+    async def get_nerd_stats(self) -> Dict[str, Any]:
+        """
+        Returns the persisted deep learning metrics history from metadata.json.
+        These are the per-training-step loss and average return values accumulated
+        by the CLI train command and saved at the end of each training run.
+        """
+        metadata = await self.metadata_manager.read_metadata()
+        return metadata.get("nerd_stats", {
+            "step_history": [],
+            "loss_history": [],
+            "return_history": [],
+        })
+
     async def get_amount_of_trajectories(self) -> int:
         """Gets the total number of trajectories from the metadata."""
         metadata = await self.metadata_manager.read_metadata()

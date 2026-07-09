@@ -218,6 +218,22 @@ class Trainer:
         tf.summary.scalar("loss", loss_info.loss, step=step)
         self.metrics.reset_avg_return()
 
+        # Stream metrics to the client over the WebSocket channel
+        payload = {
+            "type": "metrics",
+            "step": int(step),
+            "loss": float(loss_info.loss.numpy()),
+            "average_return": float(avg_ret),
+            "episodes": int(self.metrics.num_episodes),
+        }
+        if self.loop:
+            self.loop.call_soon_threadsafe(
+                self.session.replay_queue.put_nowait, payload
+            )
+        else:
+            self.session.replay_queue.put_nowait(payload)
+
+
     def _graceful_shutdown(self) -> None:
         logging.info("Shutting down trainer...")
         self.env_manager.close()

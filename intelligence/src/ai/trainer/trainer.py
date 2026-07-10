@@ -118,6 +118,30 @@ class Trainer:
             if self._check_graduation(level_idx):
                 break
 
+            # --- Checkpoint Check ---
+            from ai.config import config
+            checkpoint_interval = getattr(config, "CHECKPOINT_INTERVAL", 0)
+            if checkpoint_interval > 0 and (cycle + 1) % checkpoint_interval == 0:
+                if hasattr(self, "model_manager") and self.model_manager:
+                    try:
+                        model_bytes = self.model_manager.get_serialized_model()
+                        if model_bytes:
+                            import base64
+                            model_bytes_b64 = base64.b64encode(model_bytes).decode("utf-8")
+                            payload = {
+                                "type": "checkpoint",
+                                "cycle": cycle + 1,
+                                "model_bytes_b64": model_bytes_b64
+                            }
+                            if self.loop:
+                                self.loop.call_soon_threadsafe(
+                                    self.session.replay_queue.put_nowait, payload
+                                )
+                            else:
+                                self.session.replay_queue.put_nowait(payload)
+                    except Exception as e:
+                        logging.error(f"Failed to serialize checkpoint for cycle {cycle + 1}: {e}")
+
             cycle += 1
 
     def _should_stop_loop(self, cycle: int, level_idx: int) -> bool:

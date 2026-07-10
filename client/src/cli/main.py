@@ -22,6 +22,9 @@ def main():
     train_p.add_argument("--mode", choices=["static", "dynamic"], required=True, help="Transitioning mode")
     train_p.add_argument("--agent", required=True, help="Agent name")
     train_p.add_argument("--server", default="localhost:8001", help="Training server URL")
+    train_p.add_argument("--checkpoint-interval", type=int, default=0, help="Cycle interval to save checkpoints (0 to disable)")
+    train_p.add_argument("--checkpoint", default=None, help="Name or cycle number of checkpoint to load for warm-start")
+
 
     # Optional hyperparameter overrides
     train_p.add_argument("--learning-rate", type=float, default=None, help="Learning rate (PPO)")

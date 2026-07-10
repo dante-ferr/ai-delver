@@ -87,15 +87,51 @@ def run_train(args):
         # Load existing agent weights if present
         from agent.agent import Agent
         agent_obj = Agent(args.agent)
+        
+        # Resolve weights path
+        weights_to_load = None
+        if args.checkpoint:
+            checkpoint_name = str(args.checkpoint)
+            if not checkpoint_name.endswith(".zip"):
+                # Try both 'cycle_{N}.zip' (if integer) and '{name}.zip'
+                if checkpoint_name.isdigit():
+                    possible_paths = [
+                        agent_obj.weights_path.parent / "checkpoints" / f"cycle_{checkpoint_name}.zip",
+                        agent_obj.weights_path.parent / "checkpoints" / f"{checkpoint_name}.zip",
+                    ]
+                else:
+                    possible_paths = [
+                        agent_obj.weights_path.parent / "checkpoints" / f"{checkpoint_name}.zip",
+                        agent_obj.weights_path.parent / "checkpoints" / checkpoint_name,
+                    ]
+            else:
+                possible_paths = [
+                    agent_obj.weights_path.parent / "checkpoints" / checkpoint_name,
+                ]
+
+            for path in possible_paths:
+                if path.is_file():
+                    weights_to_load = path
+                    break
+
+            if not weights_to_load:
+                print_json("error", message=f"Specified checkpoint '{args.checkpoint}' not found.")
+                return
+        else:
+            # Default to latest weights
+            if agent_obj.weights_path and agent_obj.weights_path.is_file():
+                weights_to_load = agent_obj.weights_path
+
+        # Load weights bytes
         model_bytes_b64 = None
-        if agent_obj.weights_path and agent_obj.weights_path.is_file():
+        if weights_to_load and weights_to_load.is_file():
             import base64
             try:
-                with open(agent_obj.weights_path, "rb") as f:
+                with open(weights_to_load, "rb") as f:
                     model_bytes_b64 = base64.b64encode(f.read()).decode("utf-8")
-                print_json("info", message="Loaded existing policy weights from disk for warm-start.")
+                print_json("info", message=f"Loaded policy weights from '{weights_to_load.name}' for warm-start.")
             except Exception as e:
-                print_json("info", message=f"Failed to read existing weights: {e}")
+                print_json("info", message=f"Failed to read weights from '{weights_to_load}': {e}")
 
         standard_keys = {"levels", "cycles", "episodes_per_cycle", "mode", "agent", "server", "command"}
         config_overrides = {
@@ -177,6 +213,22 @@ def run_train(args):
                 except Exception as e:
                     print_json("error", message=f"Failed to save downloaded model weights: {e}")
 
+        async def on_checkpoint(cycle, model_bytes_b64):
+            if model_bytes_b64:
+                import base64
+                try:
+                    weights_data = base64.b64decode(model_bytes_b64)
+                    agent_obj = Agent(args.agent)
+                    if agent_obj.weights_path:
+                        checkpoint_dir = agent_obj.weights_path.parent / "checkpoints"
+                        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+                        checkpoint_path = checkpoint_dir / f"cycle_{cycle}.zip"
+                        with open(checkpoint_path, "wb") as f:
+                            f.write(weights_data)
+                        print_json("info", message=f"Successfully saved checkpoint for cycle {cycle}.")
+                except Exception as e:
+                    print_json("error", message=f"Failed to save checkpoint for cycle {cycle}: {e}")
+
         try:
             await client_instance.listen_to_trajectory(
                 session_id=session_id,
@@ -186,6 +238,7 @@ def run_train(args):
                 on_error=on_error,
                 on_metrics=on_metrics,
                 on_model_weights=on_model_weights,
+                on_checkpoint=on_checkpoint,
             )
         except Exception as e:
             print_json("error", message=f"WebSocket stream error: {e}")

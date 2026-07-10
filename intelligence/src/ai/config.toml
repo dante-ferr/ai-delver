@@ -44,3 +44,5 @@ dynamic_max_episodes = 1000       # Maximum training episodes allowed before for
 max_training_levels = 10          # Maximum number of levels in curriculum training
 log_interval = 10                 # Logging frequency of agent metrics
 seed = 42                         # Random seed for reproducibility
+checkpoint_interval = 0           # Frequency (in cycles) to save intermediate checkpoints (0 to disable)
+

@@ -108,6 +108,7 @@ class TrainingClient:
         on_error: callable,
         on_metrics: callable = None,
         on_model_weights: callable = None,
+        on_checkpoint: callable = None,
     ):
         """Connects to the WebSocket endpoint and streams trajectory results via callbacks."""
         uri = f"ws://{self.server_url}/episode-trajectory/{session_id}"
@@ -160,6 +161,13 @@ class TrainingClient:
                     elif response_type == "model_weights":
                         if on_model_weights:
                             await on_model_weights(response_json.get("model_bytes_b64"))
+
+                    elif response_type == "checkpoint":
+                        if on_checkpoint:
+                            await on_checkpoint(
+                                response_json.get("cycle"),
+                                response_json.get("model_bytes_b64")
+                            )
         except Exception as e:
             on_error(f"WebSocket stream failed: {e}")
 

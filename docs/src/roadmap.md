@@ -4,14 +4,13 @@ This document outlines the short-to-medium term plans for expanding the AI Delve
 
 ---
 
-## 1. Configurable Training Parameters & TOML Transition
+## 1. Configurable Training Parameters & TOML Format
 
-Currently, the deep learning and reinforcement learning hyperparameters are managed by `intelligence/src/ai/config.json`.
+The deep learning and reinforcement learning hyperparameters are managed by `intelligence/src/ai/config.toml`.
 
-### Recommended Transition: JSON to TOML
-We propose migrating `config.json` to `config.toml` (e.g., using `tomllib` / `tomli`).
+### TOML Format Advantage
+We have migrated the configuration from `config.json` to `config.toml` (using `tomllib` with a Python <3.11 fallback to `tomli`).
 * **Why**: TOML supports native comments (`#`). In Reinforcement Learning, hyperparameter decisions (e.g., why `entropy_regularization` is `0.2` or why `wall_hugging_reward` is negative) are highly empirical. Having inline comments allows developers and AI orchestrators to document changes and understand tuning logic.
-* **Implementation**: We can modify `intelligence/src/ai/config.py` to check for `config.toml` first, using Python's standard `tomllib` (or the `tomli` backport for Python <3.11).
 
 ### Parameters to Expose
 We intend to make these parameters fully configurable via the CLI (and eventually GUI knobs) so that an orchestrating AI agent can automatically tune the policy:

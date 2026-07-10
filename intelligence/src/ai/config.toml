@@ -1,0 +1,46 @@
+# AI Delver Agent Training Configuration
+
+# ==============================================================================
+# RL Hyperparameters
+# ==============================================================================
+learning_rate = 0.0003            # Step size for gradient descent updates
+gamma = 0.995                     # Discount factor for future rewards (balancing short-term vs long-term goals)
+entropy_regularization = 0.2      # Penalty/incentive for policy entropy to promote exploration
+
+# ==============================================================================
+# Reward & Penalty Weights
+# ==============================================================================
+not_finished_reward = -10.0       # Penalty given if agent fails to reach the goal within limit
+finished_reward = 100.0           # Sparse positive reward awarded only upon successfully solving the level
+turn_reward = 0.0                 # Positive/negative reward applied when changing direction
+
+frame_step_reward = -0.01         # Time penalty per step to encourage faster execution
+tile_exploration_reward = 0.04    # Small positive reward given for exploring new coordinates
+jump_reward = -0.15               # Small penalty to discourage unnecessary jumping
+wall_hugging_reward = -0.2        # Penalty to discourage sticking/scraping against walls
+
+goal_distance_reward_scale = 0.005 # Scaling factor for reward based on distance to goal
+
+# ==============================================================================
+# Training Environment & Replay Buffer
+# ==============================================================================
+replay_buffer_capacity = 20000    # Maximum number of steps stored in the experience replay buffer
+replay_buffer_batch_size = 256    # Number of training steps sampled per gradient update
+collect_seconds_per_env = 15      # Seconds of experience collected per environment iteration
+actions_per_second = 10           # Resolution of actions the agent takes per second
+max_seconds_per_episode = 60      # Maximum duration before an episode is terminated
+
+# ==============================================================================
+# Dynamic Level Graduation (Curriculum Learning)
+# ==============================================================================
+dynamic_exam_pass_reward = 90     # Threshold average reward to start examining for level graduation
+dynamic_target_reward = 95        # Threshold average reward to graduate to the next level
+dynamic_min_episodes = 50         # Minimum training episodes required before a level can graduate
+dynamic_max_episodes = 1000       # Maximum training episodes allowed before force-graduating a level
+
+# ==============================================================================
+# Miscellaneous
+# ==============================================================================
+max_training_levels = 10          # Maximum number of levels in curriculum training
+log_interval = 10                 # Logging frequency of agent metrics
+seed = 42                         # Random seed for reproducibility

@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 from typing import Any, Dict
 import os
@@ -11,7 +10,7 @@ class Config:
     largest absolute reward found, ensuring neural network stability.
     """
 
-    def __init__(self, config_path: str = "src/ai/config.json"):
+    def __init__(self, config_path: str = "src/ai/config.toml"):
         self._config_path = Path(config_path)
 
         # Load the raw values (Human Readable)
@@ -43,8 +42,14 @@ class Config:
 
     def _load_config(self) -> dict:
         try:
-            with open(self._config_path, "r") as f:
-                return json.load(f)
+            import sys
+            if sys.version_info >= (3, 11):
+                import tomllib
+            else:
+                import tomli as tomllib
+
+            with open(self._config_path, "rb") as f:
+                return tomllib.load(f)
         except FileNotFoundError:
             # Fallback for CI/CD or testing where file might not exist yet
             return {}

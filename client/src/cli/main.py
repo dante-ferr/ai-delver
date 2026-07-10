@@ -9,6 +9,7 @@ import bootstrap
 from cli.commands.train import run_train
 from cli.commands.stats import run_stats
 from cli.commands.interrupt import run_interrupt
+from cli.commands.tune import run_tune
 
 def main():
     parser = argparse.ArgumentParser(description="AI Delver CLI Client")
@@ -60,6 +61,15 @@ def main():
     load_p = subparsers.add_parser("load-agent", help="Loads an agent from a path")
     load_p.add_argument("--path", required=True, help="Path to the agent directory")
 
+    # Subcommand: tune
+    tune_p = subparsers.add_parser("tune", help="Runs automated hyperparameter tuning using Optuna")
+    tune_p.add_argument("--levels", required=True, help="Comma-separated level names")
+    tune_p.add_argument("--cycles", type=int, default=5, help="Cycles per trial")
+    tune_p.add_argument("--episodes-per-cycle", type=int, default=32, help="Episodes per cycle")
+    tune_p.add_argument("--agent", required=True, help="Agent name")
+    tune_p.add_argument("--trials", type=int, default=10, help="Number of Optuna trials")
+    tune_p.add_argument("--server", default="localhost:8001", help="Training server URL")
+
     args = parser.parse_args()
 
     if args.command == "train":
@@ -77,6 +87,8 @@ def main():
     elif args.command == "load-agent":
         from cli.commands.agent_load import run_load_agent
         run_load_agent(args.path)
+    elif args.command == "tune":
+        run_tune(args)
 
 if __name__ == "__main__":
     main()

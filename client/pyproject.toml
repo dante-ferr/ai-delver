@@ -33,6 +33,7 @@ agent = { path = "../agent", develop = true }
 
 [tool.poetry.group.dev.dependencies]
 # e.g. pytest = "*"
+optuna = "^4.9.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0"]

@@ -115,6 +115,23 @@ poetry run python src/cli/main.py load-agent --path "data/agents/Brave Delver"
 
 ---
 
+### `tune`
+Runs a developer-only automated hyperparameter tuning session using Optuna. It suggests parameters (learning rate, entropy regularization, finished reward) across multiple trials, runs the training script as a subprocess, prunes bad trials early if the loss diverges, and reports the best parameter set upon completion.
+
+```bash
+poetry run python src/cli/main.py tune \
+    --levels "Ai Test #1" \
+    --cycles 5 \
+    --episodes-per-cycle 32 \
+    --agent ppo_delver \
+    --trials 10
+```
+
+**GUI Trigger**: Developer CLI command only.
+
+---
+
+
 ## Output and Event Formats
 
 The GUI runs the CLI as a subprocess (using `subprocess.Popen`) with `stdout=subprocess.PIPE`. It reads lines from stdout in real-time on a background thread and parses each line as a JSON event:

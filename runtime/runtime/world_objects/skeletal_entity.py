@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import TYPE_CHECKING, Literal, Callable, Optional
 
-from ..world_object import WorldObject
+from .world_object import WorldObject
 
 if TYPE_CHECKING:
     from pyglet_dragonbones.skeleton import Skeleton

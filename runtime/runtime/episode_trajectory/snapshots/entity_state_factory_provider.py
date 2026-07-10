@@ -1,4 +1,4 @@
-from runtime.world_objects.entities.skeletal_entity import SkeletalEntity
+from runtime.world_objects.skeletal_entity import SkeletalEntity
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:

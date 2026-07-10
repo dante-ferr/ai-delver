@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from .entity_state_factory_provider import (
     EntityStateSnapshotFactoryProvider,
 )
-import runtime.world_objects.entities as entities
+import runtime.world_objects as entities
 from typing import List, TYPE_CHECKING, Any
 
 if TYPE_CHECKING:

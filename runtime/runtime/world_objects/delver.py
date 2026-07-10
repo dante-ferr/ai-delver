@@ -4,7 +4,7 @@ from typing import Optional, TYPE_CHECKING
 import pyglet
 from pyglet_dragonbones.skeleton import Skeleton
 
-from ..skeletal_entity import SkeletalEntity, LocomotionState
+from .skeletal_entity import SkeletalEntity, LocomotionState
 from runtime.config import ASSETS_PATH
 from runtime.utils import vector_to_angle
 

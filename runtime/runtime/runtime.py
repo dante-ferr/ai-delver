@@ -1,8 +1,8 @@
 from typing import Any, TYPE_CHECKING
 
 from .world_objects import WorldObjectsController
-from .world_objects.entities.delver import Delver
-from .world_objects.items.goal import Goal
+from .world_objects.delver import Delver
+from .world_objects.goal import Goal
 from . import runtime_core
 
 if TYPE_CHECKING:

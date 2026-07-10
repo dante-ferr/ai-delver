@@ -1,7 +1,7 @@
 from ..simulation import Simulation
 from runtime.episode_trajectory import EpisodeTrajectory
 from ai.config import config
-from runtime.world_objects.entities import SkeletalEntity
+from runtime.world_objects import SkeletalEntity
 from runtime.episode_trajectory.snapshots import FrameSnapshot
 
 from typing import TYPE_CHECKING, cast

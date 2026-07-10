@@ -1,0 +1,13 @@
+.git
+.gitmodules
+.venv
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.idea
+.vscode
+.env
+
+# Rust build artifacts can become very large and are rebuilt inside container.
+runtime/target/

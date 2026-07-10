@@ -3,7 +3,7 @@ from .entity_state_snapshot import (
     EntityStateSnapshot,
     EntityStateSnapshotFactory,
 )
-from runtime.world_objects.entities.skeletal_entity import (
+from runtime.world_objects.skeletal_entity import (
     SkeletalEntity,
     LocomotionState,
 )

@@ -1,6 +1,6 @@
 from .replay import Replay
 from typing import TYPE_CHECKING, Dict, cast, List
-from runtime.world_objects.entities.skeletal_entity import SkeletalEntity
+from runtime.world_objects.skeletal_entity import SkeletalEntity
 from runtime.episode_trajectory.snapshots import interpolate_frame_snapshots
 from loaders import level_loader
 from loaders import agent_loader

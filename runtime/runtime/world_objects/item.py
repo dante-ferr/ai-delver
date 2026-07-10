@@ -1,4 +1,4 @@
-from ..world_object import WorldObject
+from .world_object import WorldObject
 from typing import Optional, Any, TYPE_CHECKING
 
 

@@ -1,17 +1,26 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from runtime.runtime import Runtime
 
 
 class WorldObject:
-    def __init__(self, runtime: "Runtime"):
+    def __init__(self, runtime: "Runtime", base_object: Any = None):
         self.runtime = runtime
+        self._base_object = base_object
 
         self._position = (0.0, 0.0)
         self._spawn_based_id: str | None = None
 
         self._bounding_box: tuple[float, float, float, float] | None = None
+
+    @property
+    def base_object(self) -> Any:
+        return self._base_object
+
+    @base_object.setter
+    def base_object(self, value: Any):
+        self._base_object = value
 
     @property
     def bounding_box(self):

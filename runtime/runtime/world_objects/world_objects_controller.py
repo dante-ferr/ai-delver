@@ -9,6 +9,7 @@ class WorldObjectsController:
         self.world_objects: set["WorldObject"] = set()
         self.world_object_groups: dict[str, set["WorldObject"]] = {}
         self.world_objects_by_spawn_based_id: dict[str, "WorldObject"] = {}
+        self._unique_objects: dict[str, "WorldObject"] = {}
 
     def add_world_object(
         self,
@@ -19,17 +20,19 @@ class WorldObjectsController:
         self.world_objects.add(world_object)
 
         if group_name is not None:
-            if group_name not in self.world_object_groups.keys():
+            if group_name not in self.world_object_groups:
                 self.world_object_groups[group_name] = set()
             self.world_object_groups[group_name].add(world_object)
 
         if unique_identifier is not None:
-            setattr(self, unique_identifier, world_object)
+            self._unique_objects[unique_identifier] = world_object
 
         self.world_objects_by_spawn_based_id[world_object.spawn_based_id] = world_object
 
     def get_world_object(self, name: str) -> "WorldObject":
-        return getattr(self, name)
+        if name in self._unique_objects:
+            return self._unique_objects[name]
+        raise AttributeError(f"WorldObjectsController has no unique object with name '{name}'")
 
     def _get_sorted_objects(self) -> List["WorldObject"]:
         """

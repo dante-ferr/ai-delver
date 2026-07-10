@@ -36,7 +36,7 @@ class Delver(SkeletalEntity):
         super().__init__(runtime, skeleton=skeleton)
 
         self._physics_engine = runtime.physics_engine
-        self._base_delver = self._physics_engine.get_delver()
+        self.base_object = self._physics_engine.get_delver()
         self._spawn_based_id = "delver"
         self.pending_run: float = 0.0
         self.pending_jump: bool = False
@@ -64,7 +64,8 @@ class Delver(SkeletalEntity):
         return skeleton
 
     def _state(self):
-        return self._physics_engine.get_delver()
+        self.base_object = self._physics_engine.get_delver()
+        return self.base_object
 
     @property
     def position(self) -> tuple[float, float]:

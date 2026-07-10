@@ -18,7 +18,7 @@ class Goal(Item):
 
     def __init__(self, runtime: "Runtime", variation: str, render: bool):
         self._physics_engine = runtime.physics_engine
-        self._base_goal = self._physics_engine.get_goal()
+        self.base_object = self._physics_engine.get_goal()
         sprite_path = _resolve_goal_sprite_path(variation) if render else None
         super().__init__(
             runtime,
@@ -29,14 +29,14 @@ class Goal(Item):
 
     @property
     def position(self) -> tuple[float, float]:
-        return (self._base_goal.x, self._base_goal.y)
+        return (self.base_object.x, self.base_object.y)
 
     @position.setter
     def position(self, value: tuple[float, float]):
         pass
 
     def update(self, dt: float):
-        self._base_goal = self._physics_engine.get_goal()
+        self.base_object = self._physics_engine.get_goal()
         super().update(dt)
         if self.sprite:
             x, y = self.position

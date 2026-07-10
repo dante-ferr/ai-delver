@@ -154,7 +154,7 @@ class PPOAgentFactory:
             entropy_regularization=config.ENTROPY_REGULARIZATION,
             use_gae=True,
             use_td_lambda_return=True,
-            num_epochs=5,
+            num_epochs=config.PPO_NUM_EPOCHS,
             check_numerics=False,
             debug_summaries=False,
         )

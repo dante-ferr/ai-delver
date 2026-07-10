@@ -16,6 +16,7 @@ class TrainRequest(BaseModel):
     episodes_per_cycle: int
     level_transitioning_mode: Literal["static", "dynamic"]
     config_overrides: Optional[dict[str, Any]] = None
+    model_bytes_b64: Optional[str] = None
 
 
 @router.get("/init")
@@ -75,7 +76,7 @@ async def websocket_training_endpoint(websocket: WebSocket, session_id: str):
     replay_queue = session.replay_queue
 
     try:
-        while session_manager.get_session(session_id):
+        while True:
             replay_data = await replay_queue.get()
 
             if replay_data == "end":

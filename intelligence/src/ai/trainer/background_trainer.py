@@ -8,6 +8,9 @@ def run_training_in_background(session_id: str):
     """Initializes shared objects for a specific session and starts training."""
     global SESSION_REGISTRY, REGISTRY_LOCK
 
+    import tensorflow as tf
+    tf.keras.backend.clear_session()
+
     session = session_manager.get_session(session_id)
     if not session:
         logging.error(f"FATAL: Background worker could not find session {session_id}.")
@@ -26,6 +29,26 @@ def run_training_in_background(session_id: str):
     try:
         session.trainer.setup_env_and_agent()
         session.trainer.train()
+
+        # Extract and send final model weights over the WebSocket queue
+        if hasattr(session.trainer, "model_manager"):
+            try:
+                model_bytes = session.trainer.model_manager.get_serialized_model()
+                if model_bytes:
+                    import base64
+                    model_bytes_b64 = base64.b64encode(model_bytes).decode("utf-8")
+                    payload = {
+                        "type": "model_weights",
+                        "model_bytes_b64": model_bytes_b64
+                    }
+                    if session.trainer.loop:
+                        session.trainer.loop.call_soon_threadsafe(
+                            session.replay_queue.put_nowait, payload
+                        )
+                    else:
+                        session.replay_queue.put_nowait(payload)
+            except Exception as e:
+                logging.error(f"Failed to serialize model weights for session {session_id}: {e}")
     except Exception as e:
         import traceback
         logging.error(

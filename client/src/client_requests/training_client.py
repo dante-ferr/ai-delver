@@ -45,7 +45,7 @@ class TrainingClient:
             if not os.path.exists(save_path):
                 level.save(save_path)
 
-    def create_training_payload(self, levels: list[str], episodes_per_cycle: int, mode: str, amount_of_cycles: int, config_overrides: dict = None) -> dict:
+    def create_training_payload(self, levels: list[str], episodes_per_cycle: int, mode: str, amount_of_cycles: int, config_overrides: dict = None, model_bytes_b64: str = None) -> dict:
         """Builds the request payload dictionary expected by the server."""
         level_jsons = []
         for level_name in levels:
@@ -65,6 +65,8 @@ class TrainingClient:
         }
         if config_overrides:
             payload["config_overrides"] = config_overrides
+        if model_bytes_b64:
+            payload["model_bytes_b64"] = model_bytes_b64
         return payload
 
     async def submit_training(self, payload: dict) -> dict:
@@ -105,13 +107,14 @@ class TrainingClient:
         on_completed: callable,
         on_error: callable,
         on_metrics: callable = None,
+        on_model_weights: callable = None,
     ):
         """Connects to the WebSocket endpoint and streams trajectory results via callbacks."""
         uri = f"ws://{self.server_url}/episode-trajectory/{session_id}"
         trajectory_factory = EpisodeTrajectoryFactory()
         
         try:
-            async with websockets.connect(uri) as websocket:
+            async with websockets.connect(uri, max_size=50 * 1024 * 1024) as websocket:
                 async for message in websocket:
                     try:
                         response_json = json.loads(message)
@@ -153,6 +156,10 @@ class TrainingClient:
                                 average_return=response_json.get("average_return"),
                                 episodes=response_json.get("episodes"),
                             )
+
+                    elif response_type == "model_weights":
+                        if on_model_weights:
+                            await on_model_weights(response_json.get("model_bytes_b64"))
         except Exception as e:
             on_error(f"WebSocket stream failed: {e}")
 

@@ -106,3 +106,19 @@ The CLI handles system signals (`SIGINT` / `SIGTERM`) gracefully:
 *   If a terminal user presses `Ctrl+C` or a process runner signals the subprocess, the client catches the interrupt.
 *   It sends an HTTP POST request to the server's `/interrupt-training/{session_id}` endpoint to signal the backend to pause, save, and exit.
 *   Once finished, it outputs `{"event": "interrupted", "message": "..."}` and exits cleanly with exit code `0`.
+
+---
+
+## 6. Client-Server Weights Synchronization (Warm-Starts)
+
+The training client supports bi-directional model weights synchronization with the intelligence server to allow training sessions to be warm-started from a previously saved state:
+
+1. **Client-to-Server (Upload)**:
+   * On startup, the CLI checks if a weights file (`model_weights.zip`) exists inside the agent's folder (`data/agents/{agent_name}/model_weights.zip`).
+   * If found, the client base64-encodes the zip archive and includes it in the `model_bytes_b64` field of the `/train` payload.
+   * The server decodes the payload and loads the weights into the actor and value networks of the newly created agent using name-and-shape matching.
+
+2. **Server-to-Client (Download)**:
+   * When training completes (either normally or via interrupt), the server serializes the final model policy, base64-encodes the bytes, and pushes them to the client over the active WebSocket connection as a `"type": "model_weights"` event.
+   * The client decodes the base64 string and writes it back to disk at `data/agents/{agent_name}/model_weights.zip` for future warm-starts.
+

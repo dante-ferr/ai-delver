@@ -84,6 +84,19 @@ def run_train(args):
             print_json("error", message=f"Failed to prepare levels: {e}")
             return
 
+        # Load existing agent weights if present
+        from agent.agent import Agent
+        agent_obj = Agent(args.agent)
+        model_bytes_b64 = None
+        if agent_obj.weights_path and agent_obj.weights_path.is_file():
+            import base64
+            try:
+                with open(agent_obj.weights_path, "rb") as f:
+                    model_bytes_b64 = base64.b64encode(f.read()).decode("utf-8")
+                print_json("info", message="Loaded existing policy weights from disk for warm-start.")
+            except Exception as e:
+                print_json("info", message=f"Failed to read existing weights: {e}")
+
         standard_keys = {"levels", "cycles", "episodes_per_cycle", "mode", "agent", "server", "command"}
         config_overrides = {
             key: val for key, val in vars(args).items()
@@ -95,7 +108,8 @@ def run_train(args):
             args.episodes_per_cycle,
             args.mode,
             args.cycles,
-            config_overrides=config_overrides if config_overrides else None
+            config_overrides=config_overrides if config_overrides else None,
+            model_bytes_b64=model_bytes_b64
         )
 
         print_json("request_sent", message=f"Sending training request to http://{args.server}/train...")
@@ -148,6 +162,21 @@ def run_train(args):
                 episodes=episodes,
             )
 
+        async def on_model_weights(model_bytes_b64):
+            if model_bytes_b64:
+                import base64
+                try:
+                    weights_data = base64.b64decode(model_bytes_b64)
+                    # Re-instantiate agent_obj to ensure save paths exist
+                    agent_obj = Agent(args.agent)
+                    if agent_obj.weights_path:
+                        agent_obj.weights_path.parent.mkdir(parents=True, exist_ok=True)
+                        with open(agent_obj.weights_path, "wb") as f:
+                            f.write(weights_data)
+                        print_json("info", message="Successfully saved downloaded model weights from server.")
+                except Exception as e:
+                    print_json("error", message=f"Failed to save downloaded model weights: {e}")
+
         try:
             await client_instance.listen_to_trajectory(
                 session_id=session_id,
@@ -156,6 +185,7 @@ def run_train(args):
                 on_completed=on_completed,
                 on_error=on_error,
                 on_metrics=on_metrics,
+                on_model_weights=on_model_weights,
             )
         except Exception as e:
             print_json("error", message=f"WebSocket stream error: {e}")

@@ -26,21 +26,17 @@ We intend to make these parameters fully configurable via the CLI (and eventuall
 
 ---
 
-## 2. Server-Client Model Weight Transfer
+## 2. Server-Client Model Weight Transfer (Completed)
 
-Currently, the intelligence server and the client run in separate environments, and the agent's neural network weights are only stored in the memory of the training server process. If the server or the GUI restarts, training progress is lost.
-
-### The Next Step: Bidirectional Weight Sync
-We plan to implement a protocol to sync model weights (`.keras` / `.h5` or PyTorch state dicts) over the network:
+We have fully implemented and verified bi-directional network weight transfer between the client CLI and the training server:
 
 1. **Downstream (Server $\rightarrow$ Client)**:
-   * When training completes or is interrupted, the intelligence server serializes the model weights.
-   * The server sends the weights payload (as raw bytes or via a structured endpoint/WebSocket frame) to the CLI training client.
-   * The CLI client saves the weights file under the agent's local directory: `data/agents/<agent_name>/model_weights.keras`.
+   * When training completes (either normally or via interrupt), the uvicorn server serializes the final model policy, base64-encodes the zip archive, and streams it to the CLI client over the active WebSocket connection.
+   * The client decodes and saves it locally at `data/agents/<agent_name>/model_weights.zip`.
 2. **Upstream (Client $\rightarrow$ Server)**:
-   * When starting a training session for an existing agent, the CLI client reads the local `model_weights.keras` file.
-   * The client transmits the weights to the server during the session initialization (`/train` or WebSockets).
-   * The server loads the weights into the neural network before starting the training loop (warm-starting).
+   * When training is initialized, the client checks for the existence of `model_weights.zip`. If present, it base64-encodes the archive and attaches it to the `/train` request payload.
+   * The server extracts and decodes the model weights, mapping variables dynamically by name and shape to warm-start both the actor and value networks.
+   * Resets Keras global session state before training runs to avoid global layer name counter collisions.
 
 ---
 

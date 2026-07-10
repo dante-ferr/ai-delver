@@ -21,7 +21,16 @@ class TrainingSession:
         self.level_transitioning_mode = request.level_transitioning_mode
 
         self.session_id: str = str(uuid.uuid4())
-        self.trainer = trainer_factory(self)
+
+        model_bytes = None
+        if getattr(request, "model_bytes_b64", None):
+            import base64
+            try:
+                model_bytes = base64.b64decode(request.model_bytes_b64)
+            except Exception as e:
+                logging.error(f"Failed to decode model_bytes_b64: {e}")
+
+        self.trainer = trainer_factory(self, model_bytes=model_bytes)
 
         # This is the FAST queue for the asyncio server (WebSocket).
         self.replay_queue: asyncio.Queue[Any] = asyncio.Queue()
@@ -50,10 +59,21 @@ class SessionManager:
             if session_id in self._sessions:
                 session = self._sessions[session_id]
                 try:
-                    session.replay_queue.put_nowait("end")
+                    loop = None
+                    if session.trainer and getattr(session.trainer, "loop", None):
+                        loop = session.trainer.loop
+
+                    if loop:
+                        loop.call_soon_threadsafe(session.replay_queue.put_nowait, "end")
+                    else:
+                        session.replay_queue.put_nowait("end")
                 except asyncio.QueueFull:
                     logging.warning(
                         f"Could not signal end to session {session_id}: queue is full."
+                    )
+                except Exception as e:
+                    logging.warning(
+                        f"Could not signal end to session {session_id}: {e}."
                     )
 
                 del self._sessions[session_id]

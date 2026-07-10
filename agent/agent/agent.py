@@ -55,3 +55,12 @@ class Agent:
             if AGENT_SAVE_FOLDER_PATH
             else None
         )
+
+    @property
+    def weights_path(self) -> Path | None:
+        """Dynamically generates the save file path for policy weights."""
+        return (
+            Path(AGENT_SAVE_FOLDER_PATH) / Path(self.name) / "model_weights.zip"
+            if AGENT_SAVE_FOLDER_PATH
+            else None
+        )

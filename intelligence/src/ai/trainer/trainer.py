@@ -238,7 +238,6 @@ class Trainer:
         logging.info("Shutting down trainer...")
         self.env_manager.close()
         self.agent_manager.clear_buffer()
-        session_manager.delete_session(self.session.session_id)
 
     def interrupt_training(self) -> None:
         self._is_interrupted = True

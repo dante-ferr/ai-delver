@@ -2,3 +2,5 @@
 .venv
 .vscode
 __pycache__/
+target/
+runtime/runtime_core*.so

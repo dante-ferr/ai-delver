@@ -39,3 +39,19 @@ To make the coaching experience smooth and prevent accidental skill wipes, the c
      * The system automatically scales the default learning rate down to `0.000075` (1/4 of the default `0.0003` value).
      * If the user has explicitly overridden the learning rate in their arguments, the CLI respects their override and logs the choice.
 4. **History Consolidation**: Upon successful training completion, the new levels are appended to `metadata.json`'s `trained_levels` list.
+
+---
+
+## 4. Agent Starting Modes: Blank Slate vs. Pre-Trained Foundation
+
+To give the player full agency over the coaching experience, the application offers two starting modes when creating a new agent:
+
+### A. Blank Slate Mode (Starting from Scratch)
+*   **Concept**: The agent is initialized with completely randomized weights.
+*   **Player Experience**: The player builds custom training arenas and watches the agent learn to navigate from absolute zero.
+*   **Why it works**: Because the application ships with **auto-tuned hyperparameter defaults** (`config.toml`), the fresh agent trains stably and quickly without diverging, making the initial learning loop engaging and satisfying.
+
+### B. Pre-Trained Foundation Mode (Warm-Start Shipped Weights)
+*   **Concept**: The agent is initialized with a copy of the developer's pre-trained model weights (e.g. `default_weights.zip`).
+*   **Player Experience**: The agent starts with basic motor skills (walking, jumping, hazard evasion) already mastered. The player can immediately jump into training the agent on advanced, specialized custom tasks.
+

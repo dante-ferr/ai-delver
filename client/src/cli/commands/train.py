@@ -133,6 +133,26 @@ def run_train(args):
             except Exception as e:
                 print_json("info", message=f"Failed to read weights from '{weights_to_load}': {e}")
 
+        # Check if we are facing a new challenge to prevent catastrophic forgetting
+        from runtime.episode_trajectory._trajectory_metadata_manager import TrajectoryMetadataManager
+        metadata_manager = TrajectoryMetadataManager(args.agent)
+        try:
+            metadata = await metadata_manager.read_metadata()
+        except Exception:
+            metadata = {"trajectory_count": 0, "stats": {"amount": 0, "victories": 0}}
+
+        previously_trained = metadata.get("trained_levels", [])
+        new_levels = [lvl for lvl in levels_list if lvl not in previously_trained]
+
+        # If warm-starting and facing a new challenge
+        if weights_to_load and new_levels:
+            if args.learning_rate is None:
+                # Default is 0.0003; reduce to 0.000075 (1/4)
+                args.learning_rate = 0.000075
+                print_json("info", message=f"New challenge detected (levels: {', '.join(new_levels)}). Automatically reduced learning rate to 0.000075 to prevent catastrophic forgetting.")
+            else:
+                print_json("info", message=f"New challenge detected (levels: {', '.join(new_levels)}). Respecting user-specified learning rate override of {args.learning_rate}.")
+
         standard_keys = {"levels", "cycles", "episodes_per_cycle", "mode", "agent", "server", "command", "checkpoint"}
         config_overrides = {
             key: val for key, val in vars(args).items()
@@ -240,6 +260,17 @@ def run_train(args):
                 on_model_weights=on_model_weights,
                 on_checkpoint=on_checkpoint,
             )
+            # Update trained levels history if session finished successfully
+            if completed_normally:
+                try:
+                    metadata = await metadata_manager.read_metadata()
+                    trained = set(metadata.get("trained_levels", []))
+                    for lvl in levels_list:
+                        trained.add(lvl)
+                    metadata["trained_levels"] = list(trained)
+                    await metadata_manager.write_metadata(metadata)
+                except Exception as e:
+                    print_json("error", message=f"Failed to update trained levels history: {e}")
         except Exception as e:
             print_json("error", message=f"WebSocket stream error: {e}")
         finally:

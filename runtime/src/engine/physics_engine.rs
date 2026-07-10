@@ -27,10 +27,6 @@ pub struct RustPhysicsEngine {
 
     // Handles
     player_body_handle: RigidBodyHandle,
-
-    // Jump timers
-    jump_tolerance_timer: f32,
-    jump_cooldown_timer: f32,
 }
 
 #[pymethods]
@@ -126,8 +122,6 @@ impl RustPhysicsEngine {
             ccd_solver,
             query_pipeline,
             player_body_handle,
-            jump_tolerance_timer: 0.0,
-            jump_cooldown_timer: 0.0,
         }
     }
 
@@ -197,88 +191,30 @@ impl RustPhysicsEngine {
 
 impl RustPhysicsEngine {
     fn tick_physics(&mut self, dt: f32, action_run: f32, action_jump: bool) {
-        // 1. Update jump timers
-        if self.jump_cooldown_timer > 0.0 {
-            self.jump_cooldown_timer -= dt;
-        }
-
-        // Query ground state before taking a step
         self.query_pipeline.update(&self.rigid_body_set, &self.collider_set);
-        let rb = &self.rigid_body_set[self.player_body_handle];
-        let player_pos = *rb.translation();
 
-        let left_x = player_pos.x - self.consts.player_width / 2.0 + 3.0;
-        let right_x = player_pos.x + self.consts.player_width / 2.0 - 3.0;
-        let ray_y = player_pos.y - self.consts.player_height / 2.0 + 0.05;
+        let old_vx = {
+            let rb = &self.rigid_body_set[self.player_body_handle];
+            rb.linvel().x
+        };
+        let old_x = {
+            let rb = &self.rigid_body_set[self.player_body_handle];
+            rb.translation().x
+        };
 
-        let ray_dir = vector![0.0, -1.0];
-        let max_toi = 0.07; // 0.05 internal offset + 0.02 buffer below feet
-
-        let filter = QueryFilter::default().exclude_rigid_body(self.player_body_handle);
-
-        let hit_left = self.query_pipeline.cast_ray(
-            &self.rigid_body_set,
+        // 1. Delegate pre-step updates to the BaseDelver
+        self.delver.pre_step(
+            dt,
+            action_run,
+            action_jump,
+            &mut self.rigid_body_set,
             &self.collider_set,
-            &Ray::new(point![left_x, ray_y], ray_dir),
-            max_toi,
-            true,
-            filter,
+            &self.query_pipeline,
+            self.player_body_handle,
+            &self.consts,
         );
 
-        let hit_right = self.query_pipeline.cast_ray(
-            &self.rigid_body_set,
-            &self.collider_set,
-            &Ray::new(point![right_x, ray_y], ray_dir),
-            max_toi,
-            true,
-            filter,
-        );
-
-        let is_on_ground = hit_left.is_some() || hit_right.is_some();
-
-        if is_on_ground {
-            self.jump_tolerance_timer = self.consts.jump_tolerance_max;
-        } else if self.jump_tolerance_timer > 0.0 {
-            self.jump_tolerance_timer -= dt;
-        }
-
-        // 2. Fetch and calculate horizontal forces / damping
-        let rb = &mut self.rigid_body_set[self.player_body_handle];
-        let mut linvel = *rb.linvel();
-        let mut force_x = 0.0;
-
-        if action_run != 0.0 {
-            force_x += action_run * self.consts.move_force;
-            if linvel.x * action_run < 0.0 {
-                let dir = if linvel.x > 0.0 { -1.0 } else { 1.0 };
-                force_x += dir * self.consts.braking_force;
-            }
-            force_x -= linvel.x * self.consts.linear_damping;
-        } else {
-            if linvel.x.abs() > 10.0 {
-                let dir = if linvel.x > 0.0 { -1.0 } else { 1.0 };
-                force_x += dir * self.consts.braking_force;
-            } else {
-                linvel.x = 0.0;
-            }
-        }
-
-        linvel.x += force_x * dt;
-        linvel.x = linvel.x.clamp(-self.consts.max_vx, self.consts.max_vx);
-
-        // 3. Jump impulse
-        let can_jump = is_on_ground || self.jump_tolerance_timer > 0.0;
-        if action_jump && self.jump_cooldown_timer <= 0.0 && can_jump {
-            linvel.y = self.consts.jump_impulse;
-            self.jump_cooldown_timer = self.consts.jump_cooldown_max;
-            self.jump_tolerance_timer = 0.0;
-        }
-
-        let old_vx = linvel.x;
-        let old_x = player_pos.x;
-        rb.set_linvel(linvel, true);
-
-        // 4. Step Rapier Simulation
+        // 2. Step Rapier Simulation
         let gravity = vector![0.0, self.consts.gravity];
         let integration_parameters = IntegrationParameters {
             dt,
@@ -303,51 +239,15 @@ impl RustPhysicsEngine {
             &event_handler,
         );
 
-        // 5. Update self.delver from rigid body
-        let rb = &mut self.rigid_body_set[self.player_body_handle];
-        let pos = *rb.translation();
-        let mut vel = *rb.linvel();
-
-        // Check if we hit a wall horizontally (velocity was blocked/intended distance not travelled)
-        let dx = (pos.x - old_x).abs();
-        let intended_dx = (old_vx * dt).abs();
-        if intended_dx > 0.1 && dx < 0.1 * intended_dx {
-            vel.x = 0.0;
-        } else if is_on_ground {
-            // Preserve horizontal velocity to resolve corner normal forces and landing slowdowns
-            vel.x = old_vx;
-        }
-
-        vel.x = vel.x.clamp(-self.consts.max_vx, self.consts.max_vx);
-        vel.y = vel.y.clamp(-self.consts.max_vy, self.consts.max_vy);
-        rb.set_linvel(vel, true);
-
-        self.delver.x = pos.x;
-        self.delver.y = pos.y;
-        self.delver.vx = vel.x;
-        self.delver.vy = vel.y;
-        self.delver.is_on_ground = is_on_ground;
-
-        // Check victory
-        let half_w = self.consts.player_width / 2.0;
-        let half_h = self.consts.player_height / 2.0;
-        let left = self.delver.x - half_w;
-        let right = self.delver.x + half_w;
-        let bottom = self.delver.y - half_h;
-        let top = self.delver.y + half_h;
-
-        let (min_tx, max_tx, min_ty, max_ty) = self.grid.tile_coords_for_aabb(left, right, bottom, top);
-        for ty in min_ty..=max_ty {
-            for tx in min_tx..=max_tx {
-                if self.grid.get(tx as i32, ty as i32) == 3 {
-                    self.delver.is_victory = true;
-                }
-            }
-        }
-
-        // Out-of-bounds death
-        if self.delver.y + half_h < 0.0 {
-            self.delver.is_dead = true;
-        }
+        // 3. Delegate post-step updates and velocity restoration to the BaseDelver
+        self.delver.post_step(
+            dt,
+            old_vx,
+            old_x,
+            &mut self.rigid_body_set,
+            self.player_body_handle,
+            &self.consts,
+            &self.grid,
+        );
     }
 }

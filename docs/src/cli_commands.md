@@ -21,8 +21,10 @@ poetry run python src/cli/main.py train \
     --agent ppo_delver
 ```
 
-#### Optional Hyperparameter Overrides
-You can optionally override individual training and reward parameters from `config.toml` for the duration of the training session:
+#### Optional Parameters and Hyperparameter Overrides
+You can optionally configure checkpoints or override individual training and reward parameters from `config.toml` for the duration of the training session:
+* `--checkpoint-interval <int>`: Frequency (in cycles) to save intermediate checkpoints under `data/agents/<agent_name>/checkpoints/cycle_<N>.zip` (default `0`, which disables periodic saving).
+* `--checkpoint <name_or_number>`: Name or cycle number of an existing checkpoint to load from the checkpoints directory for warm-starting training.
 * `--learning-rate <float>`: Learning rate for the policy optimizer.
 * `--gamma <float>`: Discount factor for rewards.
 * `--entropy-regularization <float>`: Policy entropy weight to control exploration.
@@ -39,9 +41,9 @@ You can optionally override individual training and reward parameters from `conf
 The CLI and the intelligence server employ a dynamic mapping pattern to transfer parameters without maintaining duplicate lists of variable names across different architectural layers (CLI arguments $\rightarrow$ Client payload $\rightarrow$ Server request $\rightarrow$ Core config):
 
 1. **Client-Side Filtering**:
-   In `client/src/cli/commands/train.py`, the CLI separates session control arguments from hyperparameter overrides by checking parsed inputs against a set of `standard_keys` (e.g., `levels`, `mode`, `agent`, etc.). Anything else is dynamically gathered into a `config_overrides` dictionary:
+   In `client/src/cli/commands/train.py`, the CLI separates session control arguments and client-side parameters from hyperparameter overrides by checking parsed inputs against a set of `standard_keys` (e.g., `levels`, `mode`, `agent`, etc.). Anything else is dynamically gathered into a `config_overrides` dictionary:
    ```python
-   standard_keys = {"levels", "cycles", "episodes_per_cycle", "mode", "agent", "server", "command"}
+   standard_keys = {"levels", "cycles", "episodes_per_cycle", "mode", "agent", "server", "command", "checkpoint"}
    config_overrides = {
        key: val for key, val in vars(args).items()
        if key not in standard_keys and val is not None
@@ -50,7 +52,7 @@ The CLI and the intelligence server employ a dynamic mapping pattern to transfer
 2. **REST API Payload**:
    The `config_overrides` dictionary is sent as an optional property in the `TrainRequest` JSON body submitted to the server's `/train` endpoint.
 3. **Server-Side Application**:
-   Upon session initialization, the intelligence server invokes `config.update_config(request.config_overrides)`. This resets the server configuration state to the defaults specified in `config.toml`, applies the active overrides, and triggers the recalculation of reward scaling factors and collector step counts.
+   Upon session initialization, the intelligence server invokes `config.update_config(request.config_overrides)`. This resets the server configuration state to the defaults specified in `config.toml`, applies the active overrides (including `checkpoint_interval`), and triggers the recalculation of reward scaling factors and collector step counts.
 
 **GUI Trigger**: The "Train" button in `_train_buttons_container.py`.
 
@@ -140,6 +142,7 @@ for line in iter(self.train_process.stdout.readline, ""):
 | `progress` | `train` | A cycle completed (includes cycle number and episode count) |
 | `level_transition` | `train` | Agent graduated to a new level |
 | `metrics` | `train` | Deep learning metrics snapshot (loss, average return, step, episodes) |
+| `checkpoint` | `train` | Intermediate model weights checkpoint received from server |
 | `completed` | `train` | All cycles finished successfully |
 | `interrupted` | `train` | Training was interrupted gracefully |
 | `stats` | `stats` | Aggregate statistics for the agent |

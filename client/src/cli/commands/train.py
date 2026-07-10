@@ -133,7 +133,7 @@ def run_train(args):
             except Exception as e:
                 print_json("info", message=f"Failed to read weights from '{weights_to_load}': {e}")
 
-        standard_keys = {"levels", "cycles", "episodes_per_cycle", "mode", "agent", "server", "command"}
+        standard_keys = {"levels", "cycles", "episodes_per_cycle", "mode", "agent", "server", "command", "checkpoint"}
         config_overrides = {
             key: val for key, val in vars(args).items()
             if key not in standard_keys and val is not None

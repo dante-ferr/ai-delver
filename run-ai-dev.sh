@@ -44,7 +44,7 @@ for arg in "$@"; do
 done
 
 # Determine container behavior via environment variables
-export CONTAINER_COMMAND="PYTHONHASHSEED=0 python3 src/main.py"
+export CONTAINER_COMMAND="python3 /runtime/build_rust.py && PYTHONHASHSEED=0 python3 src/main.py"
 
 # GPU Detection
 if lspci | grep -iq 'vga.*nvidia'; then

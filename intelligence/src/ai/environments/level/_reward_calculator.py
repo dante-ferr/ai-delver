@@ -64,7 +64,12 @@ class RewardCalculator:
         reward += config.FRAME_STEP_REWARD
 
         # Exploration Reward
-        if simulation.exploration_grid.step_on(simulation.delver.position, 1):
+        tile_w, tile_h = self._level.map.tile_size
+        grid_h = self._level.map.grid_size[1]
+        map_height_px = grid_h * tile_h
+        curr_tx = simulation.delver.position[0] / tile_w
+        curr_ty = (map_height_px - simulation.delver.position[1]) / tile_h
+        if simulation.exploration_grid.step_on((curr_tx, curr_ty), 1):
             reward += config.TILE_EXPLORATION_REWARD
 
         # Dijkstra Distance Reward (The Compass)

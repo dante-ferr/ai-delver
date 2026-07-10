@@ -1,7 +1,6 @@
 from .replay import Replay
 from typing import TYPE_CHECKING, Dict, cast, List
-from pymunk import Vec2d
-from runtime.world_objects.entities.entity import Entity
+from runtime.world_objects.entities.skeletal_entity import SkeletalEntity
 from runtime.episode_trajectory.snapshots import interpolate_frame_snapshots
 from loaders import level_loader
 from loaders import agent_loader
@@ -18,8 +17,8 @@ def lerp(a: float, b: float, alpha: float) -> float:
     return a + alpha * (b - a)
 
 
-def lerp_vec(v1: list[float], v2: list[float], alpha: float) -> Vec2d:
-    return Vec2d(v1[0], v1[1]).interpolate_to(Vec2d(v2[0], v2[1]), alpha)
+def lerp_vec(v1: list[float], v2: list[float], alpha: float) -> tuple[float, float]:
+    return (lerp(v1[0], v2[0], alpha), lerp(v1[1], v2[1], alpha))
 
 
 class StateSyncReplay(Replay):
@@ -50,10 +49,10 @@ class StateSyncReplay(Replay):
         self.execution_speed = 1.0
 
         entities = cast(
-            "List[Entity]",
-            self.world_objects_controller.get_world_objects_by_type(Entity),
+            "List[SkeletalEntity]",
+            self.world_objects_controller.get_world_objects_by_type(SkeletalEntity),
         )
-        self.entity_map: Dict[str, "Entity"] = {
+        self.entity_map: Dict[str, "SkeletalEntity"] = {
             obj.spawn_based_id: obj for obj in entities
         }
 

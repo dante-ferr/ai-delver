@@ -28,7 +28,13 @@ class LevelEnvironment(PyEnvironment):
     WINDOW_SIZE = 15
 
     def __init__(
-        self, env_id: int, level_json: dict, session_id: str, is_showcase: bool = False
+        self,
+        env_id: int,
+        level_json: dict,
+        session_id: str,
+        is_showcase: bool = False,
+        frame_counter=None,
+        frame_lock=None,
     ):
         super().__init__()
 
@@ -36,6 +42,8 @@ class LevelEnvironment(PyEnvironment):
         self._level_json = level_json
         self._session_id = session_id
         self._is_showcase = is_showcase
+        self._frame_counter_override = frame_counter
+        self._frame_lock_override = frame_lock
 
         self._init_level_and_simulation()
         self._init_reward_system()
@@ -81,11 +89,15 @@ class LevelEnvironment(PyEnvironment):
 
     def _init_global_frame_tracking(self, session_id: str):
         """Initializes shared global frame counters for synchronization."""
-        with REGISTRY_LOCK:
-            session_objects = SESSION_REGISTRY[session_id]
+        if self._frame_counter_override is not None:
+            self._global_frame_counter = self._frame_counter_override
+            self._global_frame_lock = self._frame_lock_override
+        else:
+            with REGISTRY_LOCK:
+                session_objects = SESSION_REGISTRY[session_id]
+            self._global_frame_counter = session_objects["frame_counter"]
+            self._global_frame_lock = session_objects["frame_lock"]
 
-        self._global_frame_counter = session_objects["frame_counter"]
-        self._global_frame_lock = session_objects["frame_lock"]
         with self._global_frame_lock:
             self._last_frame_count = self._global_frame_counter.value
             self._initial_frame_count = self._last_frame_count
@@ -238,33 +250,8 @@ class LevelEnvironment(PyEnvironment):
 
     def _get_local_view(self):
         """Extracts a cropped grid centered on the agent's current position."""
-        grid = self.platforms_grid
-        h, w = grid.shape
-
-        tx = int(self.delver_position[0] // self._level.map.tile_size[0])
-        ty = self._physics_y_to_grid_y(self.delver_position[1])
-
-        half = self.WINDOW_SIZE // 2
-
-        y_start, y_end = ty - half, ty + half + 1
-        x_start, x_end = tx - half, tx + half + 1
-
-        view = np.ones((self.WINDOW_SIZE, self.WINDOW_SIZE), dtype=np.uint8)
-
-        # Calculate valid intersection between the requested window and the actual grid
-        grid_y_s, grid_y_e = max(0, y_start), min(h, y_end)
-        grid_x_s, grid_x_e = max(0, x_start), min(w, x_end)
-
-        view_y_s, view_x_s = max(0, -y_start), max(0, -x_start)
-        view_y_e = view_y_s + (grid_y_e - grid_y_s)
-        view_x_e = view_x_s + (grid_x_e - grid_x_s)
-
-        if grid_y_e > grid_y_s and grid_x_e > grid_x_s:
-            view[view_y_s:view_y_e, view_x_s:view_x_e] = grid[
-                grid_y_s:grid_y_e, grid_x_s:grid_x_e
-            ]
-
-        return view
+        flat_view = self.simulation.physics_engine.get_local_view(radius=7)
+        return np.array(flat_view, dtype=np.uint8).reshape((15, 15))
 
     def _create_time_step(self, reward):
         """Wraps the current observation and reward into a TF-Agents TimeStep."""

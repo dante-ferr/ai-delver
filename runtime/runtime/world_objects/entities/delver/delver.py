@@ -1,34 +1,49 @@
 from enum import Enum
+from typing import Optional, TYPE_CHECKING
+
 import pyglet
 from pyglet_dragonbones.skeleton import Skeleton
-from .delver_body import DelverBody
-import pymunk
+
 from ..skeletal_entity import SkeletalEntity, LocomotionState
 from runtime.config import ASSETS_PATH
-from utils import vector_to_angle
+from runtime.utils import vector_to_angle
+
+if TYPE_CHECKING:
+    from runtime.runtime import Runtime
 
 
 class DelverLocomotionState(str, Enum):
+    """Extended locomotion states specific to the Delver character."""
     JUMP = "JUMP"
 
 
 class Delver(SkeletalEntity):
+    """
+    The player character for the visual (Pyglet) client.
+
+    Physics are driven entirely by the Rust engine exposed through `runtime.physics_engine`.
+    This class is responsible for:
+      - Buffering pending input (`pending_run`, `pending_jump`)
+      - Driving DragonBones skeleton animation from physics state
+      - Air-tilt visual effect
+    """
 
     AIR_TILT_ANGLE = 20.0
-    locomotion_state_enums = [DelverLocomotionState, LocomotionState]
+    MAX_SPEED = (500.0, 1000.0)
 
-    def __init__(self, runtime, space: pymunk.Space, render=True):
-        body = DelverBody()
-        space.add(body, body.shape)
+    def __init__(self, runtime: "Runtime", render: bool = True):
+        skeleton = self._build_skeleton(render) if render else None
+        super().__init__(runtime, skeleton=skeleton)
 
-        body.setup_collision_handlers()
+        self._physics_engine = runtime.physics_engine
+        self._base_delver = self._physics_engine.get_delver()
+        self._spawn_based_id = "delver"
+        self.pending_run: float = 0.0
+        self.pending_jump: bool = False
 
-        skeleton = self._skeleton_factory(render) if render else None
-        super().__init__(runtime, body, skeleton)
-
-    def _skeleton_factory(self, render):
-        if render == True:
-            delver_groups = {
+    def _build_skeleton(self, render: bool) -> Optional[Skeleton]:
+        groups = (
+            {
                 "feather": pyglet.graphics.Group(6),
                 "head": pyglet.graphics.Group(5),
                 "front_hand": pyglet.graphics.Group(4),
@@ -37,78 +52,98 @@ class Delver(SkeletalEntity):
                 "front_foot": pyglet.graphics.Group(1),
                 "back_foot": pyglet.graphics.Group(0),
             }
-        else:
-            delver_groups = None
-
+            if render
+            else None
+        )
         skeleton = Skeleton(
-            str(ASSETS_PATH / "img/sprites/delver"), groups=delver_groups, render=render
+            str(ASSETS_PATH / "img/sprites/delver"), groups=groups, render=render
         )
         for bone in skeleton.bones.values():
             bone.transform.smoothing_enabled["scale"] = False
-
+            
         return skeleton
 
-    def run(self, dt, direction: int):
-        """
-        Make the delver run in a given direction. -1 = left, 1 = right
-        """
-        super().move(dt, vector_to_angle((direction, 0)))
+    def _state(self):
+        return self._physics_engine.get_delver()
 
-    def jump(self, dt):
-        jumped = self.body.jump()
-        if jumped:
-            self.locomotion_state = DelverLocomotionState.JUMP
-            self.play_locomotion_animation()
+    @property
+    def position(self) -> tuple[float, float]:
+        s = self._state()
+        return (s.x, s.y)
 
-    def draw(self, dt):
+    @property
+    def velocity(self) -> tuple[float, float]:
+        s = self._state()
+        return (s.vx, s.vy)
+
+    @property
+    def is_on_ground(self) -> bool:
+        return self._state().is_on_ground
+
+    def check_collision(self, other) -> bool:
+        return self._state().is_victory
+
+    def run(self, dt: float, direction: int):
+        self.pending_run = float(direction)
+        self.is_moving_intentionally = True
         if self.skeleton:
-            self.skeleton.draw(dt)
-        super().draw(dt)
+            self.move_angle = vector_to_angle((direction, 0))
+            self.apply_move_visuals()
 
-    def update(self, dt):
+    def jump(self, dt: float):
+        self.pending_jump = True
+        self.locomotion_state = DelverLocomotionState.JUMP
+        self.play_locomotion_animation()
+
+    def update(self, dt: float):
+        s = self._state()
         if self.skeleton:
-            self.skeleton.position = (self.body.position.x, self.body.position.y)
+            self.skeleton.position = (s.x, s.y)
             self.skeleton.update(dt)
 
         is_moving = self.is_moving_intentionally
+        self.is_moving_intentionally = False
 
-        super().update(dt)
+        if not self.in_replay:
+            self._update_locomotion(s, is_moving)
+
+    def draw(self, dt: float):
+        if self.skeleton:
+            self.skeleton.draw(dt)
+
+    def _update_locomotion(self, state, is_moving: bool):
+        # Maintain JUMP state while still rising
+        if self.locomotion_state == DelverLocomotionState.JUMP and state.vy > 0:
+            return
+
+        self.update_locomotion_state(
+            is_on_ground=state.is_on_ground,
+            vy=state.vy,
+            is_moving=is_moving,
+        )
 
         if self.skeleton:
-            self._update_tilt(is_moving)
+            self._update_tilt(state, is_moving)
 
-    def _update_tilt(self, is_moving: bool):
+    def _update_tilt(self, state, is_moving: bool):
         is_airborne = self.locomotion_state in (
             LocomotionState.GO_UP,
             LocomotionState.FALL,
             DelverLocomotionState.JUMP,
         )
-
         if is_airborne and is_moving:
-            self.angle = (
-                self.AIR_TILT_ANGLE if self.scale[0] > 0 else -self.AIR_TILT_ANGLE
-            )
+            self.angle = self.AIR_TILT_ANGLE if self.scale[0] > 0 else -self.AIR_TILT_ANGLE
         else:
             self.angle = 0.0
-
-    def _update_locomotion_state(self, is_moving: bool):
-        # If we are jumping and still going up, maintain JUMP state
-        if self.locomotion_state == DelverLocomotionState.JUMP:
-            if self.velocity.y > 0:
-                return
-
-        super()._update_locomotion_state(is_moving)
-
-    def _on_jump_finish(self):
-        if self.locomotion_state == DelverLocomotionState.JUMP:
-            if self.velocity.y > 0:
-                self.locomotion_state = LocomotionState.GO_UP
-            else:
-                self.locomotion_state = LocomotionState.FALL
-            self.play_locomotion_animation()
 
     def play_locomotion_animation(self):
         if self.locomotion_state == DelverLocomotionState.JUMP:
             self.run_animation("jump", on_end=self._on_jump_finish)
         else:
             super().play_locomotion_animation()
+
+    def _on_jump_finish(self):
+        if self.locomotion_state == DelverLocomotionState.JUMP:
+            s = self._state()
+            if s.vy <= 0:
+                self.locomotion_state = LocomotionState.FALL

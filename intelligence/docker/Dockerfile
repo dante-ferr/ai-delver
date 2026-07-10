@@ -14,6 +14,14 @@ RUN apt-get update && \
     curl build-essential python3-pip tk-dev python3-tk && \
     rm -rf /var/lib/apt/lists/*
 
+# Install Rust toolchain system-wide for appuser accessibility
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path && \
+    chmod -R a+w $RUSTUP_HOME $CARGO_HOME
+
+
 # Create non-root user for security
 ARG UID=1000
 ARG GID=1000

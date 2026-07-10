@@ -1,7 +1,7 @@
 from ..simulation import Simulation
 from runtime.episode_trajectory import EpisodeTrajectory
 from ai.config import config
-from runtime.world_objects.entities import Entity
+from runtime.world_objects.entities import SkeletalEntity
 from runtime.episode_trajectory.snapshots import FrameSnapshot
 
 from typing import TYPE_CHECKING, cast
@@ -34,8 +34,8 @@ class ShowcaseSimulation(Simulation):
     def update(self, dt):
         super().update(dt)
 
-        entities = self.world_objects_controller.get_world_objects_by_type(Entity)
-        entities = cast(list[Entity], entities)
+        entities = self.world_objects_controller.get_world_objects_by_type(SkeletalEntity)
+        entities = cast(list[SkeletalEntity], entities)
         frame_snapshot = FrameSnapshot()
         for entity in entities:
             frame_snapshot.add_entity(entity)

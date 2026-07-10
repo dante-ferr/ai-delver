@@ -1,7 +1,7 @@
 import logging
 import multiprocessing as std_mp
 from ai.sessions.session_manager import session_manager
-from ai.sessions import REGISTRY_LOCK, SESSION_REGISTRY
+from ai.sessions import REGISTRY_LOCK, SESSION_REGISTRY, get_shared_manager
 
 
 def run_training_in_background(session_id: str):
@@ -20,10 +20,12 @@ def run_training_in_background(session_id: str):
             f"FATAL: Background worker could not find trainer for session {session_id}."
         )
 
+    # Use the long-lived shared manager to create picklable proxy objects
+    manager = get_shared_manager()
     with REGISTRY_LOCK:
         SESSION_REGISTRY[session_id] = {
-            "frame_counter": std_mp.Value("i", 0),
-            "frame_lock": std_mp.Lock(),
+            "frame_counter": manager.Value("i", 0),
+            "frame_lock": manager.Lock(),
         }
 
     try:
@@ -68,8 +70,7 @@ def run_training_in_background(session_id: str):
             session.replay_queue.put_nowait(error_payload)
     finally:
         with REGISTRY_LOCK:
-            if session_id in SESSION_REGISTRY:
-                del SESSION_REGISTRY[session_id]
+            SESSION_REGISTRY.pop(session_id, None)
 
         logging.info(f"Cleaning up session: {session_id}")
         session_manager.delete_session(session_id)

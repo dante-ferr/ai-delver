@@ -7,6 +7,7 @@ class GameControls(ViewControls):
 
     def __init__(self, keys: window.key.KeyStateHandler):
         super().__init__(keys)
+        self._space_was_down = False
 
     def _update_delver_controls(self, dt):
         run_direction = 0
@@ -16,8 +17,10 @@ class GameControls(ViewControls):
         if self.keys[window.key.LEFT]:
             run_direction -= 1
 
-        if self.keys[window.key.SPACE]:
+        space_is_down = self.keys[window.key.SPACE]
+        if space_is_down and not self._space_was_down:
             self.delver.jump(dt)
+        self._space_was_down = space_is_down
 
         if run_direction != 0:
             self.delver.run(dt, run_direction)

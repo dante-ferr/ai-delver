@@ -11,7 +11,7 @@ from typing import cast, TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
-    from runtime.world_objects.entities.entity import Entity
+    from runtime.world_objects.world_object import WorldObject
 
 
 @dataclass
@@ -27,7 +27,7 @@ class SkeletalEntityStateSnapshot(EntityStateSnapshot):
 
     entity_type: str = field(default="SkeletalEntity")
 
-    def apply_to_entity(self, entity: "Entity"):
+    def apply_to_entity(self, entity: "WorldObject"):
         super().apply_to_entity(entity)
 
         entity = cast("SkeletalEntity", entity)
@@ -38,7 +38,7 @@ class SkeletalEntityStateSnapshot(EntityStateSnapshot):
             entity.apply_move_visuals()
 
 class SkeletalEntityStateSnapshotFactory(EntityStateSnapshotFactory):
-    def _get_state_snapshot_args(self, entity: "Entity"):
+    def _get_state_snapshot_args(self, entity: "WorldObject"):
         entity = cast("SkeletalEntity", entity)
 
         locomotion_state = entity.locomotion_state
@@ -51,7 +51,7 @@ class SkeletalEntityStateSnapshotFactory(EntityStateSnapshotFactory):
         }
 
     def create_state_snapshot_from_entity(
-        self, entity: "Entity"
+        self, entity: "WorldObject"
     ) -> SkeletalEntityStateSnapshot:
         entity = cast("SkeletalEntity", entity)
 

@@ -7,7 +7,7 @@ from typing import List, TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .entity_state_snapshot import EntityStateSnapshot
-    from runtime.world_objects.entities.entity import Entity
+    from runtime.world_objects.world_object import WorldObject
 
 
 @dataclass
@@ -25,7 +25,7 @@ class FrameSnapshot:
         entity_state = snapshot_state_factory.create_state_snapshot_from_json(json)
         self.add_entity_snapshot(entity_state)
 
-    def add_entity(self, entity: "Entity"):
+    def add_entity(self, entity: "WorldObject"):
         snapshot_state_factory = EntityStateSnapshotFactoryProvider().from_entity_type(
             type(entity)
         )

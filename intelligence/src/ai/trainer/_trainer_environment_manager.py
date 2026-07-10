@@ -7,10 +7,15 @@ from typing import Optional
 
 
 def _create_level_environment(
-    env_id: int, level_json: dict, session_id: str
+    env_id: int, level_json: dict, session_id: str, frame_counter, frame_lock
 ) -> LevelEnvironment:
     return LevelEnvironment(
-        env_id=env_id, level_json=level_json, session_id=session_id, is_showcase=False
+        env_id=env_id,
+        level_json=level_json,
+        session_id=session_id,
+        is_showcase=False,
+        frame_counter=frame_counter,
+        frame_lock=frame_lock,
     )
 
 
@@ -33,12 +38,17 @@ class TrainerEnvironmentManager:
         """Creates or recreates the parallel environment for a specific level."""
         self.close()
 
+        from ai.sessions import SESSION_REGISTRY
+        session_objects = SESSION_REGISTRY[self.session_id]
+
         constructors = [
             functools.partial(
                 _create_level_environment,
                 env_id=i,
                 level_json=level_json,
                 session_id=self.session_id,
+                frame_counter=session_objects["frame_counter"],
+                frame_lock=session_objects["frame_lock"],
             )
             for i in range(config.ENV_BATCH_SIZE)
         ]

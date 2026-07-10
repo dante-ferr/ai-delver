@@ -89,6 +89,23 @@ class Config:
             if key in self._data:
                 self._data[key] = self._data[key] * self.REWARD_SCALE_FACTOR
 
+    def update_config(self, overrides: dict):
+        """Resets to default configuration values and applies overrides, recalculating scaling."""
+        self._raw_data = self._load_config()
+        self._data = self._raw_data.copy()
+
+        for key, val in overrides.items():
+            if val is not None:
+                self._raw_data[key] = val
+                self._data[key] = val
+
+        self.REWARD_SCALE_FACTOR = 1.0
+        self._normalize_rewards()
+
+        seconds = self._data.get("collect_seconds_per_env", 10)
+        aps = self._data.get("actions_per_second", 10)
+        self.COLLECT_STEPS_PER_ITERATION = int(self.ENV_BATCH_SIZE * seconds * aps)
+
     def __getattr__(self, name: str) -> Any:
         # Converts Python's UPPER_SNAKE_CASE to json's snake_case for lookup
         key = name.lower()

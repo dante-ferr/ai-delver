@@ -45,7 +45,7 @@ class TrainingClient:
             if not os.path.exists(save_path):
                 level.save(save_path)
 
-    def create_training_payload(self, levels: list[str], episodes_per_cycle: int, mode: str, amount_of_cycles: int) -> dict:
+    def create_training_payload(self, levels: list[str], episodes_per_cycle: int, mode: str, amount_of_cycles: int, config_overrides: dict = None) -> dict:
         """Builds the request payload dictionary expected by the server."""
         level_jsons = []
         for level_name in levels:
@@ -63,6 +63,8 @@ class TrainingClient:
             "level_transitioning_mode": mode,
             "amount_of_cycles": amount_of_cycles if mode == "static" else None
         }
+        if config_overrides:
+            payload["config_overrides"] = config_overrides
         return payload
 
     async def submit_training(self, payload: dict) -> dict:

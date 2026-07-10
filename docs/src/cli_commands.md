@@ -21,6 +21,20 @@ poetry run python src/cli/main.py train \
     --agent ppo_delver
 ```
 
+#### Optional Hyperparameter Overrides
+You can optionally override individual training and reward parameters from `config.toml` for the duration of the training session:
+* `--learning-rate <float>`: Learning rate for the policy optimizer.
+* `--gamma <float>`: Discount factor for rewards.
+* `--entropy-regularization <float>`: Policy entropy weight to control exploration.
+* `--not-finished-reward <float>`: Penalty given for failing to finish.
+* `--finished-reward <float>`: Reward given for reaching the goal.
+* `--turn-reward <float>`: Reward/penalty given on directional turns.
+* `--frame-step-reward <float>`: Reward/penalty given per frame step (time penalty).
+* `--tile-exploration-reward <float>`: Reward given per unique tile explored.
+* `--jump-reward <float>`: Penalty given per jump.
+* `--wall-hugging-reward <float>`: Penalty given for touching walls.
+* `--goal-distance-reward-scale <float>`: Scaling multiplier for the goal-distance reward.
+
 **GUI Trigger**: The "Train" button in `_train_buttons_container.py`.
 
 ---

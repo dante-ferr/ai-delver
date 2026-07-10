@@ -84,7 +84,19 @@ def run_train(args):
             print_json("error", message=f"Failed to prepare levels: {e}")
             return
 
-        payload = client_instance.create_training_payload(levels_list, args.episodes_per_cycle, args.mode, args.cycles)
+        standard_keys = {"levels", "cycles", "episodes_per_cycle", "mode", "agent", "server", "command"}
+        config_overrides = {
+            key: val for key, val in vars(args).items()
+            if key not in standard_keys and val is not None
+        }
+
+        payload = client_instance.create_training_payload(
+            levels_list,
+            args.episodes_per_cycle,
+            args.mode,
+            args.cycles,
+            config_overrides=config_overrides if config_overrides else None
+        )
 
         print_json("request_sent", message=f"Sending training request to http://{args.server}/train...")
         try:

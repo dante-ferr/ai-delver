@@ -23,6 +23,19 @@ def main():
     train_p.add_argument("--agent", required=True, help="Agent name")
     train_p.add_argument("--server", default="localhost:8001", help="Training server URL")
 
+    # Optional hyperparameter overrides
+    train_p.add_argument("--learning-rate", type=float, default=None, help="Learning rate (PPO)")
+    train_p.add_argument("--gamma", type=float, default=None, help="Discount factor gamma")
+    train_p.add_argument("--entropy-regularization", type=float, default=None, help="Entropy regularization coefficient")
+    train_p.add_argument("--not-finished-reward", type=float, default=None, help="Penalty for not finishing the level")
+    train_p.add_argument("--finished-reward", type=float, default=None, help="Reward for finishing the level")
+    train_p.add_argument("--turn-reward", type=float, default=None, help="Reward/penalty for turning")
+    train_p.add_argument("--frame-step-reward", type=float, default=None, help="Time penalty per step")
+    train_p.add_argument("--tile-exploration-reward", type=float, default=None, help="Reward for tile exploration")
+    train_p.add_argument("--jump-reward", type=float, default=None, help="Penalty for jumping")
+    train_p.add_argument("--wall-hugging-reward", type=float, default=None, help="Penalty for wall hugging")
+    train_p.add_argument("--goal-distance-reward-scale", type=float, default=None, help="Scale factor for goal distance reward")
+
     # Subcommand: stats
     stats_p = subparsers.add_parser("stats", help="Calculates and prints agent stats")
     stats_p.add_argument("--agent", required=True, help="Agent name")

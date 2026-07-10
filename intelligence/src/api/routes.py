@@ -5,7 +5,7 @@ from ai.sessions.session_manager import session_manager
 from ai.trainer.background_trainer import run_training_in_background
 import logging
 from ai.config import config
-from typing import Literal, Optional
+from typing import Literal, Optional, Any
 
 router = APIRouter()
 
@@ -15,6 +15,7 @@ class TrainRequest(BaseModel):
     amount_of_cycles: Optional[int]
     episodes_per_cycle: int
     level_transitioning_mode: Literal["static", "dynamic"]
+    config_overrides: Optional[dict[str, Any]] = None
 
 
 @router.get("/init")
@@ -32,6 +33,9 @@ async def train_agent(request: TrainRequest, background_tasks: BackgroundTasks):
     Receives a training request, creates a session, starts training in the
     background, and immediately returns the session ID.
     """
+    if request.config_overrides:
+        config.update_config(request.config_overrides)
+
     new_session = session_manager.create_session(request)
 
     background_tasks.add_task(run_training_in_background, new_session.session_id)

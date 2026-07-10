@@ -97,6 +97,10 @@ class Delver(SkeletalEntity):
         self.play_locomotion_animation()
 
     def update(self, dt: float):
+        self._physics_engine.set_entity_actions("delver", self.pending_run, self.pending_jump)
+        self.pending_run = 0.0
+        self.pending_jump = False
+
         s = self._state()
         if self.skeleton:
             self.skeleton.position = (s.x, s.y)

@@ -59,9 +59,7 @@ class Runtime:
     def update(self, dt: float):
         self.world_objects_controller.update_world_objects(dt)
         if self.physics:
-            self.physics_engine.step(dt, self.delver.pending_run, self.delver.pending_jump)
-            self.delver.pending_run = 0.0
-            self.delver.pending_jump = False
+            self.physics_engine.step(dt)
 
     def run(self):
         self.running = True

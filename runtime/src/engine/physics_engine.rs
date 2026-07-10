@@ -1,8 +1,10 @@
+use std::collections::HashMap;
 use pyo3::prelude::*;
 use rapier2d::prelude::*;
 
 use crate::world_objects::base_delver::BaseDelver;
 use crate::world_objects::base_goal::BaseGoal;
+use crate::world_objects::physics_entity::PhysicsEntity;
 use crate::engine::grid::TileGrid;
 use crate::engine::physics_constants::PhysicsConstants;
 use crate::engine::physics_world::PhysicsWorld;
@@ -10,11 +12,10 @@ use crate::engine::physics_world::PhysicsWorld;
 #[pyclass]
 pub struct RustPhysicsEngine {
     grid: TileGrid,
-    delver: BaseDelver,
+    entities: HashMap<String, PhysicsEntity>,
     goal: BaseGoal,
     consts: PhysicsConstants,
     world: PhysicsWorld,
-    player_body_handle: RigidBodyHandle,
 }
 
 #[pymethods]
@@ -83,19 +84,29 @@ impl RustPhysicsEngine {
             goal_y = (height as f32 - y as f32 - 0.5) * tile_size;
         }
 
+        let mut entities = HashMap::new();
+        let mut delver = BaseDelver::new("delver".to_string(), start_x, start_y);
+        delver.body_handle = player_body_handle;
+        entities.insert("delver".to_string(), PhysicsEntity::Delver(delver));
+
         RustPhysicsEngine {
             grid,
-            delver: BaseDelver::new(start_x, start_y),
+            entities,
             goal: BaseGoal::new(goal_x, goal_y),
             consts,
             world,
-            player_body_handle,
         }
     }
 
-    pub fn step(&mut self, dt: f32, action_run: f32, action_jump: bool) -> BaseDelver {
-        if self.delver.is_dead {
-            return self.delver.clone();
+    pub fn step(&mut self, dt: f32) -> PyResult<BaseDelver> {
+        let is_delver_dead = if let Some(PhysicsEntity::Delver(ref d)) = self.entities.get("delver") {
+            d.is_dead
+        } else {
+            false
+        };
+
+        if is_delver_dead {
+            return self.get_delver();
         }
 
         let sub_dt = 1.0 / 60.0;
@@ -103,44 +114,33 @@ impl RustPhysicsEngine {
 
         while elapsed < dt {
             let tick_dt = (dt - elapsed).min(sub_dt);
-            self.tick_physics(tick_dt, action_run, action_jump);
+            self.tick_physics(tick_dt);
             elapsed += tick_dt;
         }
 
-        self.delver.clone()
+        self.get_delver()
     }
 
-    pub fn get_local_view(&self, radius: i32) -> Vec<i32> {
-        let tx = (self.delver.x / self.grid.tile_size).floor() as i32;
-        let map_height_px = self.grid.height as f32 * self.grid.tile_size;
-        let ty = ((map_height_px - self.delver.y) / self.grid.tile_size).floor() as i32;
-        let mut view = Vec::new();
-
-        for dy in -radius..=radius {
-            for dx in -radius..=radius {
-                let gx = tx + dx;
-                let gy = ty + dy;
-                let tile = self.grid.get(gx, gy);
-                let cell = if gx < 0
-                    || gy < 0
-                    || gx >= self.grid.width as i32
-                    || gy >= self.grid.height as i32
-                {
-                    1
-                } else if tile == 1 {
-                    1
-                } else {
-                    0
-                };
-                view.push(cell);
+    pub fn set_entity_actions(&mut self, id: &str, action_run: f32, action_jump: bool) -> PyResult<()> {
+        if let Some(entity) = self.entities.get_mut(id) {
+            match entity {
+                PhysicsEntity::Delver(delver) => {
+                    delver.action_run = action_run;
+                    delver.action_jump = action_jump;
+                }
             }
+            Ok(())
+        } else {
+            Err(pyo3::exceptions::PyKeyError::new_err(format!("Entity with id {} not found", id)))
         }
-
-        view
     }
 
-    pub fn get_delver(&self) -> BaseDelver {
-        self.delver.clone()
+    pub fn get_delver(&self) -> PyResult<BaseDelver> {
+        if let Some(PhysicsEntity::Delver(ref delver)) = self.entities.get("delver") {
+            Ok(delver.clone())
+        } else {
+            Err(pyo3::exceptions::PyKeyError::new_err("Delver entity not found"))
+        }
     }
 
     pub fn get_goal(&self) -> BaseGoal {
@@ -151,50 +151,82 @@ impl RustPhysicsEngine {
         (self.goal.x, self.goal.y)
     }
 
-    pub fn get_player_rotation(&self) -> f32 {
-        let rb = &self.world.rigid_bodies[self.player_body_handle];
-        rb.rotation().angle()
+    pub fn get_entity_rotation(&self, id: &str) -> PyResult<f32> {
+        if let Some(entity) = self.entities.get(id) {
+            let rb = &self.world.rigid_bodies[entity.body_handle()];
+            Ok(rb.rotation().angle())
+        } else {
+            Err(pyo3::exceptions::PyKeyError::new_err(format!("Entity with id {} not found", id)))
+        }
+    }
+
+    pub fn get_local_view(&self, id: &str, radius: i32) -> PyResult<Vec<i32>> {
+        if let Some(entity) = self.entities.get(id) {
+            let (ex, ey) = match entity {
+                PhysicsEntity::Delver(delver) => (delver.x, delver.y),
+            };
+
+            let tx = (ex / self.grid.tile_size).floor() as i32;
+            let map_height_px = self.grid.height as f32 * self.grid.tile_size;
+            let ty = ((map_height_px - ey) / self.grid.tile_size).floor() as i32;
+            let mut view = Vec::new();
+
+            for dy in -radius..=radius {
+                for dx in -radius..=radius {
+                    let gx = tx + dx;
+                    let gy = ty + dy;
+                    let tile = self.grid.get(gx, gy);
+                    let cell = if gx < 0
+                        || gy < 0
+                        || gx >= self.grid.width as i32
+                        || gy >= self.grid.height as i32
+                    {
+                        1
+                    } else if tile == 1 {
+                        1
+                    } else {
+                        0
+                    };
+                    view.push(cell);
+                }
+            }
+
+            Ok(view)
+        } else {
+            Err(pyo3::exceptions::PyKeyError::new_err(format!("Entity with id {} not found", id)))
+        }
     }
 }
 
 impl RustPhysicsEngine {
-    fn tick_physics(&mut self, dt: f32, action_run: f32, action_jump: bool) {
+    fn tick_physics(&mut self, dt: f32) {
         self.world.query_pipeline.update(&self.world.rigid_bodies, &self.world.colliders);
 
-        let old_vx = {
-            let rb = &self.world.rigid_bodies[self.player_body_handle];
-            rb.linvel().x
-        };
-        let old_x = {
-            let rb = &self.world.rigid_bodies[self.player_body_handle];
-            rb.translation().x
-        };
+        // Cache old positions/velocities for velocity restoration
+        let mut old_states = HashMap::new();
+        for (id, entity) in &self.entities {
+            let rb = &self.world.rigid_bodies[entity.body_handle()];
+            let old_vx = rb.linvel().x;
+            let old_x = rb.translation().x;
+            old_states.insert(id.clone(), (old_vx, old_x));
+        }
 
-        // 1. Delegate pre-step updates to the BaseDelver
-        self.delver.pre_step(
-            dt,
-            action_run,
-            action_jump,
-            &mut self.world.rigid_bodies,
-            &self.world.colliders,
-            &self.world.query_pipeline,
-            self.player_body_handle,
-            &self.consts,
-        );
+        // 1. Delegate pre-step updates to all dynamic entities
+        let entity_ids: Vec<String> = self.entities.keys().cloned().collect();
+        for id in &entity_ids {
+            let entity = self.entities.get_mut(id).unwrap();
+            entity.pre_step(dt, &mut self.world, &self.consts);
+        }
 
         // 2. Step the Physics World simulation
         let gravity = vector![0.0, self.consts.gravity];
         self.world.step(&gravity, dt);
 
-        // 3. Delegate post-step updates and velocity restoration to the BaseDelver
-        self.delver.post_step(
-            dt,
-            old_vx,
-            old_x,
-            &mut self.world.rigid_bodies,
-            self.player_body_handle,
-            &self.consts,
-            &self.grid,
-        );
+        // 3. Delegate post-step updates and velocity restoration to all dynamic entities
+        for id in &entity_ids {
+            let (old_vx, old_x) = old_states.get(id).cloned().unwrap_or((0.0, 0.0));
+            let entity = self.entities.get_mut(id).unwrap();
+            entity.post_step(dt, old_vx, old_x, &mut self.world, &self.consts, &self.grid);
+        }
     }
 }

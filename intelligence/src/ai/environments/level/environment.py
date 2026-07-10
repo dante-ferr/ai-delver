@@ -250,7 +250,7 @@ class LevelEnvironment(PyEnvironment):
 
     def _get_local_view(self):
         """Extracts a cropped grid centered on the agent's current position."""
-        flat_view = self.simulation.physics_engine.get_local_view(radius=7)
+        flat_view = self.simulation.physics_engine.get_local_view("delver", radius=7)
         return np.array(flat_view, dtype=np.uint8).reshape((15, 15))
 
     def _create_time_step(self, reward):

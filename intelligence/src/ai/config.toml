@@ -45,4 +45,5 @@ max_training_levels = 10          # Maximum number of levels in curriculum train
 log_interval = 10                 # Logging frequency of agent metrics
 seed = 42                         # Random seed for reproducibility
 checkpoint_interval = 0           # Frequency (in cycles) to save intermediate checkpoints (0 to disable)
+no_learning = false               # Execute random actions only without gradient updates for profiling/testing
 

@@ -25,6 +25,8 @@ def main():
     train_p.add_argument("--server", default="localhost:8001", help="Training server URL")
     train_p.add_argument("--checkpoint-interval", type=int, default=0, help="Cycle interval to save checkpoints (0 to disable)")
     train_p.add_argument("--checkpoint", default=None, help="Name or cycle number of checkpoint to load for warm-start")
+    train_p.add_argument("--no-learning", action="store_true", help="Execute random actions only without gradient updates for profiling/testing")
+
 
 
     # Optional hyperparameter overrides

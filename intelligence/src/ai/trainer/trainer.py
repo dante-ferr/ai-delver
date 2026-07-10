@@ -40,6 +40,7 @@ class Trainer:
         self.training_cycles = session.amount_of_cycles or 0
         self.episodes_per_cycle = session.episodes_per_cycle
         self.levels_trained = 0
+        self.step_counter = 0
 
         current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         self.summary_writer = create_file_writer(f"logs/train/{current_time}")
@@ -180,10 +181,19 @@ class Trainer:
                 self._is_interrupted = True
                 break
 
-            loss_info = self.agent_manager.run_training_step()
+            if getattr(config, "NO_LEARNING", False):
+                class DummyLossInfo:
+                    def __init__(self):
+                        import tensorflow as tf
+                        self.loss = tf.constant(0.0, dtype=tf.float32)
+                loss_info = DummyLossInfo()
+                self.step_counter += 10
+                step = self.step_counter
+            else:
+                loss_info = self.agent_manager.run_training_step()
+                step = self.agent_manager.get_step_count()
 
             self.agent_manager.clear_buffer()
-            step = self.agent_manager.get_step_count()
 
             if step % 10 == 0:
                 gc.collect()

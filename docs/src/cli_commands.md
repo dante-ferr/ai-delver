@@ -35,6 +35,23 @@ You can optionally override individual training and reward parameters from `conf
 * `--wall-hugging-reward <float>`: Penalty given for touching walls.
 * `--goal-distance-reward-scale <float>`: Scaling multiplier for the goal-distance reward.
 
+#### Dynamic Parameter Mapping Mechanism
+The CLI and the intelligence server employ a dynamic mapping pattern to transfer parameters without maintaining duplicate lists of variable names across different architectural layers (CLI arguments $\rightarrow$ Client payload $\rightarrow$ Server request $\rightarrow$ Core config):
+
+1. **Client-Side Filtering**:
+   In `client/src/cli/commands/train.py`, the CLI separates session control arguments from hyperparameter overrides by checking parsed inputs against a set of `standard_keys` (e.g., `levels`, `mode`, `agent`, etc.). Anything else is dynamically gathered into a `config_overrides` dictionary:
+   ```python
+   standard_keys = {"levels", "cycles", "episodes_per_cycle", "mode", "agent", "server", "command"}
+   config_overrides = {
+       key: val for key, val in vars(args).items()
+       if key not in standard_keys and val is not None
+   }
+   ```
+2. **REST API Payload**:
+   The `config_overrides` dictionary is sent as an optional property in the `TrainRequest` JSON body submitted to the server's `/train` endpoint.
+3. **Server-Side Application**:
+   Upon session initialization, the intelligence server invokes `config.update_config(request.config_overrides)`. This resets the server configuration state to the defaults specified in `config.toml`, applies the active overrides, and triggers the recalculation of reward scaling factors and collector step counts.
+
 **GUI Trigger**: The "Train" button in `_train_buttons_container.py`.
 
 ---

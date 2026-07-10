@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::engine::grid::TileGrid;
 use crate::engine::physics_constants::PhysicsConstants;
+use crate::world_objects::components::ground_detector::GroundDetector;
+use crate::world_objects::components::locomotion_motor::LocomotionMotor;
 
 #[pyclass]
 #[derive(Clone, Serialize, Deserialize)]
@@ -23,11 +25,11 @@ pub struct BaseDelver {
     #[pyo3(get, set)]
     pub is_victory: bool,
 
-    // Internal physics state not exposed to Python
+    // Reusable components
     #[serde(skip)]
-    pub jump_tolerance_timer: f32,
+    pub ground_detector: GroundDetector,
     #[serde(skip)]
-    pub jump_cooldown_timer: f32,
+    pub motor: LocomotionMotor,
 }
 
 #[pymethods]
@@ -42,8 +44,8 @@ impl BaseDelver {
             is_on_ground: false,
             is_dead: false,
             is_victory: false,
-            jump_tolerance_timer: 0.0,
-            jump_cooldown_timer: 0.0,
+            ground_detector: GroundDetector::new(3.0, 0.05, 0.07),
+            motor: LocomotionMotor::default(),
         }
     }
 }
@@ -60,82 +62,27 @@ impl BaseDelver {
         player_body_handle: RigidBodyHandle,
         consts: &PhysicsConstants,
     ) {
-        if self.jump_cooldown_timer > 0.0 {
-            self.jump_cooldown_timer -= dt;
-        }
+        let player_pos = self.get_translation(rigid_body_set, player_body_handle);
 
-        // Query ground state
-        let rb = &rigid_body_set[player_body_handle];
-        let player_pos = *rb.translation();
-
-        let left_x = player_pos.x - consts.player_width / 2.0 + 3.0;
-        let right_x = player_pos.x + consts.player_width / 2.0 - 3.0;
-        let ray_y = player_pos.y - consts.player_height / 2.0 + 0.05;
-
-        let ray_dir = vector![0.0, -1.0];
-        let max_toi = 0.07;
-
-        let filter = QueryFilter::default().exclude_rigid_body(player_body_handle);
-
-        let hit_left = query_pipeline.cast_ray(
+        self.detect_ground(
+            &player_pos,
             rigid_body_set,
             collider_set,
-            &Ray::new(point![left_x, ray_y], ray_dir),
-            max_toi,
-            true,
-            filter,
+            query_pipeline,
+            player_body_handle,
+            consts,
         );
 
-        let hit_right = query_pipeline.cast_ray(
+        self.motor.update_timers(dt, self.is_on_ground, consts);
+
+        self.apply_movement_input(
+            dt,
+            action_run,
+            action_jump,
             rigid_body_set,
-            collider_set,
-            &Ray::new(point![right_x, ray_y], ray_dir),
-            max_toi,
-            true,
-            filter,
+            player_body_handle,
+            consts,
         );
-
-        let is_on_ground = hit_left.is_some() || hit_right.is_some();
-        self.is_on_ground = is_on_ground;
-
-        if is_on_ground {
-            self.jump_tolerance_timer = consts.jump_tolerance_max;
-        } else if self.jump_tolerance_timer > 0.0 {
-            self.jump_tolerance_timer -= dt;
-        }
-
-        // Calculate forces
-        let rb = &mut rigid_body_set[player_body_handle];
-        let mut linvel = *rb.linvel();
-        let mut force_x = 0.0;
-
-        if action_run != 0.0 {
-            force_x += action_run * consts.move_force;
-            if linvel.x * action_run < 0.0 {
-                let dir = if linvel.x > 0.0 { -1.0 } else { 1.0 };
-                force_x += dir * consts.braking_force;
-            }
-            force_x -= linvel.x * consts.linear_damping;
-        } else {
-            if linvel.x.abs() > 10.0 {
-                let dir = if linvel.x > 0.0 { -1.0 } else { 1.0 };
-                force_x += dir * consts.braking_force;
-            } else {
-                linvel.x = 0.0;
-            }
-        }
-
-        linvel.x += force_x * dt;
-        linvel.x = linvel.x.clamp(-consts.max_vx, consts.max_vx);
-
-        let can_jump = is_on_ground || self.jump_tolerance_timer > 0.0;
-        if action_jump && self.jump_cooldown_timer <= 0.0 && can_jump {
-            linvel.y = consts.jump_impulse;
-            self.jump_cooldown_timer = consts.jump_cooldown_max;
-            self.jump_tolerance_timer = 0.0;
-        }
-
-        rb.set_linvel(linvel, true);
     }
 
     pub fn post_step(
@@ -148,7 +95,64 @@ impl BaseDelver {
         consts: &PhysicsConstants,
         grid: &TileGrid,
     ) {
-        let rb = &mut rigid_body_set[player_body_handle];
+        self.resolve_velocity_and_seams(dt, old_vx, old_x, rigid_body_set, player_body_handle, consts);
+        self.sync_state_from_physics(rigid_body_set, player_body_handle);
+        self.check_victory_and_death_conditions(grid, consts);
+    }
+
+    fn get_translation(&self, rigid_bodies: &RigidBodySet, handle: RigidBodyHandle) -> Vector<f32> {
+        let rb = &rigid_bodies[handle];
+        *rb.translation()
+    }
+
+    fn detect_ground(
+        &mut self,
+        player_pos: &Vector<f32>,
+        rigid_bodies: &RigidBodySet,
+        colliders: &ColliderSet,
+        query_pipeline: &QueryPipeline,
+        handle: RigidBodyHandle,
+        consts: &PhysicsConstants,
+    ) {
+        self.is_on_ground = self.ground_detector.check_grounded(
+            player_pos,
+            consts.player_width,
+            consts.player_height,
+            rigid_bodies,
+            colliders,
+            query_pipeline,
+            handle,
+        );
+    }
+
+    fn apply_movement_input(
+        &mut self,
+        dt: f32,
+        action_run: f32,
+        action_jump: bool,
+        rigid_bodies: &mut RigidBodySet,
+        handle: RigidBodyHandle,
+        consts: &PhysicsConstants,
+    ) {
+        let rb = &mut rigid_bodies[handle];
+        let mut linvel = *rb.linvel();
+        
+        linvel.x = self.motor.calculate_horizontal_velocity(dt, action_run, linvel.x, consts);
+        self.motor.try_jump(action_jump, self.is_on_ground, &mut linvel.y, consts);
+
+        rb.set_linvel(linvel, true);
+    }
+
+    fn resolve_velocity_and_seams(
+        &mut self,
+        dt: f32,
+        old_vx: f32,
+        old_x: f32,
+        rigid_bodies: &mut RigidBodySet,
+        handle: RigidBodyHandle,
+        consts: &PhysicsConstants,
+    ) {
+        let rb = &mut rigid_bodies[handle];
         let pos = *rb.translation();
         let mut vel = *rb.linvel();
 
@@ -163,14 +167,20 @@ impl BaseDelver {
         vel.x = vel.x.clamp(-consts.max_vx, consts.max_vx);
         vel.y = vel.y.clamp(-consts.max_vy, consts.max_vy);
         rb.set_linvel(vel, true);
+    }
 
-        // Update fields
+    fn sync_state_from_physics(&mut self, rigid_bodies: &RigidBodySet, handle: RigidBodyHandle) {
+        let rb = &rigid_bodies[handle];
+        let pos = *rb.translation();
+        let vel = *rb.linvel();
+
         self.x = pos.x;
         self.y = pos.y;
         self.vx = vel.x;
         self.vy = vel.y;
+    }
 
-        // Check victory
+    fn check_victory_and_death_conditions(&mut self, grid: &TileGrid, consts: &PhysicsConstants) {
         let half_w = consts.player_width / 2.0;
         let half_h = consts.player_height / 2.0;
         let left = self.x - half_w;

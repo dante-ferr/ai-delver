@@ -5,6 +5,7 @@ use crate::world_objects::base_delver::BaseDelver;
 use crate::world_objects::base_goal::BaseGoal;
 use crate::engine::grid::TileGrid;
 use crate::engine::physics_constants::PhysicsConstants;
+use crate::engine::physics_world::PhysicsWorld;
 
 #[pyclass]
 pub struct RustPhysicsEngine {
@@ -12,20 +13,7 @@ pub struct RustPhysicsEngine {
     delver: BaseDelver,
     goal: BaseGoal,
     consts: PhysicsConstants,
-
-    // Rapier components
-    physics_pipeline: PhysicsPipeline,
-    island_manager: IslandManager,
-    broad_phase: BroadPhase,
-    narrow_phase: NarrowPhase,
-    rigid_body_set: RigidBodySet,
-    collider_set: ColliderSet,
-    impulse_joint_set: ImpulseJointSet,
-    multibody_joint_set: MultibodyJointSet,
-    ccd_solver: CCDSolver,
-    query_pipeline: QueryPipeline,
-
-    // Handles
+    world: PhysicsWorld,
     player_body_handle: RigidBodyHandle,
 }
 
@@ -43,9 +31,7 @@ impl RustPhysicsEngine {
     ) -> Self {
         let consts = PhysicsConstants::default();
         let mut grid = TileGrid::new(width, height, tile_size);
-
-        let mut rigid_body_set = RigidBodySet::new();
-        let mut collider_set = ColliderSet::new();
+        let mut world = PhysicsWorld::new();
 
         // Create player body (Dynamic body with rotation locked and CCD enabled)
         let player_body = RigidBodyBuilder::dynamic()
@@ -54,7 +40,7 @@ impl RustPhysicsEngine {
             .additional_mass(1.0)
             .ccd_enabled(true)
             .build();
-        let player_body_handle = rigid_body_set.insert(player_body);
+        let player_body_handle = world.rigid_bodies.insert(player_body);
 
         let half_w = consts.player_width / 2.0;
         let half_h = consts.player_height / 2.0;
@@ -67,7 +53,7 @@ impl RustPhysicsEngine {
         .friction(0.0)
         .restitution(0.0)
         .build();
-        collider_set.insert_with_parent(player_collider, player_body_handle, &mut rigid_body_set);
+        world.colliders.insert_with_parent(player_collider, player_body_handle, &mut world.rigid_bodies);
 
         // Add static colliders for solid tiles
         let half_tile = tile_size / 2.0;
@@ -86,7 +72,7 @@ impl RustPhysicsEngine {
                 .friction(0.0)
                 .restitution(0.0)
                 .build();
-            collider_set.insert(tile_collider);
+            world.colliders.insert(tile_collider);
         }
 
         let mut goal_x = 0.0;
@@ -97,30 +83,12 @@ impl RustPhysicsEngine {
             goal_y = (height as f32 - y as f32 - 0.5) * tile_size;
         }
 
-        let physics_pipeline = PhysicsPipeline::new();
-        let island_manager = IslandManager::new();
-        let broad_phase = BroadPhase::new();
-        let narrow_phase = NarrowPhase::new();
-        let impulse_joint_set = ImpulseJointSet::new();
-        let multibody_joint_set = MultibodyJointSet::new();
-        let ccd_solver = CCDSolver::new();
-        let query_pipeline = QueryPipeline::new();
-
         RustPhysicsEngine {
             grid,
             delver: BaseDelver::new(start_x, start_y),
             goal: BaseGoal::new(goal_x, goal_y),
             consts,
-            physics_pipeline,
-            island_manager,
-            broad_phase,
-            narrow_phase,
-            rigid_body_set,
-            collider_set,
-            impulse_joint_set,
-            multibody_joint_set,
-            ccd_solver,
-            query_pipeline,
+            world,
             player_body_handle,
         }
     }
@@ -184,21 +152,21 @@ impl RustPhysicsEngine {
     }
 
     pub fn get_player_rotation(&self) -> f32 {
-        let rb = &self.rigid_body_set[self.player_body_handle];
+        let rb = &self.world.rigid_bodies[self.player_body_handle];
         rb.rotation().angle()
     }
 }
 
 impl RustPhysicsEngine {
     fn tick_physics(&mut self, dt: f32, action_run: f32, action_jump: bool) {
-        self.query_pipeline.update(&self.rigid_body_set, &self.collider_set);
+        self.world.query_pipeline.update(&self.world.rigid_bodies, &self.world.colliders);
 
         let old_vx = {
-            let rb = &self.rigid_body_set[self.player_body_handle];
+            let rb = &self.world.rigid_bodies[self.player_body_handle];
             rb.linvel().x
         };
         let old_x = {
-            let rb = &self.rigid_body_set[self.player_body_handle];
+            let rb = &self.world.rigid_bodies[self.player_body_handle];
             rb.translation().x
         };
 
@@ -207,44 +175,23 @@ impl RustPhysicsEngine {
             dt,
             action_run,
             action_jump,
-            &mut self.rigid_body_set,
-            &self.collider_set,
-            &self.query_pipeline,
+            &mut self.world.rigid_bodies,
+            &self.world.colliders,
+            &self.world.query_pipeline,
             self.player_body_handle,
             &self.consts,
         );
 
-        // 2. Step Rapier Simulation
+        // 2. Step the Physics World simulation
         let gravity = vector![0.0, self.consts.gravity];
-        let integration_parameters = IntegrationParameters {
-            dt,
-            ..Default::default()
-        };
-        let physics_hooks = ();
-        let event_handler = ();
-
-        self.physics_pipeline.step(
-            &gravity,
-            &integration_parameters,
-            &mut self.island_manager,
-            &mut self.broad_phase,
-            &mut self.narrow_phase,
-            &mut self.rigid_body_set,
-            &mut self.collider_set,
-            &mut self.impulse_joint_set,
-            &mut self.multibody_joint_set,
-            &mut self.ccd_solver,
-            Some(&mut self.query_pipeline),
-            &physics_hooks,
-            &event_handler,
-        );
+        self.world.step(&gravity, dt);
 
         // 3. Delegate post-step updates and velocity restoration to the BaseDelver
         self.delver.post_step(
             dt,
             old_vx,
             old_x,
-            &mut self.rigid_body_set,
+            &mut self.world.rigid_bodies,
             self.player_body_handle,
             &self.consts,
             &self.grid,

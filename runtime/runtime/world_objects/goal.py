@@ -18,12 +18,13 @@ class Goal(Item):
 
     def __init__(self, runtime: "Runtime", variation: str, render: bool):
         self._physics_engine = runtime.physics_engine
-        self.base_object = self._physics_engine.get_goal()
+        base_object = self._physics_engine.get_goal()
         sprite_path = _resolve_goal_sprite_path(variation) if render else None
         super().__init__(
             runtime,
             sprite_path=sprite_path,
             render=render,
+            base_object=base_object,
         )
         self._spawn_based_id = "goal"
 

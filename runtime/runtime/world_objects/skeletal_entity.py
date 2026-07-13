@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import TYPE_CHECKING, Literal, Callable, Optional
+from typing import TYPE_CHECKING, Literal, Callable, Optional, Any
 
 from .world_object import WorldObject
 
@@ -25,8 +25,13 @@ class SkeletalEntity(WorldObject):
 
     LAND_ANIMATION_REQUIRED_FALLING_SPEED = -250.0
 
-    def __init__(self, runtime, skeleton: Optional["Skeleton"] = None):
-        super().__init__(runtime)
+    def __init__(
+        self,
+        runtime,
+        skeleton: Optional["Skeleton"] = None,
+        base_object: Any = None,
+    ):
+        super().__init__(runtime, base_object=base_object)
         self.skeleton = skeleton
         self._locomotion_state = LocomotionState.IDLE
         self.previous_on_air_vy: float = 0.0
@@ -49,12 +54,14 @@ class SkeletalEntity(WorldObject):
         Derive the next locomotion state from physics state.
         Call this from your concrete subclass's `update()` method.
         """
+        self.is_moving = is_moving
         new_state = self._locomotion_state
 
         if is_on_ground:
             if self._locomotion_state in (LocomotionState.GO_UP, LocomotionState.FALL):
-                if self.previous_on_air_vy <= self.LAND_ANIMATION_REQUIRED_FALLING_SPEED:
+                if self.previous_on_air_vy <= self.LAND_ANIMATION_REQUIRED_FALLING_SPEED and self.skeleton:
                     new_state = LocomotionState.LAND
+                    self.previous_on_air_vy = 0.0
                 else:
                     new_state = LocomotionState.RUN if is_moving else LocomotionState.IDLE
             elif self._locomotion_state == LocomotionState.LAND:
@@ -82,7 +89,7 @@ class SkeletalEntity(WorldObject):
 
     def _on_land_finish(self):
         if self._locomotion_state == LocomotionState.LAND:
-            self.locomotion_state = LocomotionState.IDLE
+            self.locomotion_state = LocomotionState.RUN if getattr(self, "is_moving", False) else LocomotionState.IDLE
 
     def run_animation(
         self,

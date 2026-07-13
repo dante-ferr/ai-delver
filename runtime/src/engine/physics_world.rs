@@ -30,10 +30,11 @@ impl PhysicsWorld {
     }
 
     pub fn step(&mut self, gravity: &Vector<f32>, dt: f32) {
-        let integration_parameters = IntegrationParameters {
-            dt,
-            ..Default::default()
-        };
+        let mut integration_parameters = IntegrationParameters::default();
+        integration_parameters.dt = dt;
+        integration_parameters.num_solver_iterations = std::num::NonZeroUsize::new(12).unwrap();
+        integration_parameters.num_additional_friction_iterations = 8;
+        integration_parameters.num_internal_pgs_iterations = 2;
         let physics_hooks = ();
         let event_handler = ();
 

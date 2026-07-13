@@ -19,6 +19,7 @@ build-client-dev:
 	cd client && poetry env use 3.13 && poetry install
 
 run-client-dev: on-run
+	cd runtime && PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 poetry run python build_rust.py
 	cd client && ./run.sh
 
 docs-serve:

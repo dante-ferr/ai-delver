@@ -32,11 +32,11 @@ class Delver(SkeletalEntity):
     MAX_SPEED = (500.0, 1000.0)
 
     def __init__(self, runtime: "Runtime", render: bool = True):
-        skeleton = self._build_skeleton(render) if render else None
-        super().__init__(runtime, skeleton=skeleton)
-
         self._physics_engine = runtime.physics_engine
-        self.base_object = self._physics_engine.get_delver()
+        base_object = self._physics_engine.get_delver()
+        skeleton = self._build_skeleton(render) if render else None
+        super().__init__(runtime, skeleton=skeleton, base_object=base_object)
+
         self._spawn_based_id = "delver"
         self.pending_run: float = 0.0
         self.pending_jump: bool = False

@@ -17,36 +17,20 @@ impl PhysicsEntity {
     ) {
         match self {
             PhysicsEntity::Delver(delver) => {
-                delver.pre_step(
-                    dt,
-                    &mut world.rigid_bodies,
-                    &world.colliders,
-                    &world.query_pipeline,
-                    consts,
-                );
+                delver.pre_step(dt, world, consts);
             }
         }
     }
 
     pub fn post_step(
         &mut self,
-        dt: f32,
-        old_vx: f32,
-        old_x: f32,
         world: &mut PhysicsWorld,
         consts: &PhysicsConstants,
         grid: &TileGrid,
     ) {
         match self {
             PhysicsEntity::Delver(delver) => {
-                delver.post_step(
-                    dt,
-                    old_vx,
-                    old_x,
-                    &mut world.rigid_bodies,
-                    consts,
-                    grid,
-                );
+                delver.post_step(world, consts, grid);
             }
         }
     }

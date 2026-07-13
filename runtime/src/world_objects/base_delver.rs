@@ -6,6 +6,7 @@ use crate::engine::grid::TileGrid;
 use crate::engine::physics_constants::PhysicsConstants;
 use crate::world_objects::components::ground_detector::GroundDetector;
 use crate::world_objects::components::locomotion_motor::LocomotionMotor;
+use crate::engine::physics_world::PhysicsWorld;
 
 #[pyclass]
 #[derive(Clone, Serialize, Deserialize)]
@@ -56,7 +57,7 @@ impl BaseDelver {
             is_victory: false,
             action_run: 0.0,
             action_jump: false,
-            ground_detector: GroundDetector::new(3.0, 0.05, 0.07),
+            ground_detector: GroundDetector::new(3.0, 5.0, 5.2),
             motor: LocomotionMotor::default(),
             body_handle: RigidBodyHandle::invalid(),
         }
@@ -67,41 +68,33 @@ impl BaseDelver {
     pub fn pre_step(
         &mut self,
         dt: f32,
-        rigid_body_set: &mut RigidBodySet,
-        collider_set: &ColliderSet,
-        query_pipeline: &QueryPipeline,
+        world: &mut PhysicsWorld,
         consts: &PhysicsConstants,
     ) {
-        let player_pos = self.get_translation(rigid_body_set);
+        let player_pos = self.get_translation(&world.rigid_bodies);
 
         self.detect_ground(
             &player_pos,
-            rigid_body_set,
-            collider_set,
-            query_pipeline,
+            &world.rigid_bodies,
+            &world.colliders,
+            &world.query_pipeline,
             consts,
         );
 
         self.motor.update_timers(dt, self.is_on_ground, consts);
 
-        self.apply_movement_input(
-            dt,
-            rigid_body_set,
-            consts,
-        );
+        self.apply_movement_input(dt, world, consts);
     }
 
     pub fn post_step(
         &mut self,
-        dt: f32,
-        old_vx: f32,
-        old_x: f32,
-        rigid_body_set: &mut RigidBodySet,
+        world: &mut PhysicsWorld,
         consts: &PhysicsConstants,
         grid: &TileGrid,
     ) {
-        self.resolve_velocity_and_seams(dt, old_vx, old_x, rigid_body_set, consts);
-        self.sync_state_from_physics(rigid_body_set);
+        let pos = self.get_translation(&world.rigid_bodies);
+        self.detect_ground(&pos, &world.rigid_bodies, &world.colliders, &world.query_pipeline, consts);
+        self.sync_state_from_physics(&world.rigid_bodies);
         self.check_victory_and_death_conditions(grid, consts);
     }
 
@@ -132,41 +125,15 @@ impl BaseDelver {
     fn apply_movement_input(
         &mut self,
         dt: f32,
-        rigid_bodies: &mut RigidBodySet,
+        world: &mut PhysicsWorld,
         consts: &PhysicsConstants,
     ) {
-        let rb = &mut rigid_bodies[self.body_handle];
+        let rb = &mut world.rigid_bodies[self.body_handle];
         let mut linvel = *rb.linvel();
-        
+
         linvel.x = self.motor.calculate_horizontal_velocity(dt, self.action_run, linvel.x, consts);
         self.motor.try_jump(self.action_jump, self.is_on_ground, &mut linvel.y, consts);
-
         rb.set_linvel(linvel, true);
-    }
-
-    fn resolve_velocity_and_seams(
-        &mut self,
-        dt: f32,
-        old_vx: f32,
-        old_x: f32,
-        rigid_bodies: &mut RigidBodySet,
-        consts: &PhysicsConstants,
-    ) {
-        let rb = &mut rigid_bodies[self.body_handle];
-        let pos = *rb.translation();
-        let mut vel = *rb.linvel();
-
-        let dx = (pos.x - old_x).abs();
-        let intended_dx = (old_vx * dt).abs();
-        if intended_dx > 0.1 && dx < 0.1 * intended_dx {
-            vel.x = 0.0;
-        } else if self.is_on_ground {
-            vel.x = old_vx;
-        }
-
-        vel.x = vel.x.clamp(-consts.max_vx, consts.max_vx);
-        vel.y = vel.y.clamp(-consts.max_vy, consts.max_vy);
-        rb.set_linvel(vel, true);
     }
 
     fn sync_state_from_physics(&mut self, rigid_bodies: &RigidBodySet) {

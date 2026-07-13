@@ -56,24 +56,45 @@ impl RustPhysicsEngine {
         .build();
         world.colliders.insert_with_parent(player_collider, player_body_handle, &mut world.rigid_bodies);
 
-        // Add static colliders for solid tiles
+        // Add static colliders for solid tiles by merging contiguous segments in each row
         let half_tile = tile_size / 2.0;
+        let mut rows: std::collections::HashMap<i32, Vec<i32>> = std::collections::HashMap::new();
         for (x, y) in solid_tiles {
             if goal_tiles.contains(&(x, y)) {
                 continue;
             }
             grid.set(x, y, 1);
-            let cell_left = x as f32 * tile_size;
-            let cell_bottom = (height as f32 - y as f32 - 1.0) * tile_size;
-            let cx = cell_left + half_tile;
-            let cy = cell_bottom + half_tile;
+            rows.entry(y as i32).or_default().push(x as i32);
+        }
 
-            let tile_collider = ColliderBuilder::cuboid(half_tile, half_tile)
-                .translation(vector![cx, cy])
-                .friction(0.0)
-                .restitution(0.0)
-                .build();
-            world.colliders.insert(tile_collider);
+        for (y, mut xs) in rows {
+            xs.sort_unstable();
+            let mut i = 0;
+            while i < xs.len() {
+                let start_x = xs[i];
+                let mut end_x = start_x;
+                while i + 1 < xs.len() && xs[i + 1] == end_x + 1 {
+                    end_x = xs[i + 1];
+                    i += 1;
+                }
+
+                let count = (end_x - start_x + 1) as f32;
+                let segment_width = count * tile_size;
+                let cell_left = start_x as f32 * tile_size;
+                let cell_bottom = (height as f32 - y as f32 - 1.0) * tile_size;
+
+                let cx = cell_left + segment_width / 2.0;
+                let cy = cell_bottom + half_tile;
+
+                let tile_collider = ColliderBuilder::cuboid(segment_width / 2.0, half_tile)
+                    .translation(vector![cx, cy])
+                    .friction(0.0)
+                    .restitution(0.0)
+                    .build();
+                world.colliders.insert(tile_collider);
+
+                i += 1;
+            }
         }
 
         let mut goal_x = 0.0;
@@ -202,15 +223,6 @@ impl RustPhysicsEngine {
     fn tick_physics(&mut self, dt: f32) {
         self.world.query_pipeline.update(&self.world.rigid_bodies, &self.world.colliders);
 
-        // Cache old positions/velocities for velocity restoration
-        let mut old_states = HashMap::new();
-        for (id, entity) in &self.entities {
-            let rb = &self.world.rigid_bodies[entity.body_handle()];
-            let old_vx = rb.linvel().x;
-            let old_x = rb.translation().x;
-            old_states.insert(id.clone(), (old_vx, old_x));
-        }
-
         // 1. Delegate pre-step updates to all dynamic entities
         let entity_ids: Vec<String> = self.entities.keys().cloned().collect();
         for id in &entity_ids {
@@ -222,11 +234,13 @@ impl RustPhysicsEngine {
         let gravity = vector![0.0, self.consts.gravity];
         self.world.step(&gravity, dt);
 
-        // 3. Delegate post-step updates and velocity restoration to all dynamic entities
+        // Update query pipeline after step so post-step raycasts query the new positions
+        self.world.query_pipeline.update(&self.world.rigid_bodies, &self.world.colliders);
+
+        // 3. Delegate post-step updates
         for id in &entity_ids {
-            let (old_vx, old_x) = old_states.get(id).cloned().unwrap_or((0.0, 0.0));
             let entity = self.entities.get_mut(id).unwrap();
-            entity.post_step(dt, old_vx, old_x, &mut self.world, &self.consts, &self.grid);
+            entity.post_step(&mut self.world, &self.consts, &self.grid);
         }
     }
 }

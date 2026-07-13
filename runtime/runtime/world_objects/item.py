@@ -17,8 +17,9 @@ class Item(WorldObject):
         animation: Optional["Animation"] = None,
         batch: Optional["Batch"] = None,
         size: tuple[int, int] = (24, 24),
+        base_object: Any = None,
     ):
-        super().__init__(runtime)
+        super().__init__(runtime, base_object=base_object)
 
         self.render = render
         self.size: tuple[int, int] = size

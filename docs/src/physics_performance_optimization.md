@@ -1,6 +1,6 @@
 # Physics Engine Performance & Optimizations
 
-This document explains the performance profiling, bottlenecks, and optimization work performed on the **AI Delver** physics engine integration, culminating in the pure-Rust trainer (`intelligence_rs`).
+This document explains the performance profiling, bottlenecks, and optimization work performed on the **AI Delver** physics engine integration, culminating in the pure-Rust trainer under `intelligence/`.
 
 ---
 
@@ -45,7 +45,7 @@ Relative to the optimized Python+Rust baseline (**37.83s** ML-on): Rust **CPU** 
   ```
   This allows all 38 environments to run their physics updates concurrently on different CPU cores.
 
-### C. Pure-Rust Trainer (`intelligence_rs`)
+### C. Pure-Rust Trainer (`intelligence/`)
 * **Problem**: Even with GIL release and threaded envs, Python still owned the PPO loop, observation assembly, and TensorFlow graph — capping end-to-end throughput and keeping PyO3 crossings on every step.
 * **Solution**: Moved collection, reward, actor-critic, and PPO into a native binary. Environments step with **Rayon**; learning uses **`tch`/libtorch**. Physics-only profiling uses `--no-learning` (random actions, no gradient updates).
 * **PPO fixes that recovered training speed** (after an initial ~80s equal-frame ML-on regression on CPU):

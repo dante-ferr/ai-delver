@@ -3,7 +3,7 @@ ARG BASE_IMAGE="rust:1.85-bookworm"
 # =========================================================================
 # Stage 1: 'base'
 # Rust toolchain image with native build dependencies for Rapier / libtorch.
-# Set TORCH_INDEX_URL to a CUDA wheel index (e.g. cu124) for GPU images.
+# Set TORCH_INDEX_URL to a CUDA wheel index (e.g. cu126) for GPU images.
 # =========================================================================
 FROM ${BASE_IMAGE} AS base
 
@@ -40,6 +40,11 @@ RUN groupadd -g $GID appgroup && \
     mkdir -p /usr/local/cargo /usr/local/rustup && \
     chown -R appuser:appgroup /usr/local/cargo /usr/local/rustup
 
+COPY intelligence/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
 # =========================================================================
 # Stage 2: 'builder-dev'
 # Compile the native trainer against local level + runtime crates.
@@ -50,11 +55,12 @@ WORKDIR /app
 
 COPY --chown=appuser:appgroup level ./level
 COPY --chown=appuser:appgroup runtime ./runtime
-COPY --chown=appuser:appgroup intelligence/intelligence_rs ./intelligence/intelligence_rs
-COPY --chown=appuser:appgroup intelligence/src/ai/config.toml ./intelligence/src/ai/config.toml
+COPY --chown=appuser:appgroup intelligence/Cargo.toml intelligence/Cargo.lock \
+    intelligence/build.rs intelligence/config.toml ./intelligence/
+COPY --chown=appuser:appgroup intelligence/src ./intelligence/src
 
 USER appuser
-WORKDIR /app/intelligence/intelligence_rs
+WORKDIR /app/intelligence
 
 RUN cargo build --release --locked
 
@@ -66,14 +72,13 @@ FROM base AS production
 
 WORKDIR /app
 COPY --from=builder-dev --chown=appuser:appgroup \
-    /app/intelligence/intelligence_rs/target/release/ai-delver-intelligence \
+    /app/intelligence/target/release/ai-delver-intelligence \
     /usr/local/bin/ai-delver-intelligence
 COPY --from=builder-dev --chown=appuser:appgroup \
-    /app/intelligence/src/ai/config.toml \
-    /app/intelligence/src/ai/config.toml
+    /app/intelligence/config.toml \
+    /app/intelligence/config.toml
 
 USER appuser
 WORKDIR /app/intelligence
 
-ENTRYPOINT ["ai-delver-intelligence"]
-CMD ["--help"]
+CMD ["ai-delver-intelligence", "--help"]

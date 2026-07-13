@@ -32,7 +32,7 @@ intelligence/src/
 └── cli/                   # CLI runner and stdout JSON logging
 ```
 
-### Proposed Rust Architecture (`intelligence_rs/src/`)
+### Proposed Rust Architecture (`intelligence/src/`)
 
 ```
 src/
@@ -77,7 +77,7 @@ src/
 ## 5. Implementation Roadmap for the Next Agent
 
 ### Step 1: Initialize the Rust Crate
-1. Create a new Rust project (e.g. `intelligence_rs` or adding it as a binary in the existing workspace).
+1. Create a new Rust project under `intelligence/` (crate root at that directory).
 2. Configure `Cargo.toml` with dependencies: `tch`, `rayon`, `serde`, `serde_json`, `clap`, and the project's local physics/level libraries.
 
 ### Step 2: Implement the Environment Wrapper (`environments/`)

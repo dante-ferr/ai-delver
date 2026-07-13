@@ -6,6 +6,7 @@ __pycache__/
 data/
 logs/
 logger_train
-intelligence_rs/target/
+target/
+target-cuda/
 .vscode
 .idea

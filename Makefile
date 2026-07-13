@@ -8,7 +8,7 @@ update-submodules:
 
 on-run: prepare-scripts
 
-# Builds the Rust intelligence trainer image (intelligence_rs).
+# Builds the Rust intelligence trainer image.
 # Usage: make build-ai-dev ARGS="--batch-size=38 --train-args='--levels \"Ai Test #1\" --cycles 1'"
 build-ai-dev: on-run
 	./run-ai-dev.sh --build $(ARGS)

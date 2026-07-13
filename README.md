@@ -68,4 +68,4 @@ This repo encapsulates all of its internal dependencies, serving as a developmen
   Launches a local development server for previewing the project documentation using `mdbook`. The docs will be available at `http://localhost:3000` and will auto-rebuild on file changes.
 
 ## Tweaks
-You can tweak the ai training settings at intelligence/src/ai/config.toml. Be careful, because some of them might break the app if changed.
+You can tweak the ai training settings at intelligence/config.toml. Be careful, because some of them might break the app if changed.

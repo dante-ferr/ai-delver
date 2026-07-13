@@ -6,7 +6,7 @@ This document outlines the short-to-medium term plans for expanding the AI Delve
 
 ## 1. Configurable Training Parameters & TOML Format
 
-The deep learning and reinforcement learning hyperparameters are managed by `intelligence/src/ai/config.toml`.
+The deep learning and reinforcement learning hyperparameters are managed by `intelligence/config.toml`.
 
 ### TOML Format Advantage
 We have migrated the configuration from `config.json` to `config.toml` (using `tomllib` with a Python <3.11 fallback to `tomli`).

@@ -36,14 +36,11 @@ fn run() -> Result<()> {
         "init_started",
         json!({"message": "Loading configuration and levels"}),
     );
-    let intelligence_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .context("crate must be inside intelligence/")?
-        .to_path_buf();
+    let intelligence_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let repo_root = intelligence_root
         .parent()
         .context("intelligence directory must have repository parent")?;
-    let mut config = Config::load(&intelligence_root.join("src/ai/config.toml"))?;
+    let mut config = Config::load(&intelligence_root.join("config.toml"))?;
     apply_overrides(&mut config, &args);
     if config.env_batch_size == 0 || args.episodes_per_cycle == 0 {
         bail!("environment and episode counts must be positive");

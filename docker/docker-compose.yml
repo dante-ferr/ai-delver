@@ -10,8 +10,10 @@ services:
         BASE_IMAGE: ${BASE_IMAGE:-rust:1.85-bookworm}
         UID: ${UID:-1000}
         GID: ${GID:-1000}
+        TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cpu}
     working_dir: /app/intelligence
-    user: "${UID}:${GID}"
+    # Entrypoint starts as root to chown named volumes, then drops to HOST_UID.
+    user: "0:0"
     shm_size: ${AI_SHM_SIZE:-2g}
     volumes:
       - ./intelligence:/app/intelligence
@@ -20,9 +22,13 @@ services:
       - ./client/data/level_saves:/app/client/data/level_saves:ro
       - cargo-registry:/usr/local/cargo/registry
       - cargo-git:/usr/local/cargo/git
-      - intelligence-target:/app/intelligence/intelligence_rs/target
+      - intelligence-target:/app/intelligence/target
     environment:
       - LIBTORCH_USE_PYTORCH=1
+      - LIBTORCH_BYPASS_VERSION_CHECK=1
+      - LD_LIBRARY_PATH=/opt/torch-lib
+      - HOST_UID=${UID:-1000}
+      - HOST_GID=${GID:-1000}
       - AI_BATCH_SIZE=${AI_BATCH_SIZE:-38}
       - CONTAINER_COMMAND
     command: sh -c "${CONTAINER_COMMAND}"

@@ -1,4 +1,4 @@
-ARG BASE_IMAGE="rust:1.85-bookworm"
+ARG BASE_IMAGE="rust:1.88-bookworm"
 
 # =========================================================================
 # Stage 1: 'base'
@@ -24,8 +24,12 @@ RUN apt-get update && \
 
 # tch 0.20 expects libtorch 2.7.x. Prefer the Python wheel layout so the
 # image stays portable without a separate official libtorch tarball.
+# Use PyPI as the primary index and TORCH_INDEX_URL as an extra index: with
+# only --index-url pointed at download.pytorch.org, pip cannot install
+# typing-extensions (broken Name metadata on that index).
 RUN python3 -m pip install --break-system-packages --no-cache-dir \
-        "torch==${TORCH_VERSION}" --index-url "${TORCH_INDEX_URL}" && \
+        "torch==${TORCH_VERSION}" \
+        --extra-index-url "${TORCH_INDEX_URL}" && \
     TORCH_LIB="$(python3 -c 'import os, torch; print(os.path.join(os.path.dirname(torch.__file__), "lib"))')" && \
     ln -sfn "${TORCH_LIB}" /opt/torch-lib
 

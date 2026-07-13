@@ -44,19 +44,20 @@ for arg in "$@"; do
   esac
 done
 
-# Build (if needed) then run the native Rust trainer against mounted sources.
-export CONTAINER_COMMAND="cargo build --release --manifest-path Cargo.toml && cargo run --release --manifest-path Cargo.toml -- ${TRAIN_ARGS}"
+# TRAIN_ARGS is exported into the container (not written to .env — '#' would comment).
+# Compose evals it so quotes around spaced level names survive.
+export TRAIN_ARGS
 
 # GPU Detection: prefer a CUDA-capable base when available. CPU Rust images are
 # used otherwise; CUDA libtorch wiring can be refined later.
 if lspci | grep -iq 'vga.*nvidia'; then
   echo "✅ NVIDIA GPU detected. Using NVIDIA override (host GPU visible)."
-  export BASE_IMAGE_VAR="rust:1.85-bookworm"
+  export BASE_IMAGE_VAR="rust:1.88-bookworm"
   export TORCH_INDEX_URL="${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu126}"
   COMPOSE_FILES="-f docker/docker-compose.yml -f docker/docker-compose.nvidia.yml"
 else
   echo "⚠️ No NVIDIA GPU detected. Starting in CPU-only mode."
-  export BASE_IMAGE_VAR="rust:1.85-bookworm"
+  export BASE_IMAGE_VAR="rust:1.88-bookworm"
   export TORCH_INDEX_URL="${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cpu}"
   COMPOSE_FILES="-f docker/docker-compose.yml"
 fi

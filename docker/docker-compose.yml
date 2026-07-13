@@ -7,7 +7,7 @@ services:
       dockerfile: intelligence/docker/Dockerfile
       target: builder-dev
       args:
-        BASE_IMAGE: ${BASE_IMAGE:-rust:1.85-bookworm}
+        BASE_IMAGE: ${BASE_IMAGE:-rust:1.88-bookworm}
         UID: ${UID:-1000}
         GID: ${GID:-1000}
         TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cpu}
@@ -30,8 +30,13 @@ services:
       - HOST_UID=${UID:-1000}
       - HOST_GID=${GID:-1000}
       - AI_BATCH_SIZE=${AI_BATCH_SIZE:-38}
-      - CONTAINER_COMMAND
-    command: sh -c "${CONTAINER_COMMAND}"
+      - TRAIN_ARGS
+    # eval re-parses quotes inside TRAIN_ARGS so "Ai Test #1" stays one clap argument.
+    # $$ becomes $ in the container (Compose escaping).
+    command:
+      - sh
+      - -c
+      - cargo build --release --manifest-path Cargo.toml && eval "cargo run --release --manifest-path Cargo.toml -- $$TRAIN_ARGS"
     stdin_open: true
     tty: true
     deploy:

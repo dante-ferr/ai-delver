@@ -103,7 +103,7 @@ class Delver(SkeletalEntity):
 
         s = self._state()
         if self.skeleton:
-            self.skeleton.position = (s.x, s.y)
+            self.skeleton.position = (s.x, s.y - 3.0)
             self.skeleton.update(dt)
 
         is_moving = self.is_moving_intentionally

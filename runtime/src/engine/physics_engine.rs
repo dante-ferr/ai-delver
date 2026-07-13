@@ -38,7 +38,7 @@ impl RustPhysicsEngine {
         let player_body = RigidBodyBuilder::dynamic()
             .translation(vector![start_x, start_y])
             .lock_rotations()
-            .additional_mass(1.0)
+            .additional_mass(100.0)
             .ccd_enabled(true)
             .build();
         let player_body_handle = world.rigid_bodies.insert(player_body);
@@ -51,6 +51,7 @@ impl RustPhysicsEngine {
             half_h - border_radius,
             border_radius,
         )
+        .density(0.0)
         .friction(0.0)
         .restitution(0.0)
         .build();

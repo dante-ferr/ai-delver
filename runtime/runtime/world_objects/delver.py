@@ -137,9 +137,11 @@ class Delver(SkeletalEntity):
             DelverLocomotionState.JUMP,
         )
         if is_airborne and is_moving:
-            self.angle = self.AIR_TILT_ANGLE if self.scale[0] > 0 else -self.AIR_TILT_ANGLE
+            self.target_angle = (
+                self.AIR_TILT_ANGLE if self.scale[0] > 0 else -self.AIR_TILT_ANGLE
+            )
         else:
-            self.angle = 0.0
+            self.target_angle = 0.0
 
     def play_locomotion_animation(self):
         if self.locomotion_state == DelverLocomotionState.JUMP:

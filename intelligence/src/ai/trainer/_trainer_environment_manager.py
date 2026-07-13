@@ -1,6 +1,6 @@
 import functools
 import logging
-from tf_agents.environments import parallel_py_environment, tf_py_environment
+from tf_agents.environments import batched_py_environment, tf_py_environment
 from ai.environments.level.environment import LevelEnvironment
 from ai.config import config
 from typing import Optional
@@ -53,9 +53,8 @@ class TrainerEnvironmentManager:
             for i in range(config.ENV_BATCH_SIZE)
         ]
 
-        py_env = parallel_py_environment.ParallelPyEnvironment(
-            constructors, start_serially=True
-        )
+        envs = [c() for c in constructors]
+        py_env = batched_py_environment.BatchedPyEnvironment(envs)
         self._tf_env = tf_py_environment.TFPyEnvironment(py_env)
         logging.info("Environment initialized.")
 

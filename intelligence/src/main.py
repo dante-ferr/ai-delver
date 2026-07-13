@@ -1,8 +1,8 @@
-import multiprocessing
-try:
-    multiprocessing.set_start_method('spawn')
-except RuntimeError:
-    pass
+# import multiprocessing
+# try:
+#     multiprocessing.set_start_method('spawn')
+# except RuntimeError:
+#     pass
 
 import uvicorn
 from api.server import app as api_app

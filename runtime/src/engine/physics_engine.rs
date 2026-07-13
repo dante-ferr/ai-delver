@@ -120,7 +120,7 @@ impl RustPhysicsEngine {
         }
     }
 
-    pub fn step(&mut self, dt: f32) -> PyResult<BaseDelver> {
+    pub fn step(&mut self, py: Python<'_>, dt: f32) -> PyResult<BaseDelver> {
         let is_delver_dead = if let Some(PhysicsEntity::Delver(ref d)) = self.entities.get("delver") {
             d.is_dead
         } else {
@@ -132,13 +132,14 @@ impl RustPhysicsEngine {
         }
 
         let sub_dt = 1.0 / 60.0;
-        let mut elapsed = 0.0;
-
-        while elapsed < dt {
-            let tick_dt = (dt - elapsed).min(sub_dt);
-            self.tick_physics(tick_dt);
-            elapsed += tick_dt;
-        }
+        py.allow_threads(|| {
+            let mut elapsed = 0.0;
+            while elapsed < dt {
+                let tick_dt = (dt - elapsed).min(sub_dt);
+                self.tick_physics(tick_dt);
+                elapsed += tick_dt;
+            }
+        });
 
         self.get_delver()
     }

@@ -1,10 +1,12 @@
 prepare-scripts:
-	chmod +x run.sh
+	chmod +x ../run-ai-dev.sh
 
 on-run: prepare-scripts
 
+# Builds/runs the Rust intelligence trainer container from the repository root.
+# Usage: make build ARGS="--batch-size=38"
 build: on-run
-	./run.sh --build
+	cd .. && ./run-ai-dev.sh --build $(ARGS)
 
 run: on-run
-	./run.sh
+	cd .. && ./run-ai-dev.sh $(ARGS)

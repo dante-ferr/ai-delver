@@ -1,79 +1,75 @@
-ARG BASE_IMAGE="python:3.11-slim"
+ARG BASE_IMAGE="rust:1.85-bookworm"
 
 # =========================================================================
 # Stage 1: 'base'
-# Setup OS, system deps, and non-root user.
+# Rust toolchain image with native build dependencies for Rapier / libtorch.
 # =========================================================================
 FROM ${BASE_IMAGE} AS base
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies. 'python3-tk' resolves to the correct version for the base image.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    curl build-essential python3-pip tk-dev python3-tk && \
+        ca-certificates \
+        curl \
+        pkg-config \
+        libssl-dev \
+        python3 \
+        python3-pip \
+        python3-venv && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Rust toolchain system-wide for appuser accessibility
-ENV RUSTUP_HOME=/usr/local/rustup \
-    CARGO_HOME=/usr/local/cargo \
-    PATH=/usr/local/cargo/bin:$PATH
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path && \
-    chmod -R a+w $RUSTUP_HOME $CARGO_HOME
+# tch 0.20 expects a matching libtorch. Prefer the Python wheel layout so the
+# image stays portable without a separate official libtorch tarball.
+RUN python3 -m pip install --break-system-packages --no-cache-dir \
+        "torch==2.4.1" --index-url https://download.pytorch.org/whl/cpu && \
+    TORCH_LIB="$(python3 -c 'import os, torch; print(os.path.join(os.path.dirname(torch.__file__), "lib"))')" && \
+    ln -sfn "${TORCH_LIB}" /opt/torch-lib
 
+ENV LIBTORCH_USE_PYTORCH=1 \
+    LD_LIBRARY_PATH=/opt/torch-lib:${LD_LIBRARY_PATH}
 
-# Create non-root user for security
 ARG UID=1000
 ARG GID=1000
 RUN groupadd -g $GID appgroup && \
-    useradd -m -s /bin/bash -u $UID -g $GID appuser
-
-RUN python3 -m pip install --upgrade pip && \
-    python3 -m pip install poetry==1.8.2
+    useradd -m -s /bin/bash -u $UID -g $GID appuser && \
+    mkdir -p /usr/local/cargo /usr/local/rustup && \
+    chown -R appuser:appgroup /usr/local/cargo /usr/local/rustup
 
 # =========================================================================
 # Stage 2: 'builder-dev'
-# Install Python dependencies and compile local libs.
+# Compile the native trainer against local level + runtime crates.
 # =========================================================================
 FROM base AS builder-dev
 
 WORKDIR /app
 
-COPY --chown=appuser:appgroup runtime ./runtime
 COPY --chown=appuser:appgroup level ./level
-COPY --chown=appuser:appgroup pytiling-lib ./pytiling-lib
-COPY --chown=appuser:appgroup pyglet-dragonbones-lib ./pyglet-dragonbones-lib
-COPY --chown=appuser:appgroup assets ./assets
-
-WORKDIR /app/intelligence
-COPY --chown=appuser:appgroup intelligence/pyproject.toml ./
-COPY --chown=appuser:appgroup intelligence/poetry.lock ./
-
-# Remove system-level 'blinker' to avoid conflicts with Poetry's version on Debian
-RUN apt-get update && apt-get remove -y python3-blinker || true
-
-RUN poetry config virtualenvs.create false && \
-    poetry install --no-interaction --no-ansi
+COPY --chown=appuser:appgroup runtime ./runtime
+COPY --chown=appuser:appgroup intelligence/intelligence_rs ./intelligence/intelligence_rs
+COPY --chown=appuser:appgroup intelligence/src/ai/config.toml ./intelligence/src/ai/config.toml
 
 USER appuser
+WORKDIR /app/intelligence/intelligence_rs
+
+RUN cargo build --release --locked
 
 # =========================================================================
 # Stage 3: 'production'
-# Final runtime image. Copies only installed packages and source code.
+# Slim runtime image with the compiled trainer binary.
 # =========================================================================
 FROM base AS production
 
-# Dynamic PYTHONPATH to support varying Python versions in TensorFlow images (3.9, 3.10, or 3.11)
-ENV PYTHONPATH=/usr/local/lib/python3.11/site-packages:/usr/local/lib/python3.10/site-packages:/usr/local/lib/python3.9/site-packages:/usr/local/lib/site-packages
-
-# Copy installed packages from builder using wildcard to match any Python version
-COPY --from=builder-dev /usr/local/lib/python3.*/site-packages /usr/local/lib/site-packages
-
-# Ensure the destination is also in path
-ENV PYTHONPATH=/usr/local/lib/site-packages:$PYTHONPATH
-
 WORKDIR /app
-COPY --chown=appuser:appgroup src ./src
-USER appuser
+COPY --from=builder-dev --chown=appuser:appgroup \
+    /app/intelligence/intelligence_rs/target/release/ai-delver-intelligence \
+    /usr/local/bin/ai-delver-intelligence
+COPY --from=builder-dev --chown=appuser:appgroup \
+    /app/intelligence/src/ai/config.toml \
+    /app/intelligence/src/ai/config.toml
 
-CMD ["python3", "src/main.py"]
+USER appuser
+WORKDIR /app/intelligence
+
+ENTRYPOINT ["ai-delver-intelligence"]
+CMD ["--help"]

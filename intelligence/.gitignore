@@ -1,5 +1,8 @@
-logs
+data/
+logs/
 __pycache__/
 .vscode
-logger_train
 .venv
+logger_train
+*.ot
+target/

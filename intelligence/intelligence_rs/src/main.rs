@@ -113,6 +113,9 @@ fn apply_overrides(config: &mut Config, args: &Cli) {
     if let Some(value) = &args.device {
         config.device.clone_from(value);
     }
+    if args.no_learning {
+        config.no_learning = true;
+    }
 }
 
 fn parse_device(value: &str) -> Result<Device> {

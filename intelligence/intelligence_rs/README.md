@@ -48,13 +48,25 @@ cargo run --release \
   --agent ppo_delver
 ```
 
+Physics-only profiling (random actions, no PPO updates):
+
+```bash
+cargo run --release \
+  --manifest-path intelligence/intelligence_rs/Cargo.toml -- \
+  --levels "Ai Test #3" \
+  --cycles 1 \
+  --episodes-per-cycle 38 \
+  --no-learning
+```
+
 Level names resolve through `client/data/level_saves`; direct paths are also
 accepted. Protocol events are emitted as one JSON object per stdout line.
 Diagnostics go to stderr.
 
 The default batch contains 38 environments stepped with Rayon. Configuration
 comes from `intelligence/src/ai/config.toml`, with CLI arguments taking
-precedence.
+precedence. Pass `--no-learning` to force profiling mode regardless of the
+`no_learning` value in `config.toml`.
 
 ## Current limitation
 

@@ -1,4 +1,4 @@
-use clap::{Parser, ValueEnum};
+use clap::{ArgAction, Parser, ValueEnum};
 use serde::Serialize;
 use std::path::PathBuf;
 
@@ -53,6 +53,9 @@ pub struct Cli {
     pub device: Option<String>,
     #[arg(long)]
     pub seed: Option<u64>,
+    /// Skip policy inference and PPO updates (random actions) for physics profiling.
+    #[arg(long, action = ArgAction::SetTrue)]
+    pub no_learning: bool,
 }
 
 pub fn emit<T: Serialize>(event: &str, value: T) {

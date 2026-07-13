@@ -3,16 +3,12 @@ set -e
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )
 
 # Defaults
-ENTRYPOINT="main"
 BUILD_FLAG=""
-BATCH_SIZE="32"
+BATCH_SIZE="38"
 MEMORY_LIMIT="12G"
-# Default SHM: 2GB is safe for 48 envs + TensorFlow overhead
 SHM_SIZE="2g"
-# Default Swap: If null, Docker defaults to 2x RAM (12G RAM + 12G Swap = 24G Total)
-# Setting this explicitly protects your host OS from OOM locking.
-# Note: This value represents RAM + SWAP combined.
-SWAP_LIMIT="14G" 
+SWAP_LIMIT="14G"
+TRAIN_ARGS='--levels "Ai Test #1" --cycles 1 --episodes-per-cycle 38 --agent ppo_delver'
 
 # Argument Parsing
 for arg in "$@"; do
@@ -37,24 +33,29 @@ for arg in "$@"; do
       SWAP_LIMIT="${arg#*=}"
       shift
       ;;
+    --train-args=*)
+      TRAIN_ARGS="${arg#*=}"
+      shift
+      ;;
     *)
-      ENTRYPOINT="$arg"
+      echo "Unknown argument: $arg" >&2
+      exit 1
       ;;
   esac
 done
 
-# Determine container behavior via environment variables
-export CONTAINER_COMMAND="python3 /runtime/build_rust.py && PYTHONHASHSEED=0 python3 src/main.py"
+# Build (if needed) then run the native Rust trainer against mounted sources.
+export CONTAINER_COMMAND="cargo build --release --manifest-path intelligence_rs/Cargo.toml && cargo run --release --manifest-path intelligence_rs/Cargo.toml -- ${TRAIN_ARGS}"
 
-# GPU Detection
+# GPU Detection: prefer a CUDA-capable base when available. CPU Rust images are
+# used otherwise; CUDA libtorch wiring can be refined later.
 if lspci | grep -iq 'vga.*nvidia'; then
-  echo "✅ NVIDIA GPU detected. Using NVIDIA environment."
-  export BASE_IMAGE_VAR="tensorflow/tensorflow:2.15.0-gpu"
-  # We use a separate override file for GPU configs
+  echo "✅ NVIDIA GPU detected. Using NVIDIA override (host GPU visible)."
+  export BASE_IMAGE_VAR="rust:1.85-bookworm"
   COMPOSE_FILES="-f docker/docker-compose.yml -f docker/docker-compose.nvidia.yml"
 else
   echo "⚠️ No NVIDIA GPU detected. Starting in CPU-only mode."
-  export BASE_IMAGE_VAR="python:3.11-slim"
+  export BASE_IMAGE_VAR="rust:1.85-bookworm"
   COMPOSE_FILES="-f docker/docker-compose.yml"
 fi
 
@@ -75,9 +76,11 @@ echo "   - Batch Size: ${BATCH_SIZE}"
 echo "   - Memory Limit: ${MEMORY_LIMIT}"
 echo "   - Swap Limit (Total): ${SWAP_LIMIT}"
 echo "   - SHM Size: ${SHM_SIZE}"
+echo "   - Train Args: ${TRAIN_ARGS}"
 
-echo "🔧 Ensuring host log directory exists..."
+echo "🔧 Ensuring host log and data directories exist..."
 mkdir -p "${SCRIPT_DIR}/intelligence/logs"
+mkdir -p "${SCRIPT_DIR}/intelligence/data"
 
 # Execution
 echo "📖 Using base image: ${BASE_IMAGE_VAR}"

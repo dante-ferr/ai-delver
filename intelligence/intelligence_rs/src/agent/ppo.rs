@@ -83,7 +83,9 @@ impl Ppo {
         let runs = rollout.runs.transpose(0, 1);
         let jumps = rollout.jumps.transpose(0, 1);
         let old_log_probs = rollout.old_log_probs.transpose(0, 1);
-        let envs_per_batch = (self.config.minibatch_size / steps).max(1);
+        let envs_per_batch = ((self.config.minibatch_size + steps - 1) / steps)
+            .max(1)
+            .min(envs);
         let mut metrics = UpdateMetrics::default();
 
         for _ in 0..self.config.ppo_num_epochs {

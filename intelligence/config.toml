@@ -1,4 +1,5 @@
 # AI Delver Agent Training Configuration
+# All fields are required. Unknown keys are rejected.
 
 # ==============================================================================
 # RL Hyperparameters
@@ -31,28 +32,15 @@ wall_hugging_reward = -0.2        # Penalty to discourage sticking/scraping agai
 goal_distance_reward_scale = 0.005 # Scaling factor for reward based on distance to goal
 
 # ==============================================================================
-# Training Environment & Replay Buffer
+# Training Environment
 # ==============================================================================
-replay_buffer_capacity = 20000    # Maximum number of steps stored in the experience replay buffer
-replay_buffer_batch_size = 256    # Number of training steps sampled per gradient update
 collect_seconds_per_env = 5       # Seconds of experience collected per environment iteration
 actions_per_second = 10           # Resolution of actions the agent takes per second
 max_seconds_per_episode = 60      # Maximum duration before an episode is terminated
 
 # ==============================================================================
-# Dynamic Level Graduation (Curriculum Learning)
-# ==============================================================================
-dynamic_exam_pass_reward = 90     # Threshold average reward to start examining for level graduation
-dynamic_target_reward = 95        # Threshold average reward to graduate to the next level
-dynamic_min_episodes = 50         # Minimum training episodes required before a level can graduate
-dynamic_max_episodes = 1000       # Maximum training episodes allowed before force-graduating a level
-
-# ==============================================================================
 # Miscellaneous
 # ==============================================================================
-max_training_levels = 10          # Maximum number of levels in curriculum training
-log_interval = 10                 # Logging frequency of agent metrics
 seed = 42                         # Random seed for reproducibility
 checkpoint_interval = 0           # Frequency (in cycles) to save intermediate checkpoints (0 to disable)
 no_learning = false               # Execute random actions only without gradient updates for profiling/testing
-

@@ -3,7 +3,7 @@ use serde::Deserialize;
 use std::{fs, path::Path};
 
 #[derive(Clone, Debug, Deserialize)]
-#[serde(default)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     pub learning_rate: f64,
     pub gamma: f32,
@@ -32,6 +32,7 @@ pub struct Config {
     pub no_learning: bool,
 }
 
+#[cfg(test)]
 impl Default for Config {
     fn default() -> Self {
         Self {

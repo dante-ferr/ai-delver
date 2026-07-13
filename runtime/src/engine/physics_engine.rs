@@ -1,15 +1,37 @@
 use std::collections::HashMap;
+use std::fmt;
+
+#[cfg(feature = "python")]
 use pyo3::prelude::*;
 use rapier2d::prelude::*;
 
-use crate::world_objects::base_delver::BaseDelver;
-use crate::world_objects::base_goal::BaseGoal;
-use crate::world_objects::physics_entity::PhysicsEntity;
 use crate::engine::grid::TileGrid;
 use crate::engine::physics_constants::PhysicsConstants;
 use crate::engine::physics_world::PhysicsWorld;
+use crate::world_objects::base_delver::BaseDelver;
+use crate::world_objects::base_goal::BaseGoal;
+use crate::world_objects::physics_entity::PhysicsEntity;
 
-#[pyclass]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RuntimeError {
+    EntityNotFound(String),
+    DelverNotFound,
+}
+
+impl fmt::Display for RuntimeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EntityNotFound(id) => write!(formatter, "Entity with id {id} not found"),
+            Self::DelverNotFound => formatter.write_str("Delver entity not found"),
+        }
+    }
+}
+
+impl std::error::Error for RuntimeError {}
+
+pub type RuntimeResult<T> = Result<T, RuntimeError>;
+
+#[cfg_attr(feature = "python", pyclass)]
 pub struct RustPhysicsEngine {
     grid: TileGrid,
     entities: HashMap<String, PhysicsEntity>,
@@ -18,14 +40,34 @@ pub struct RustPhysicsEngine {
     world: PhysicsWorld,
 }
 
-#[pymethods]
 impl RustPhysicsEngine {
-    #[new]
+    /// Constructs a simulation from tile geometry and a world-space delver start.
     pub fn new(
         width: usize,
         height: usize,
         solid_tiles: Vec<(usize, usize)>,
         goal_tiles: Vec<(usize, usize)>,
+        start_x: f32,
+        start_y: f32,
+        tile_size: f32,
+    ) -> Self {
+        Self::from_geometry_ref(
+            width,
+            height,
+            &solid_tiles,
+            &goal_tiles,
+            start_x,
+            start_y,
+            tile_size,
+        )
+    }
+
+    /// Constructs a simulation without requiring callers to clone level geometry.
+    pub fn from_geometry_ref(
+        width: usize,
+        height: usize,
+        solid_tiles: &[(usize, usize)],
+        goal_tiles: &[(usize, usize)],
         start_x: f32,
         start_y: f32,
         tile_size: f32,
@@ -55,12 +97,16 @@ impl RustPhysicsEngine {
         .friction(0.0)
         .restitution(0.0)
         .build();
-        world.colliders.insert_with_parent(player_collider, player_body_handle, &mut world.rigid_bodies);
+        world.colliders.insert_with_parent(
+            player_collider,
+            player_body_handle,
+            &mut world.rigid_bodies,
+        );
 
         // Add static colliders for solid tiles by merging contiguous segments in each row
         let half_tile = tile_size / 2.0;
         let mut rows: std::collections::HashMap<i32, Vec<i32>> = std::collections::HashMap::new();
-        for (x, y) in solid_tiles {
+        for &(x, y) in solid_tiles {
             if goal_tiles.contains(&(x, y)) {
                 continue;
             }
@@ -100,7 +146,7 @@ impl RustPhysicsEngine {
 
         let mut goal_x = 0.0;
         let mut goal_y = 0.0;
-        for (x, y) in goal_tiles {
+        for &(x, y) in goal_tiles {
             grid.set(x, y, 3);
             goal_x = (x as f32 + 0.5) * tile_size;
             goal_y = (height as f32 - y as f32 - 0.5) * tile_size;
@@ -120,31 +166,57 @@ impl RustPhysicsEngine {
         }
     }
 
-    pub fn step(&mut self, py: Python<'_>, dt: f32) -> PyResult<BaseDelver> {
-        let is_delver_dead = if let Some(PhysicsEntity::Delver(ref d)) = self.entities.get("delver") {
+    /// An explicit geometry constructor for callers that prefer a descriptive name.
+    pub fn from_geometry(
+        width: usize,
+        height: usize,
+        solid_tiles: Vec<(usize, usize)>,
+        goal_tiles: Vec<(usize, usize)>,
+        start_x: f32,
+        start_y: f32,
+        tile_size: f32,
+    ) -> Self {
+        Self::new(
+            width,
+            height,
+            solid_tiles,
+            goal_tiles,
+            start_x,
+            start_y,
+            tile_size,
+        )
+    }
+
+    /// Advances the simulation using the same fixed-size substeps as Python.
+    pub fn step_native(&mut self, dt: f32) -> RuntimeResult<BaseDelver> {
+        let is_delver_dead = if let Some(PhysicsEntity::Delver(ref d)) = self.entities.get("delver")
+        {
             d.is_dead
         } else {
             false
         };
 
         if is_delver_dead {
-            return self.get_delver();
+            return self.get_delver_native();
         }
 
         let sub_dt = 1.0 / 60.0;
-        py.allow_threads(|| {
-            let mut elapsed = 0.0;
-            while elapsed < dt {
-                let tick_dt = (dt - elapsed).min(sub_dt);
-                self.tick_physics(tick_dt);
-                elapsed += tick_dt;
-            }
-        });
+        let mut elapsed = 0.0;
+        while elapsed < dt {
+            let tick_dt = (dt - elapsed).min(sub_dt);
+            self.tick_physics(tick_dt);
+            elapsed += tick_dt;
+        }
 
-        self.get_delver()
+        self.get_delver_native()
     }
 
-    pub fn set_entity_actions(&mut self, id: &str, action_run: f32, action_jump: bool) -> PyResult<()> {
+    pub fn set_entity_actions_native(
+        &mut self,
+        id: &str,
+        action_run: f32,
+        action_jump: bool,
+    ) -> RuntimeResult<()> {
         if let Some(entity) = self.entities.get_mut(id) {
             match entity {
                 PhysicsEntity::Delver(delver) => {
@@ -154,36 +226,52 @@ impl RustPhysicsEngine {
             }
             Ok(())
         } else {
-            Err(pyo3::exceptions::PyKeyError::new_err(format!("Entity with id {} not found", id)))
+            Err(RuntimeError::EntityNotFound(id.to_owned()))
         }
     }
 
-    pub fn get_delver(&self) -> PyResult<BaseDelver> {
+    pub fn set_delver_action(&mut self, action_run: f32, action_jump: bool) -> RuntimeResult<()> {
+        self.set_entity_actions_native("delver", action_run, action_jump)
+    }
+
+    pub fn delver(&self) -> RuntimeResult<&BaseDelver> {
         if let Some(PhysicsEntity::Delver(ref delver)) = self.entities.get("delver") {
-            Ok(delver.clone())
+            Ok(delver)
         } else {
-            Err(pyo3::exceptions::PyKeyError::new_err("Delver entity not found"))
+            Err(RuntimeError::DelverNotFound)
         }
     }
 
-    pub fn get_goal(&self) -> BaseGoal {
+    pub fn get_delver_native(&self) -> RuntimeResult<BaseDelver> {
+        self.delver().cloned()
+    }
+
+    pub fn goal(&self) -> &BaseGoal {
+        &self.goal
+    }
+
+    pub fn get_goal_native(&self) -> BaseGoal {
         self.goal.clone()
     }
 
-    pub fn get_goal_position(&self) -> (f32, f32) {
+    pub fn goal_position(&self) -> (f32, f32) {
         (self.goal.x, self.goal.y)
     }
 
-    pub fn get_entity_rotation(&self, id: &str) -> PyResult<f32> {
+    pub fn max_velocity(&self) -> (f32, f32) {
+        (self.consts.max_vx, self.consts.max_vy)
+    }
+
+    pub fn get_entity_rotation_native(&self, id: &str) -> RuntimeResult<f32> {
         if let Some(entity) = self.entities.get(id) {
             let rb = &self.world.rigid_bodies[entity.body_handle()];
             Ok(rb.rotation().angle())
         } else {
-            Err(pyo3::exceptions::PyKeyError::new_err(format!("Entity with id {} not found", id)))
+            Err(RuntimeError::EntityNotFound(id.to_owned()))
         }
     }
 
-    pub fn get_local_view(&self, id: &str, radius: i32) -> PyResult<Vec<i32>> {
+    pub fn local_view(&self, id: &str, radius: i32) -> RuntimeResult<Vec<i32>> {
         if let Some(entity) = self.entities.get(id) {
             let (ex, ey) = match entity {
                 PhysicsEntity::Delver(delver) => (delver.x, delver.y),
@@ -216,14 +304,89 @@ impl RustPhysicsEngine {
 
             Ok(view)
         } else {
-            Err(pyo3::exceptions::PyKeyError::new_err(format!("Entity with id {} not found", id)))
+            Err(RuntimeError::EntityNotFound(id.to_owned()))
         }
+    }
+}
+
+#[cfg(feature = "python")]
+fn runtime_error_to_py(error: RuntimeError) -> pyo3::PyErr {
+    pyo3::exceptions::PyKeyError::new_err(error.to_string())
+}
+
+#[cfg(feature = "python")]
+#[pyo3::pymethods]
+impl RustPhysicsEngine {
+    #[new]
+    fn py_new(
+        width: usize,
+        height: usize,
+        solid_tiles: Vec<(usize, usize)>,
+        goal_tiles: Vec<(usize, usize)>,
+        start_x: f32,
+        start_y: f32,
+        tile_size: f32,
+    ) -> Self {
+        Self::new(
+            width,
+            height,
+            solid_tiles,
+            goal_tiles,
+            start_x,
+            start_y,
+            tile_size,
+        )
+    }
+
+    #[pyo3(name = "step")]
+    fn step_py(&mut self, py: pyo3::Python<'_>, dt: f32) -> pyo3::PyResult<BaseDelver> {
+        py.allow_threads(|| self.step_native(dt))
+            .map_err(runtime_error_to_py)
+    }
+
+    #[pyo3(name = "set_entity_actions")]
+    fn set_entity_actions_py(
+        &mut self,
+        id: &str,
+        action_run: f32,
+        action_jump: bool,
+    ) -> pyo3::PyResult<()> {
+        self.set_entity_actions_native(id, action_run, action_jump)
+            .map_err(runtime_error_to_py)
+    }
+
+    #[pyo3(name = "get_delver")]
+    fn get_delver_py(&self) -> pyo3::PyResult<BaseDelver> {
+        self.get_delver_native().map_err(runtime_error_to_py)
+    }
+
+    #[pyo3(name = "get_goal")]
+    fn get_goal_py(&self) -> BaseGoal {
+        self.get_goal_native()
+    }
+
+    #[pyo3(name = "get_goal_position")]
+    fn get_goal_position_py(&self) -> (f32, f32) {
+        self.goal_position()
+    }
+
+    #[pyo3(name = "get_entity_rotation")]
+    fn get_entity_rotation_py(&self, id: &str) -> pyo3::PyResult<f32> {
+        self.get_entity_rotation_native(id)
+            .map_err(runtime_error_to_py)
+    }
+
+    #[pyo3(name = "get_local_view")]
+    fn get_local_view_py(&self, id: &str, radius: i32) -> pyo3::PyResult<Vec<i32>> {
+        self.local_view(id, radius).map_err(runtime_error_to_py)
     }
 }
 
 impl RustPhysicsEngine {
     fn tick_physics(&mut self, dt: f32) {
-        self.world.query_pipeline.update(&self.world.rigid_bodies, &self.world.colliders);
+        self.world
+            .query_pipeline
+            .update(&self.world.rigid_bodies, &self.world.colliders);
 
         // 1. Delegate pre-step updates to all dynamic entities
         let entity_ids: Vec<String> = self.entities.keys().cloned().collect();
@@ -237,7 +400,9 @@ impl RustPhysicsEngine {
         self.world.step(&gravity, dt);
 
         // Update query pipeline after step so post-step raycasts query the new positions
-        self.world.query_pipeline.update(&self.world.rigid_bodies, &self.world.colliders);
+        self.world
+            .query_pipeline
+            .update(&self.world.rigid_bodies, &self.world.colliders);
 
         // 3. Delegate post-step updates
         for id in &entity_ids {
@@ -246,3 +411,22 @@ impl RustPhysicsEngine {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_api_constructs_without_python() {
+        let solids = [(0, 4), (1, 4), (2, 4), (3, 4), (4, 4)];
+        let goals = [(3, 3)];
+        let mut engine =
+            RustPhysicsEngine::from_geometry_ref(5, 5, &solids, &goals, 24.0, 40.0, 16.0);
+
+        engine.set_delver_action(1.0, false).unwrap();
+        assert_eq!(engine.goal_position(), (56.0, 24.0));
+        assert_eq!(engine.local_view("delver", 7).unwrap().len(), 225);
+        assert_eq!(engine.max_velocity(), (500.0, 1000.0));
+    }
+}
+

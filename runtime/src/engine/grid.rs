@@ -52,17 +52,9 @@ impl TileGrid {
         let max_tx = ((right / self.tile_size).floor() as i32).clamp(0, w) as usize;
         // Y-axis is flipped: tile row 0 is the top of the map in pixel space.
         let min_ty = (((map_height_px - top) / self.tile_size).floor() as i32).clamp(0, h) as usize;
-        let max_ty = (((map_height_px - bottom) / self.tile_size).floor() as i32).clamp(0, h) as usize;
+        let max_ty =
+            (((map_height_px - bottom) / self.tile_size).floor() as i32).clamp(0, h) as usize;
 
         (min_tx, max_tx, min_ty, max_ty)
-    }
-
-    /// Returns the pixel-space left/right/bottom/top bounds of a tile cell.
-    pub fn cell_pixel_bounds(&self, tx: usize, ty: usize) -> (f32, f32, f32, f32) {
-        let cell_left = tx as f32 * self.tile_size;
-        let cell_right = (tx + 1) as f32 * self.tile_size;
-        let cell_bottom = (self.height as f32 - ty as f32 - 1.0) * self.tile_size;
-        let cell_top = (self.height as f32 - ty as f32) * self.tile_size;
-        (cell_left, cell_right, cell_bottom, cell_top)
     }
 }

@@ -5,8 +5,15 @@
 # ==============================================================================
 learning_rate = 0.0003            # Step size for gradient descent updates
 gamma = 0.995                     # Discount factor for future rewards (balancing short-term vs long-term goals)
-entropy_regularization = 0.2      # Penalty/incentive for policy entropy to promote exploration
+entropy_regularization = 0.01     # Standard PPO entropy bonus; 0.2 prevented convergence
 ppo_num_epochs = 4                # Number of optimization epochs per gradient update step
+clip_epsilon = 0.2                # PPO policy-ratio clipping range
+gae_lambda = 0.95                 # Bias/variance tradeoff for generalized advantage estimation
+value_coefficient = 0.5           # Value loss weight
+max_grad_norm = 0.5               # Global optimizer gradient clipping norm
+minibatch_size = 256              # Target number of time steps per recurrent sequence minibatch
+env_batch_size = 38               # Number of native environments stepped in parallel
+device = "cpu"                    # cpu, cuda, cuda:N, or mps
 
 
 # ==============================================================================

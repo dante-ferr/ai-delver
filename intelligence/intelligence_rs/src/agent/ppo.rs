@@ -87,6 +87,10 @@ impl Ppo {
             .max(1)
             .min(envs);
         let mut metrics = UpdateMetrics::default();
+        let mut loss_sum = Tensor::zeros([], (Kind::Float, self.device));
+        let mut policy_sum = Tensor::zeros([], (Kind::Float, self.device));
+        let mut value_sum = Tensor::zeros([], (Kind::Float, self.device));
+        let mut entropy_sum = Tensor::zeros([], (Kind::Float, self.device));
 
         for _ in 0..self.config.ppo_num_epochs {
             let permutation = Tensor::randperm(envs as i64, (Kind::Int64, self.device));
@@ -129,19 +133,19 @@ impl Ppo {
                     - self.config.entropy_regularization * &entropy;
                 self.optimizer
                     .backward_step_clip(&loss, self.config.max_grad_norm);
-                metrics.loss += loss.double_value(&[]);
-                metrics.policy_loss += policy_loss.double_value(&[]);
-                metrics.value_loss += value_loss.double_value(&[]);
-                metrics.entropy += entropy.double_value(&[]);
+                loss_sum += loss.detach();
+                policy_sum += policy_loss.detach();
+                value_sum += value_loss.detach();
+                entropy_sum += entropy.detach();
                 metrics.updates += 1;
             }
         }
         if metrics.updates > 0 {
             let count = metrics.updates as f64;
-            metrics.loss /= count;
-            metrics.policy_loss /= count;
-            metrics.value_loss /= count;
-            metrics.entropy /= count;
+            metrics.loss = loss_sum.double_value(&[]) / count;
+            metrics.policy_loss = policy_sum.double_value(&[]) / count;
+            metrics.value_loss = value_sum.double_value(&[]) / count;
+            metrics.entropy = entropy_sum.double_value(&[]) / count;
         }
         metrics
     }

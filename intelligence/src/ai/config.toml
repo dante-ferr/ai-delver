@@ -13,7 +13,7 @@ value_coefficient = 0.5           # Value loss weight
 max_grad_norm = 0.5               # Global optimizer gradient clipping norm
 minibatch_size = 256              # Target number of time steps per recurrent sequence minibatch
 env_batch_size = 38               # Number of native environments stepped in parallel
-device = "cpu"                    # cpu, cuda, cuda:N, or mps
+device = "auto"                   # auto (CUDA if available), cpu, cuda, cuda:N, or mps
 
 
 # ==============================================================================

@@ -10,15 +10,41 @@ No Python process or PyO3 boundary is used while training.
 
 ## Prerequisites
 
-Install libtorch, or install a compatible Python PyTorch distribution and set:
+Install libtorch **2.7.x** matching `tch 0.20`, or use the download feature.
+
+### CPU build
+
+```bash
+cargo build --release \
+  --manifest-path intelligence/intelligence_rs/Cargo.toml \
+  --features tch/download-libtorch
+```
+
+### CUDA build (recommended for training)
+
+```bash
+# Example: CUDA 12.6 libs. Other supported tags for tch 0.20 / torch 2.7: cu118, cu126, cu128.
+export TORCH_CUDA_VERSION=cu126
+cargo build --release \
+  --manifest-path intelligence/intelligence_rs/Cargo.toml \
+  --features tch/download-libtorch
+
+# Point the dynamic loader at the downloaded libtorch (path under target/*/build/torch-sys-*/out/...).
+export LD_LIBRARY_PATH="$(find intelligence/intelligence_rs/target* -path '*/libtorch/lib/libtorch.so' | head -1 | xargs dirname):${LD_LIBRARY_PATH}"
+```
+
+`device = "auto"` (default) selects CUDA when the GPU is visible. The binary also
+force-loads `libtorch_cuda` at startup so GNU ld `--as-needed` cannot hide CUDA.
+
+Or point at a Python CUDA PyTorch install:
 
 ```bash
 export LIBTORCH_USE_PYTORCH=1
+export LIBTORCH_BYPASS_VERSION_CHECK=1   # if the wheel patch version differs slightly
 ```
 
-The libtorch version must match the version expected by `tch 0.20`. See the
-[`tch-rs` setup documentation](https://github.com/LaurentMazare/tch-rs) if a
-custom `LIBTORCH` directory or CUDA build is required.
+See the [`tch-rs` setup documentation](https://github.com/LaurentMazare/tch-rs) for
+custom `LIBTORCH` directories.
 
 ## Build and test
 
@@ -37,11 +63,16 @@ cargo check \
 
 ## Train
 
+`device = "auto"` in `config.toml` (default) selects CUDA when the linked
+libtorch was built with CUDA and a GPU is visible; otherwise it falls back to
+CPU. Override with `--device cuda` or `--device cpu`.
+
 Run from the repository root:
 
 ```bash
 cargo run --release \
-  --manifest-path intelligence/intelligence_rs/Cargo.toml -- \
+  --manifest-path intelligence/intelligence_rs/Cargo.toml \
+  --features tch/download-libtorch -- \
   --levels "Ai Test #1" \
   --cycles 10 \
   --episodes-per-cycle 38 \
@@ -52,7 +83,8 @@ Physics-only profiling (random actions, no PPO updates):
 
 ```bash
 cargo run --release \
-  --manifest-path intelligence/intelligence_rs/Cargo.toml -- \
+  --manifest-path intelligence/intelligence_rs/Cargo.toml \
+  --features tch/download-libtorch -- \
   --levels "Ai Test #3" \
   --cycles 1 \
   --episodes-per-cycle 38 \

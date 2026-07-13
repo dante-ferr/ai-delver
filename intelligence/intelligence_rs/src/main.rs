@@ -1,6 +1,7 @@
 mod agent;
 mod cli;
 mod config;
+mod cuda_preload;
 mod environments;
 mod trainer;
 
@@ -25,6 +26,7 @@ fn main() {
 }
 
 fn run() -> Result<()> {
+    cuda_preload::ensure_torch_cuda_loaded();
     let args = Cli::parse();
     if matches!(args.mode, TrainingMode::Dynamic) {
         bail!("dynamic curriculum mode is not implemented; use --mode static");
@@ -46,7 +48,15 @@ fn run() -> Result<()> {
     if config.env_batch_size == 0 || args.episodes_per_cycle == 0 {
         bail!("environment and episode counts must be positive");
     }
-    let device = parse_device(&config.device)?;
+    let device = resolve_device(&config.device)?;
+    cli::emit(
+        "info",
+        json!({
+            "message": format!("Using device {}", device_label(device)),
+            "device": device_label(device),
+            "cuda_available": tch::Cuda::is_available(),
+        }),
+    );
     tch::manual_seed(config.seed as i64);
     let levels = args
         .levels
@@ -118,14 +128,45 @@ fn apply_overrides(config: &mut Config, args: &Cli) {
     }
 }
 
-fn parse_device(value: &str) -> Result<Device> {
+fn resolve_device(value: &str) -> Result<Device> {
     match value.to_ascii_lowercase().as_str() {
+        "auto" => {
+            let device = Device::cuda_if_available();
+            if matches!(device, Device::Cpu) {
+                cli::emit(
+                    "info",
+                    json!({"message": "No CUDA device available; falling back to CPU"}),
+                );
+            }
+            Ok(device)
+        }
         "cpu" => Ok(Device::Cpu),
-        "cuda" => Ok(Device::Cuda(0)),
+        "cuda" => {
+            if !tch::Cuda::is_available() {
+                bail!("device cuda requested but CUDA is not available in this libtorch build");
+            }
+            Ok(Device::Cuda(0))
+        }
         "mps" => Ok(Device::Mps),
-        value if value.starts_with("cuda:") => Ok(Device::Cuda(
-            value[5..].parse().context("invalid CUDA device index")?,
-        )),
-        _ => bail!("device must be cpu, cuda, cuda:N, or mps"),
+        value if value.starts_with("cuda:") => {
+            if !tch::Cuda::is_available() {
+                bail!("device {value} requested but CUDA is not available in this libtorch build");
+            }
+            Ok(Device::Cuda(
+                value[5..]
+                    .parse()
+                    .context("invalid CUDA device index")?,
+            ))
+        }
+        _ => bail!("device must be auto, cpu, cuda, cuda:N, or mps"),
+    }
+}
+
+fn device_label(device: Device) -> String {
+    match device {
+        Device::Cpu => "cpu".into(),
+        Device::Cuda(index) => format!("cuda:{index}"),
+        Device::Mps => "mps".into(),
+        Device::Vulkan => "vulkan".into(),
     }
 }

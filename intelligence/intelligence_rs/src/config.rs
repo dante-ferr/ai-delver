@@ -45,7 +45,7 @@ impl Default for Config {
             max_grad_norm: 0.5,
             minibatch_size: 256,
             env_batch_size: 38,
-            device: "cpu".into(),
+            device: "auto".into(),
             not_finished_reward: -10.0,
             finished_reward: 100.0,
             turn_reward: 0.0,

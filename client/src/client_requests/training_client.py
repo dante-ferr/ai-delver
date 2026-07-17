@@ -137,7 +137,18 @@ class TrainingClient:
                         trajectory_data = response_json.get("trajectory")
                         trajectory = None
                         if trajectory_data:
-                            trajectory = trajectory_factory.from_json(trajectory_data)
+                            try:
+                                if isinstance(trajectory_data, dict):
+                                    trajectory = trajectory_factory.from_json(
+                                        json.dumps(trajectory_data)
+                                    )
+                                else:
+                                    trajectory = trajectory_factory.from_json(
+                                        trajectory_data
+                                    )
+                            except Exception as e:
+                                on_error(f"Failed to parse showcase trajectory: {e}")
+                                continue
                         level_episode_count = response_json.get("level_episode_count")
                         if level_episode_count is not None:
                             level_episode_count = int(level_episode_count)

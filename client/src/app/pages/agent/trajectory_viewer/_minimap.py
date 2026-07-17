@@ -14,22 +14,18 @@ class TrajectoryMinimap(ctk.CTkFrame):
         self.goal_pos = None
 
         self.minimap_title = ctk.CTkLabel(
-            self,
-            text="2D Path Visualizer",
-            font=ctk.CTkFont(size=14, weight="bold")
+            self, text="Path Visualizer", font=ctk.CTkFont(size=14, weight="bold")
         )
         self.minimap_title.grid(row=0, column=0, padx=12, pady=(12, 4), sticky="w")
 
         # Canvas for drawing the level map & path
-        self.canvas = ctk.CTkCanvas(
-            self,
-            bg="#2b2b2b",
-            highlightthickness=0
-        )
+        self.canvas = ctk.CTkCanvas(self, bg="#2b2b2b", highlightthickness=0)
         self.canvas.grid(row=1, column=0, padx=12, pady=(0, 12), sticky="nsew")
         self.canvas.bind("<Configure>", lambda e: self.draw_minimap())
 
-    def update_minimap(self, trajectory, grid_size, tile_size, walls, start_pos, goal_pos):
+    def update_minimap(
+        self, trajectory, grid_size, tile_size, walls, start_pos, goal_pos
+    ):
         self.trajectory = trajectory
         self.grid_size = grid_size
         self.tile_size = tile_size
@@ -82,19 +78,17 @@ class TrajectoryMinimap(ctk.CTkFrame):
                 cx2 = cx1 + scale
                 cy2 = cy1 + scale
                 self.canvas.create_rectangle(
-                    cx1, cy1, cx2, cy2,
-                    outline="#2a2a2a", fill="#171717", width=1
+                    cx1, cy1, cx2, cy2, outline="#2a2a2a", fill="#171717", width=1
                 )
 
         # Draw walls (platforms)
-        for (wx, wy) in self.walls:
+        for wx, wy in self.walls:
             cx1 = offset_x + wx * scale
             cy1 = offset_y + wy * scale
             cx2 = cx1 + scale
             cy2 = cy1 + scale
             self.canvas.create_rectangle(
-                cx1, cy1, cx2, cy2,
-                outline="#3e3e3e", fill="#4f4f4f", width=1
+                cx1, cy1, cx2, cy2, outline="#3e3e3e", fill="#4f4f4f", width=1
             )
 
         # Draw Goal position (Amber circle with G)
@@ -104,19 +98,27 @@ class TrajectoryMinimap(ctk.CTkFrame):
             cy = offset_y + (gy + 0.5) * scale
             r = max(4.0, scale * 0.4)
             self.canvas.create_oval(
-                cx - r, cy - r, cx + r, cy + r,
-                fill="#f59e0b", outline="#d97706", width=2
+                cx - r,
+                cy - r,
+                cx + r,
+                cy + r,
+                fill="#f59e0b",
+                outline="#d97706",
+                width=2,
             )
             self.canvas.create_text(
-                cx, cy, text="G", fill="#ffffff",
-                font=("Arial", int(max(6, scale * 0.5)), "bold")
+                cx,
+                cy,
+                text="G",
+                fill="#ffffff",
+                font=("Arial", int(max(6, scale * 0.5)), "bold"),
             )
 
         # Parse continuous physical positions of the delver
         path_points = []
         for snapshot in self.trajectory.frame_snapshots:
             for entity in snapshot.entities:
-                if entity.entity_id.startswith("Delver"):
+                if entity.entity_id.lower().startswith("delver"):
                     path_points.append(entity.position)
                     break
 
@@ -125,7 +127,7 @@ class TrajectoryMinimap(ctk.CTkFrame):
         for px, py in path_points:
             gx = (px - tile_w / 2) / tile_w
             gy = (grid_h * tile_h - (py - tile_h / 2)) / tile_h
-            
+
             cx = offset_x + gx * scale
             cy = offset_y + gy * scale
             canvas_points.append((cx, cy))

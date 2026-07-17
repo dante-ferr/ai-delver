@@ -31,6 +31,7 @@ class SkeletalEntityStateSnapshot(EntityStateSnapshot):
         super().apply_to_entity(entity)
 
         entity = cast("SkeletalEntity", entity)
+        entity.is_moving_intentionally = self.is_moving_intentionally
         entity.locomotion_state = entity.resolve_locomotion_state(self.locomotion_state)
         entity.move_angle = self.move_angle
 

@@ -87,6 +87,13 @@ class SkeletalEntity(WorldObject):
         elif self._locomotion_state in mapping:
             self.run_animation(mapping[self._locomotion_state])
 
+    def resolve_locomotion_state(self, value: str) -> LocomotionState:
+        """Map a serialized locomotion label back to an enum member."""
+        try:
+            return LocomotionState(value)
+        except ValueError:
+            return LocomotionState.IDLE
+
     def _on_land_finish(self):
         if self._locomotion_state == LocomotionState.LAND:
             self.locomotion_state = LocomotionState.RUN if getattr(self, "is_moving", False) else LocomotionState.IDLE

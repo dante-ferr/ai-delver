@@ -55,6 +55,8 @@ class StateSyncReplay(Replay):
         self.entity_map: Dict[str, "SkeletalEntity"] = {
             obj.spawn_based_id: obj for obj in entities
         }
+        if self.snapshots:
+            self._apply_state(self.snapshots[0])
 
     def update(self, dt: float):
         dt *= self.execution_speed
@@ -90,9 +92,18 @@ class StateSyncReplay(Replay):
         )
         self._apply_state(virtual_snapshot)
 
+    def _resolve_entity(self, entity_id: str):
+        target = self.entity_map.get(entity_id)
+        if target is not None:
+            return target
+        # Legacy showcase ids looked like "Delver:40.0_136.0".
+        if entity_id.lower().startswith("delver"):
+            return self.entity_map.get("delver")
+        return None
+
     def _apply_state(self, snapshot: "FrameSnapshot"):
         for entity_state in snapshot.entities:
-            target_entity = self.entity_map.get(entity_state.entity_id)
+            target_entity = self._resolve_entity(entity_state.entity_id)
             if target_entity:
                 entity_state.apply_to_entity(target_entity)
 

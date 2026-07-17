@@ -40,6 +40,8 @@ class Delver(SkeletalEntity):
         self._spawn_based_id = "delver"
         self.pending_run: float = 0.0
         self.pending_jump: bool = False
+        # State-sync replay writes poses here; live play keeps reading physics.
+        self._replay_position: tuple[float, float] | None = None
 
     def _build_skeleton(self, render: bool) -> Optional[Skeleton]:
         groups = (
@@ -69,8 +71,20 @@ class Delver(SkeletalEntity):
 
     @property
     def position(self) -> tuple[float, float]:
+        if self.in_replay and self._replay_position is not None:
+            return self._replay_position
         s = self._state()
         return (s.x, s.y)
+
+    @position.setter
+    def position(self, value: tuple[float, float]):
+        """Used by state-sync replay snapshots; ignored during live physics play."""
+        self._replay_position = (float(value[0]), float(value[1]))
+        if self.skeleton:
+            self.skeleton.position = (
+                self._replay_position[0],
+                self._replay_position[1] - 3.0,
+            )
 
     @property
     def velocity(self) -> tuple[float, float]:
@@ -80,6 +94,11 @@ class Delver(SkeletalEntity):
     @property
     def is_on_ground(self) -> bool:
         return self._state().is_on_ground
+
+    def resolve_locomotion_state(self, value: str):
+        if value == DelverLocomotionState.JUMP.value:
+            return DelverLocomotionState.JUMP
+        return super().resolve_locomotion_state(value)
 
     def check_collision(self, other) -> bool:
         return self._state().is_victory
@@ -97,6 +116,16 @@ class Delver(SkeletalEntity):
         self.play_locomotion_animation()
 
     def update(self, dt: float):
+        if self.in_replay:
+            if self.skeleton:
+                if self._replay_position is not None:
+                    self.skeleton.position = (
+                        self._replay_position[0],
+                        self._replay_position[1] - 3.0,
+                    )
+                self.skeleton.update(dt)
+            return
+
         self._physics_engine.set_entity_actions("delver", self.pending_run, self.pending_jump)
         self.pending_run = 0.0
         self.pending_jump = False
@@ -108,9 +137,7 @@ class Delver(SkeletalEntity):
 
         is_moving = self.is_moving_intentionally
         self.is_moving_intentionally = False
-
-        if not self.in_replay:
-            self._update_locomotion(s, is_moving)
+        self._update_locomotion(s, is_moving)
 
     def draw(self, dt: float):
         if self.skeleton:

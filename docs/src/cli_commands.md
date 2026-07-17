@@ -65,7 +65,7 @@ Reads the agent's local `metadata.json` and trajectory files, calculates aggrega
 poetry run python src/cli/main.py stats --agent ppo_delver
 ```
 
-**GUI Trigger**: The "Get stats" button in `trajectory_stats_panel.py`.
+**GUI Trigger**: Automated on panel open, each new trajectory, and training complete/interrupt (loading bar in `trajectory_stats_panel.py`). The CLI `stats` command remains for headless use.
 
 ---
 

@@ -206,22 +206,13 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
         fetch_container = ctk.CTkFrame(self, fg_color="transparent", width=0, height=0)
         fetch_container.pack(fill="x", pady=(0, 8))
 
-        fetch_container.columnconfigure(0, weight=0)
-        fetch_container.columnconfigure(1, weight=0)
-
-        get_stats_button = StandardButton(
-            fetch_container, text="Get stats", command=self._start_stats_job
-        )
-        get_stats_button.grid(row=0, column=0, padx=(0, 8), pady=0, sticky="n")
-        trajectory_stats_state_manager.add_disable_on_get_stats_element(
-            get_stats_button
-        )
+        fetch_container.columnconfigure(0, weight=1)
 
         stats_logs_panel = LoadingLogsPanel(
             fetch_container, width=180, fg_color="transparent"
         )
         stats_logs_panel.pack_propagate(False)
-        stats_logs_panel.grid(row=0, column=1, padx=(8, 0), sticky="ns")
+        stats_logs_panel.grid(row=0, column=0, sticky="w")
 
         trajectory_stats_state_manager.set_stats_logs_panel(stats_logs_panel)
 

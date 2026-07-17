@@ -1,6 +1,11 @@
-# Intelligence (Rust PPO trainer)
+# Intelligence (Rust PPO trainer + training server)
 
-Native PPO training for AI Delver. The trainer reuses:
+Native PPO training for AI Delver. The binary has two modes:
+
+- **`serve`** — long-lived HTTP/WebSocket API on port `8001` (what the GUI/client expect).
+- **`train`** — one-shot CLI run for benchmarks and headless jobs.
+
+It reuses:
 
 - `ai-delver-level` for validated level loading.
 - `runtime_core` for the same Rapier simulation used by the Python runtime.
@@ -8,7 +13,7 @@ Native PPO training for AI Delver. The trainer reuses:
 
 Hyperparameters live in [`config.toml`](config.toml).
 
-## Container
+## Container (training server)
 
 From the repository root:
 
@@ -17,18 +22,30 @@ make build-ai-dev
 make run-ai-dev
 ```
 
-Or from this directory:
+This starts:
 
-```bash
-make build
-make run
+```text
+ai-delver-intelligence serve --host 0.0.0.0 --port 8001
 ```
 
-Override trainer CLI flags:
+and publishes `localhost:8001`. The GUI’s “Connect now” / `GET /init` should succeed while the container stays up.
+
+One-shot train inside the same image (exits when done):
 
 ```bash
-./run-ai-dev.sh --build --train-args='--levels "Ai Test #3" --cycles 1 --episodes-per-cycle 38 --no-learning'
+./run-ai-dev.sh --train-args='train --levels "Ai Test #3" --cycles 1 --episodes-per-cycle 38 --no-learning'
 ```
+
+## API surface (compat with client)
+
+| Endpoint | Role |
+| :--- | :--- |
+| `GET /init` | Health + `env_batch_size` / `max_training_levels` |
+| `POST /train` | Start a session from level JSON; returns `session_id` |
+| `POST /interrupt-training/{session_id}` | Cooperative cancel |
+| `WS /episode-trajectory/{session_id}` | Metrics, progress showcase stubs, checkpoints, weights |
+
+See [Training Server Gap After the Rust Migration](../docs/src/training_server_gap.md) for why this façade exists and what is still incomplete (full trajectory replay, TF→`.ot` weight migration).
 
 ## Local prerequisites
 
@@ -45,73 +62,38 @@ cargo build --release \
 ### CUDA build (recommended for training)
 
 ```bash
-# Example: CUDA 12.6 libs. Other supported tags for tch 0.20 / torch 2.7: cu118, cu126, cu128.
 export TORCH_CUDA_VERSION=cu126
 cargo build --release \
   --manifest-path intelligence/Cargo.toml \
   --features tch/download-libtorch
-
-# Point the dynamic loader at the downloaded libtorch (path under target/*/build/torch-sys-*/out/...).
-export LD_LIBRARY_PATH="$(find intelligence/target* -path '*/libtorch/lib/libtorch.so' | head -1 | xargs dirname):${LD_LIBRARY_PATH}"
 ```
 
-`device = "auto"` (default) selects CUDA when the GPU is visible. The binary also
-force-loads `libtorch_cuda` at startup so GNU ld `--as-needed` cannot hide CUDA.
+`device = "auto"` (default) selects CUDA when the GPU is visible.
 
-Or point at a Python CUDA PyTorch install:
-
-```bash
-export LIBTORCH_USE_PYTORCH=1
-export LIBTORCH_BYPASS_VERSION_CHECK=1   # if the wheel patch version differs slightly
-```
-
-See the [`tch-rs` setup documentation](https://github.com/LaurentMazare/tch-rs) for
-custom `LIBTORCH` directories.
-
-## Build and test
-
-```bash
-cargo build --release --manifest-path intelligence/Cargo.toml
-cargo test --manifest-path intelligence/Cargo.toml
-```
-
-For a source-only compile check on a machine without libtorch:
-
-```bash
-cargo check \
-  --manifest-path intelligence/Cargo.toml \
-  --features tch/doc-only
-```
-
-## Train
+## Train (CLI)
 
 ```bash
 cargo run --release \
   --manifest-path intelligence/Cargo.toml \
   --features tch/download-libtorch -- \
+  train \
   --levels "Ai Test #1" \
   --cycles 10 \
   --episodes-per-cycle 38 \
   --agent ppo_delver
 ```
 
-Physics-only profiling:
+## Serve (CLI)
 
 ```bash
 cargo run --release \
   --manifest-path intelligence/Cargo.toml \
   --features tch/download-libtorch -- \
-  --levels "Ai Test #3" \
-  --cycles 1 \
-  --episodes-per-cycle 38 \
-  --no-learning
+  serve --host 127.0.0.1 --port 8001
 ```
 
-Level names resolve through `client/data/level_saves`. Protocol events are
-emitted as one JSON object per stdout line.
+## Current limitations
 
-## Current limitation
-
-Static training and checkpoint loading/saving are implemented. Dynamic
-curriculum mode exits with a clear error rather than silently behaving as
-static training.
+- Dynamic curriculum mode still errors; use static.
+- WebSocket showcase frames advance the client cycle counter but do **not** yet stream full episode trajectories for replay.
+- `model_bytes_b64` warm-start expects libtorch `.ot` bytes. Legacy TF-Agents zip payloads are ignored with a log line.

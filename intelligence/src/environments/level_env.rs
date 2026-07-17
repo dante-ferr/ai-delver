@@ -20,6 +20,17 @@ pub struct Step {
     pub victory: bool,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct DelverPose {
+    pub x: f32,
+    pub y: f32,
+    pub vx: f32,
+    pub vy: f32,
+    pub is_on_ground: bool,
+    pub action_run: f32,
+    pub action_jump: bool,
+}
+
 pub struct LevelEnvironment {
     level: Arc<Level>,
     config: Arc<Config>,
@@ -125,6 +136,23 @@ impl LevelEnvironment {
                 y.rem_euclid(self.level.tile_size) / self.level.tile_size,
                 delver.is_on_ground as u8 as f32,
             ],
+        }
+    }
+
+    /// Pose used for showcase `frame_snapshots` (state-sync replay + path visualizer).
+    pub fn delver_pose(&self) -> DelverPose {
+        let delver = self
+            .physics
+            .delver()
+            .expect("physics engine always contains the delver");
+        DelverPose {
+            x: delver.x,
+            y: delver.y,
+            vx: delver.vx,
+            vy: delver.vy,
+            is_on_ground: delver.is_on_ground,
+            action_run: delver.action_run,
+            action_jump: delver.action_jump,
         }
     }
 

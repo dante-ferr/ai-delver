@@ -8,7 +8,9 @@ BATCH_SIZE="38"
 MEMORY_LIMIT="12G"
 SHM_SIZE="2g"
 SWAP_LIMIT="14G"
-TRAIN_ARGS='--levels "Ai Test #1" --cycles 1 --episodes-per-cycle 38 --agent ppo_delver'
+# Default: long-lived training server. Override for one-shot jobs, e.g.
+# --train-args='train --levels "Ai Test #1" --cycles 1 --episodes-per-cycle 38 --agent ppo_delver'
+TRAIN_ARGS='serve --host 0.0.0.0 --port 8001'
 
 # Argument Parsing
 for arg in "$@"; do

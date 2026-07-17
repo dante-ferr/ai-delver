@@ -31,7 +31,9 @@ services:
       - HOST_GID=${GID:-1000}
       - AI_BATCH_SIZE=${AI_BATCH_SIZE:-38}
       - TRAIN_ARGS
-    # eval re-parses quotes inside TRAIN_ARGS so "Ai Test #1" stays one clap argument.
+    ports:
+      - "8001:8001"
+    # eval re-parses quotes inside TRAIN_ARGS. Default is `serve` (long-lived API).
     # $$ becomes $ in the container (Compose escaping).
     command:
       - sh

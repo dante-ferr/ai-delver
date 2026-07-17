@@ -1,13 +1,13 @@
 use crate::{
     agent::ppo::{Ppo, Rollout, UpdateMetrics},
-    cli,
     config::Config,
     environments::level_env::LevelEnvironment,
+    trainer::showcase,
 };
 use ai_delver_level::Level;
 use anyhow::{Context, Result};
 use rayon::prelude::*;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::{
     fs,
     path::Path,
@@ -19,8 +19,12 @@ use std::{
 };
 use tch::{no_grad, Device, Kind, Tensor};
 
+/// Callback for training lifecycle events (`metrics`, `progress`, `checkpoint`, …).
+pub type EventSink = Box<dyn FnMut(&str, Value) + Send>;
+
 pub fn train(
     levels: Vec<Arc<Level>>,
+    level_hashes: &[String],
     config: Config,
     cycles: usize,
     episodes_per_cycle: usize,
@@ -30,6 +34,7 @@ pub fn train(
     interrupted: Arc<AtomicBool>,
     mut ppo: Ppo,
     device: Device,
+    mut on_event: EventSink,
 ) -> Result<()> {
     let config = Arc::new(config);
     let mut envs: Vec<_> = (0..config.env_batch_size)
@@ -49,7 +54,10 @@ pub fn train(
     for cycle in 1..=cycles {
         if interrupted.load(Ordering::Relaxed) {
             let path = save_checkpoint(&ppo, &checkpoint_dir, cycle, "interrupted")?;
-            cli::emit("interrupted", json!({"cycle": cycle, "checkpoint": path}));
+            on_event(
+                "interrupted",
+                json!({"cycle": cycle, "checkpoint": path}),
+            );
             return Ok(());
         }
         let mut completed_episodes = 0usize;
@@ -215,7 +223,8 @@ pub fn train(
         } else {
             0.0
         };
-        cli::emit(
+        let reward_mean = reward_sum / total_env_steps.max(1) as f32;
+        on_event(
             "metrics",
             json!({
                 "cycle": cycle,
@@ -224,7 +233,8 @@ pub fn train(
                 "policy_loss": last_metrics.policy_loss,
                 "value_loss": last_metrics.value_loss,
                 "entropy": last_metrics.entropy,
-                "reward_mean": reward_sum / total_env_steps.max(1) as f32,
+                "reward_mean": reward_mean,
+                "average_return": reward_mean,
                 "episodes": completed_episodes,
                 "victories": victories,
                 "fps": overall_fps,
@@ -233,17 +243,53 @@ pub fn train(
                 "update_s": update_secs
             }),
         );
-        cli::emit(
+        on_event(
             "progress",
-            json!({"cycle": cycle, "level_episode_count": completed_episodes, "message": format!("Completed cycle {cycle}")}),
+            json!({
+                "cycle": cycle,
+                "level_episode_count": completed_episodes,
+                "message": format!("Completed cycle {cycle}")
+            }),
         );
+        let showcase_level = Arc::clone(&levels[0]);
+        let showcase_hash = level_hashes
+            .first()
+            .map(String::as_str)
+            .unwrap_or("");
+        match showcase::run_showcase(
+            showcase_level,
+            showcase_hash,
+            config.as_ref(),
+            &ppo,
+            device,
+        ) {
+            Ok(trajectory_json) => {
+                on_event(
+                    "showcase",
+                    json!({
+                        "trajectory": trajectory_json,
+                        "level_episode_count": completed_episodes
+                    }),
+                );
+            }
+            Err(error) => {
+                on_event(
+                    "showcase",
+                    json!({
+                        "trajectory": Value::Null,
+                        "level_episode_count": completed_episodes,
+                        "error": format!("{error:#}")
+                    }),
+                );
+            }
+        }
         if checkpoint_interval > 0 && cycle % checkpoint_interval == 0 {
             let path = save_checkpoint(&ppo, &checkpoint_dir, cycle, "checkpoint")?;
-            cli::emit("checkpoint", json!({"cycle": cycle, "path": path}));
+            on_event("checkpoint", json!({"cycle": cycle, "path": path}));
         }
     }
     let path = save_checkpoint(&ppo, &checkpoint_dir, cycles, "final")?;
-    cli::emit("completed", json!({"cycles": cycles, "checkpoint": path}));
+    on_event("completed", json!({"cycles": cycles, "checkpoint": path}));
     Ok(())
 }
 

@@ -1,22 +1,25 @@
 mod agent;
+mod api;
 mod cli;
 mod config;
 mod cuda_preload;
+mod device;
 mod environments;
+mod level_hash;
 mod trainer;
 
 use agent::ppo::Ppo;
 use ai_delver_level::Level;
 use anyhow::{bail, Context, Result};
 use clap::Parser;
-use cli::{Cli, TrainingMode};
+use cli::{Cli, Command, TrainArgs, TrainingMode};
 use config::Config;
+use device::{device_label, resolve_device};
 use serde_json::json;
 use std::{
     path::PathBuf,
     sync::{atomic::AtomicBool, Arc},
 };
-use tch::Device;
 
 fn main() {
     if let Err(error) = run() {
@@ -28,6 +31,20 @@ fn main() {
 fn run() -> Result<()> {
     cuda_preload::ensure_torch_cuda_loaded();
     let args = Cli::parse();
+    match args.command {
+        Command::Serve(serve) => {
+            let intelligence_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let runtime = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .context("failed to start tokio runtime")?;
+            runtime.block_on(api::serve(&serve.host, serve.port, intelligence_root))
+        }
+        Command::Train(train) => run_train(train),
+    }
+}
+
+fn run_train(args: TrainArgs) -> Result<()> {
     if matches!(args.mode, TrainingMode::Dynamic) {
         bail!("dynamic curriculum mode is not implemented; use --mode static");
     }
@@ -42,6 +59,11 @@ fn run() -> Result<()> {
         .context("intelligence directory must have repository parent")?;
     let mut config = Config::load(&intelligence_root.join("config.toml"))?;
     apply_overrides(&mut config, &args);
+    if let Ok(batch) = std::env::var("AI_BATCH_SIZE") {
+        if let Ok(value) = batch.parse::<usize>() {
+            config.env_batch_size = value;
+        }
+    }
     if config.env_batch_size == 0 || args.episodes_per_cycle == 0 {
         bail!("environment and episode counts must be positive");
     }
@@ -82,8 +104,16 @@ fn run() -> Result<()> {
     let checkpoint_interval = args
         .checkpoint_interval
         .unwrap_or(config.checkpoint_interval);
+    let on_event = Box::new(|event: &str, value: serde_json::Value| {
+        // Redact bulky trajectory blobs; keep one-line NDJSON for scripting.
+        cli::emit(event, &value);
+    });
+    // CLI train resolves levels by path/name; hash from empty placeholder — showcase
+    // trajectories from CLI mode are for local debugging only (GUI uses the server).
+    let level_hashes = levels.iter().map(|_| String::new()).collect::<Vec<_>>();
     trainer::r#loop::train(
         levels,
+        &level_hashes,
         config,
         args.cycles,
         args.episodes_per_cycle,
@@ -93,10 +123,11 @@ fn run() -> Result<()> {
         interrupted,
         ppo,
         device,
+        on_event,
     )
 }
 
-fn apply_overrides(config: &mut Config, args: &Cli) {
+fn apply_overrides(config: &mut Config, args: &TrainArgs) {
     macro_rules! override_value {
         ($field:ident) => {
             if let Some(value) = args.$field {
@@ -122,48 +153,5 @@ fn apply_overrides(config: &mut Config, args: &Cli) {
     }
     if args.no_learning {
         config.no_learning = true;
-    }
-}
-
-fn resolve_device(value: &str) -> Result<Device> {
-    match value.to_ascii_lowercase().as_str() {
-        "auto" => {
-            let device = Device::cuda_if_available();
-            if matches!(device, Device::Cpu) {
-                cli::emit(
-                    "info",
-                    json!({"message": "No CUDA device available; falling back to CPU"}),
-                );
-            }
-            Ok(device)
-        }
-        "cpu" => Ok(Device::Cpu),
-        "cuda" => {
-            if !tch::Cuda::is_available() {
-                bail!("device cuda requested but CUDA is not available in this libtorch build");
-            }
-            Ok(Device::Cuda(0))
-        }
-        "mps" => Ok(Device::Mps),
-        value if value.starts_with("cuda:") => {
-            if !tch::Cuda::is_available() {
-                bail!("device {value} requested but CUDA is not available in this libtorch build");
-            }
-            Ok(Device::Cuda(
-                value[5..]
-                    .parse()
-                    .context("invalid CUDA device index")?,
-            ))
-        }
-        _ => bail!("device must be auto, cpu, cuda, cuda:N, or mps"),
-    }
-}
-
-fn device_label(device: Device) -> String {
-    match device {
-        Device::Cpu => "cpu".into(),
-        Device::Cuda(index) => format!("cuda:{index}"),
-        Device::Mps => "mps".into(),
-        Device::Vulkan => "vulkan".into(),
     }
 }

@@ -134,4 +134,27 @@ impl ActorCritic {
             value,
         )
     }
+
+    /// Deterministic greedy actions for showcase / evaluation episodes.
+    pub fn greedy_action(
+        &self,
+        local: &Tensor,
+        global: &Tensor,
+        episode_starts: &Tensor,
+        state: &mut nn::LSTMState,
+    ) -> (Tensor, Tensor) {
+        let batch = local.size()[0];
+        let local_features = local.apply(&self.local).relu();
+        let global_features = global.apply(&self.global_norm).apply(&self.global).relu();
+        let features = Tensor::cat(&[local_features, global_features], -1).apply(&self.input);
+        let keep = (Tensor::ones([batch], (Kind::Float, self.device)) - episode_starts)
+            .view([1, batch, 1]);
+        *state = nn::LSTMState((state.h() * &keep, state.c() * keep));
+        let (hidden, next_state) = self.lstm.seq_init(&features.unsqueeze(1), state);
+        *state = nn::LSTMState((next_state.h().detach(), next_state.c().detach()));
+        let hidden = hidden.squeeze_dim(1).apply(&self.output).relu();
+        let run = hidden.apply(&self.run_head).argmax(-1, false);
+        let jump = hidden.apply(&self.jump_head).argmax(-1, false);
+        (run, jump)
+    }
 }

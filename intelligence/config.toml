@@ -44,3 +44,4 @@ max_seconds_per_episode = 60      # Maximum duration before an episode is termin
 seed = 42                         # Random seed for reproducibility
 checkpoint_interval = 0           # Frequency (in cycles) to save intermediate checkpoints (0 to disable)
 no_learning = false               # Execute random actions only without gradient updates for profiling/testing
+max_training_levels = 10          # Cap on concurrent curriculum levels (surfaced via GET /init)

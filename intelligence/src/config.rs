@@ -30,6 +30,7 @@ pub struct Config {
     pub checkpoint_interval: usize,
     pub seed: u64,
     pub no_learning: bool,
+    pub max_training_levels: usize,
 }
 
 #[cfg(test)]
@@ -61,6 +62,7 @@ impl Default for Config {
             checkpoint_interval: 0,
             seed: 42,
             no_learning: false,
+            max_training_levels: 10,
         }
     }
 }

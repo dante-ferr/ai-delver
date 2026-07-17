@@ -9,3 +9,4 @@
 - [Error Handling](error_handling.md)
 - [Physics Engine Performance & Optimizations](physics_performance_optimization.md)
 - [Rust-Only Reinforcement Learning Pipeline](rust_only_training_plan.md)
+- [Training Server Gap After the Rust Migration](training_server_gap.md)

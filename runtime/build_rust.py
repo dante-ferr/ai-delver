@@ -6,10 +6,11 @@ import sysconfig
 
 
 def _collect_rust_sources(src_root: str) -> list[str]:
+    # Include .toml: define_config! embeds them via include_str! at compile time.
     source_files = []
     for root, _, files in os.walk(src_root):
         for file_name in files:
-            if file_name.endswith(".rs"):
+            if file_name.endswith((".rs", ".toml")):
                 source_files.append(os.path.join(root, file_name))
     return source_files
 

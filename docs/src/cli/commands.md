@@ -10,7 +10,7 @@ All commands live in `client/src/cli/commands/` and are routed via `client/src/c
 Runs a full training session by submitting a training request to the intelligence server and streaming trajectory replays over a WebSocket.
 
 > [!NOTE]
-> For a deep dive into parameter constraints, structured JSON stdout log formats, and signal handling for training orchestration, see the [CLI Training Client](cli_training_client.md) documentation page.
+> For batch alignment, JSON event examples, signals, and weight sync, see [Training Client Internals](training_client.md).
 
 ```bash
 poetry run python src/cli/main.py train \
@@ -136,7 +136,7 @@ Also seals the grid perimeter with `platform` after placement (so concurrent del
 
 Events: `info`, `level_imported`, `error`.
 
-Sketch schema and curriculum / eval levels: [Level Authoring Protocol](level_authoring_protocol.md). Engine orchestrators: [Agentic Fine-Tuning Protocol](agentic_fine_tuning_protocol.md#6-levels-for-engine-work).
+Sketch schema and spacing: [Level Authoring](../levels/authoring.md). Engine eval level lists: [Eval Packs](../agentic_fine_tuning/eval_packs.md). Orchestrators: [Engine Protocol](../agentic_fine_tuning/engine_protocol.md).
 
 **GUI Trigger**: Developer CLI command only.
 
@@ -172,7 +172,7 @@ poetry run python src/cli/main.py tune \
 
 **GUI Trigger**: Developer CLI command only.
 
-For improving the **training engine** (`tune`, promoting defaults, sim support after new features — not player coaching), see [Agentic Fine-Tuning Protocol](agentic_fine_tuning_protocol.md).
+For improving the **training engine** (`tune`, eval packs, sim support — not player coaching), see [Agentic Fine-Tuning](../agentic_fine_tuning/index.md).
 
 ---
 

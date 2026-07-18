@@ -2,7 +2,7 @@
 
 To train a reinforcement learning agent to handle complex layouts (platforming, traps, combat), AI Delver employs a **Player-Driven Curriculum** with **Automated Forgetting Prevention** safety nets. That coaching loop is the **player’s** job.
 
-Developers / agentic AIs that tune the **training engine** (defaults, rewards, sim coverage) should read the [Agentic Fine-Tuning Protocol](agentic_fine_tuning_protocol.md) — that protocol does not replace player coaching.
+Developers / agentic AIs that tune the **training engine** should read [Agentic Fine-Tuning](../agentic_fine_tuning/index.md) (skill ladder + eval pack formula). That does not replace this player coaching loop; dependence of traps/puzzles on platforming applies to both.
 
 ---
 

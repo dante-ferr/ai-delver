@@ -28,7 +28,7 @@ This means:
 
 ---
 
-For a detailed list of available CLI commands, their syntax, GUI triggers, and output event formats, see the [CLI Commands Reference](cli_commands.md).
+For a detailed list of available CLI commands, their syntax, GUI triggers, and output event formats, see the [Commands Reference](commands.md).
 
 ---
 
@@ -38,4 +38,4 @@ For a detailed list of available CLI commands, their syntax, GUI triggers, and o
 2. Register the subparser in `client/src/cli/main.py`.
 3. If the command needs a GUI button, add the button to the appropriate panel, and have it launch the CLI command via `subprocess.Popen(sys.executable, "src/cli/main.py", "<name>", ...)`.
 4. Parse the JSON events from stdout and update `StateManager` as needed.
-5. Document the new command and its event types in [cli_commands.md](cli_commands.md).
+5. Document the new command and its event types in [commands.md](commands.md).

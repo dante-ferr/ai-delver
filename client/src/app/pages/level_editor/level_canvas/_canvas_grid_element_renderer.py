@@ -26,7 +26,7 @@ class CanvasGridElementRenderer:
 
         self._add_event_listeners()
 
-        self.photo_image_cache: dict[tuple[int, int, int], ImageTk.PhotoImage] = {}
+        self.photo_image_cache: dict[tuple, ImageTk.PhotoImage] = {}
         self._initialize_tileset_images()
         self.world_objects_image = WorldObjectsImage()
 
@@ -104,17 +104,27 @@ class CanvasGridElementRenderer:
         self,
         pil_image: "Image.Image",
         size_tiles: tuple[int, int] = (1, 1),
+        image_fit: str = "stretch",
     ) -> "PhotoImage":
         """
         Creates or retrieves from cache a PhotoImage for a given PIL Image at the
-        current canvas zoom level, scaled to occupy ``size_tiles``.
-        """
-        tile_width, tile_height = level_loader.level.map.tile_size
-        width_tiles, height_tiles = size_tiles
-        scaled_width = int(tile_width * width_tiles * self.canvas.camera.zoom_level)
-        scaled_height = int(tile_height * height_tiles * self.canvas.camera.zoom_level)
+        current canvas zoom level.
 
-        cache_key = (id(pil_image), scaled_width, scaled_height)
+        ``stretch`` scales to exactly ``size_tiles``; ``native`` keeps the image's
+        pixel aspect (1 image pixel ≈ 1 world pixel × zoom) so art may overflow
+        the footprint.
+        """
+        zoom = self.canvas.camera.zoom_level
+        if image_fit == "native":
+            scaled_width = max(1, int(pil_image.width * zoom))
+            scaled_height = max(1, int(pil_image.height * zoom))
+        else:
+            tile_width, tile_height = level_loader.level.map.tile_size
+            width_tiles, height_tiles = size_tiles
+            scaled_width = int(tile_width * width_tiles * zoom)
+            scaled_height = int(tile_height * height_tiles * zoom)
+
+        cache_key = (id(pil_image), scaled_width, scaled_height, image_fit)
         photo_image = self.photo_image_cache.get(cache_key)
 
         if photo_image is None:
@@ -127,6 +137,40 @@ class CanvasGridElementRenderer:
             self.photo_image_cache[cache_key] = photo_image
         return photo_image
 
+    def _image_fit_for_element(self, element: "GridElement") -> str:
+        if isinstance(element, WorldObjectRepresentation):
+            try:
+                from ..level_editor_manager import level_editor_manager
+
+                canvas_object = level_editor_manager.objects_manager.get_canvas_object(
+                    element.canvas_object_name
+                )
+                return canvas_object.image_fit
+            except (KeyError, ValueError):
+                return "stretch"
+        return "stretch"
+
+    def _screen_draw_origin(
+        self,
+        top_left_canvas_grid: tuple[int, int],
+        size_tiles: tuple[int, int],
+        photo_image: "PhotoImage",
+        image_fit: str,
+    ) -> tuple[float, float]:
+        """Top-left screen point for the image (nw anchor)."""
+        tile_w, tile_h = self.canvas.tile_size
+        footprint_x = top_left_canvas_grid[0] * tile_w
+        footprint_y = top_left_canvas_grid[1] * tile_h
+        if image_fit != "native":
+            return (footprint_x, footprint_y)
+
+        footprint_w = size_tiles[0] * tile_w
+        footprint_h = size_tiles[1] * tile_h
+        # Bottom-center on the footprint so overflow grows upward / sideways.
+        screen_x = footprint_x + (footprint_w - photo_image.width()) / 2
+        screen_y = footprint_y + footprint_h - photo_image.height()
+        return (screen_x, screen_y)
+
     def _draw_grid_element(
         self, element: "GridElement", pil_image: "Image.Image | None"
     ):
@@ -137,7 +181,8 @@ class CanvasGridElementRenderer:
         self.pil_image_registry[id(pil_image)] = pil_image
 
         size_tiles = getattr(element, "size", (1, 1))
-        photo_image = self.get_scaled_photo_image(pil_image, size_tiles)
+        image_fit = self._image_fit_for_element(element)
+        photo_image = self.get_scaled_photo_image(pil_image, size_tiles, image_fit)
 
         top_left = (
             element.top_left_position()
@@ -145,10 +190,9 @@ class CanvasGridElementRenderer:
             else element.position
         )
         canvas_grid_pos = self.canvas.camera.world_to_canvas_grid_pos(top_left)
-        tile_w, tile_h = self.canvas.tile_size
-
-        screen_x = canvas_grid_pos[0] * tile_w
-        screen_y = canvas_grid_pos[1] * tile_h
+        screen_x, screen_y = self._screen_draw_origin(
+            canvas_grid_pos, size_tiles, photo_image, image_fit
+        )
 
         tags_to_find = self._get_grid_element_tags(element, "element's")
         items = self.canvas.items_with_tags(tags_to_find[0], tags_to_find[1])
@@ -161,7 +205,9 @@ class CanvasGridElementRenderer:
             self.canvas.itemconfig(
                 item_id,
                 image=photo_image,
-                tags=self._get_grid_element_tags(element, pil_image=pil_image),
+                tags=self._get_grid_element_tags(
+                    element, pil_image=pil_image, image_fit=image_fit
+                ),
             )
         else:
             # Item does not exist, so create it
@@ -170,7 +216,9 @@ class CanvasGridElementRenderer:
                 screen_y,
                 image=photo_image,
                 anchor="nw",
-                tags=self._get_grid_element_tags(element, pil_image=pil_image),
+                tags=self._get_grid_element_tags(
+                    element, pil_image=pil_image, image_fit=image_fit
+                ),
             )
 
         self.canvas.update_draw_order()
@@ -181,9 +229,9 @@ class CanvasGridElementRenderer:
         layer_name: str | Literal["element's"] = "element's",
     ):
         """Erase a grid element from the canvas only if it has both the position and layer tags."""
-        for item in self.canvas.items_with_tags(
-            *self._get_grid_element_tags(element, layer_name)
-        ):
+        tags = self._get_grid_element_tags(element, layer_name)
+        # Match on footprint position + layer only; image_fit/size may vary.
+        for item in self.canvas.items_with_tags(tags[0], tags[1]):
             self.canvas.delete(item)
 
     def rescale_and_reposition_item(
@@ -206,7 +254,8 @@ class CanvasGridElementRenderer:
             return
 
         size_tiles = self._get_size_from_tag(item_id) or (1, 1)
-        new_photo_image = self.get_scaled_photo_image(pil_image, size_tiles)
+        image_fit = self._get_image_fit_from_tag(item_id) or "stretch"
+        new_photo_image = self.get_scaled_photo_image(pil_image, size_tiles, image_fit)
         self.canvas.itemconfig(item_id, image=new_photo_image)
 
         # Get grid position and calculate new screen coordinates relative to the zoom origin.
@@ -217,6 +266,13 @@ class CanvasGridElementRenderer:
         new_x, new_y = self.canvas.camera.calculate_zoomed_coords(
             grid_pos, old_zoom, origin_x, origin_y
         )
+        if image_fit == "native":
+            # calculate_zoomed_coords returns footprint top-left; shift for overflow art.
+            tile_w, tile_h = self.canvas.tile_size
+            footprint_w = size_tiles[0] * tile_w
+            footprint_h = size_tiles[1] * tile_h
+            new_x = new_x + (footprint_w - new_photo_image.width()) / 2
+            new_y = new_y + footprint_h - new_photo_image.height()
         self.canvas.coords(item_id, new_x, new_y)
 
     def _get_image_for_element(self, element: "GridElement") -> "Image.Image | None":
@@ -255,15 +311,24 @@ class CanvasGridElementRenderer:
         except (ValueError, IndexError):
             return None
 
+    def _get_image_fit_from_tag(self, item_id: int) -> str | None:
+        tags = self.canvas.gettags(item_id)
+        fit_tag = next((tag for tag in tags if tag.startswith("image_fit=")), None)
+        if not fit_tag:
+            return None
+        return fit_tag.split("=", 1)[1]
+
     def _get_grid_element_tags(
         self,
         element: "GridElement",
         layer_name: str | Literal["element's"] = "element's",
         pil_image: "Image.Image | None" = None,
+        image_fit: str = "stretch",
     ):
         """Return the tag for a grid element.
 
-        ``position`` tags the top-left of the footprint (draw origin).
+        ``position`` tags the top-left of the footprint (draw origin for stretch;
+        footprint anchor for native overflow art).
         """
         top_left = (
             element.top_left_position()
@@ -277,6 +342,7 @@ class CanvasGridElementRenderer:
 
         position_tag = f"position={canvas_grid_x},{canvas_grid_y}"
         size_tag = f"size={size[0]},{size[1]}"
+        fit_tag = f"image_fit={image_fit}"
         if layer_name == "element's":
             layer = element.layer
             layer_tag = f"layer={layer.name}"
@@ -287,6 +353,13 @@ class CanvasGridElementRenderer:
 
         if pil_image:
             image_id_tag = f"pil_id={id(pil_image)}"
-            return (position_tag, layer_tag, grid_element_tag, size_tag, image_id_tag)
+            return (
+                position_tag,
+                layer_tag,
+                grid_element_tag,
+                size_tag,
+                fit_tag,
+                image_id_tag,
+            )
 
-        return (position_tag, layer_tag, grid_element_tag, size_tag)
+        return (position_tag, layer_tag, grid_element_tag, size_tag, fit_tag)

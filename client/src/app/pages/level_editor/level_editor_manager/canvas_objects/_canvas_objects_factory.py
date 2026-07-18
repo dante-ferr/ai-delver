@@ -17,7 +17,10 @@ class CanvasObjectsFactory:
         essentials = CanvasObjectsLayer("essentials")
         essentials.add_canvas_object(
             self._create_canvas_object(
-                "delver", unique=True, size=world_object_size("delver")
+                "delver",
+                unique=True,
+                size=world_object_size("delver"),
+                image_fit="native",
             )
         )
         for canvas_object in self._create_variated_canvas_objects("goal", unique=True):
@@ -52,6 +55,7 @@ class CanvasObjectsFactory:
         self,
         canvas_object_name: str,
         path: str | None = None,
+        image_fit: str = "stretch",
         **world_object_args,
     ):
         if world_object_args.get("name") is None:
@@ -62,4 +66,9 @@ class CanvasObjectsFactory:
                 config.ASSETS_PATH / f"img/nxt/{canvas_object_name}.png"
             )
 
-        return CanvasObject(canvas_object_name, path, world_object_args)
+        return CanvasObject(
+            canvas_object_name,
+            path,
+            world_object_args,
+            image_fit=image_fit,  # type: ignore[arg-type]
+        )

@@ -21,7 +21,7 @@ class CanvasPlacementGhost:
 
     def __init__(self, canvas: "LevelCanvas"):
         self.canvas = canvas
-        self._photo_cache: dict[tuple[int, int, int], ImageTk.PhotoImage] = {}
+        self._photo_cache: dict[tuple, ImageTk.PhotoImage] = {}
         self._last_world_pos: Optional[tuple[int, int]] = None
         self._ghost_image_ref: ImageTk.PhotoImage | None = None
 
@@ -146,13 +146,20 @@ class CanvasPlacementGhost:
         alpha = ghost_pil.split()[3].point(lambda p: min(p, self.ALPHA))
         ghost_pil.putalpha(alpha)
 
-        tile_w, tile_h = level_loader.level.map.tile_size
         zoom = self.canvas.camera.zoom_level
-        scaled = (
-            max(1, int(tile_w * size[0] * zoom)),
-            max(1, int(tile_h * size[1] * zoom)),
-        )
-        cache_key = (id(pil_image), scaled[0], scaled[1])
+        image_fit = canvas_object.image_fit
+        if image_fit == "native":
+            scaled = (
+                max(1, int(pil_image.width * zoom)),
+                max(1, int(pil_image.height * zoom)),
+            )
+        else:
+            tile_w, tile_h = level_loader.level.map.tile_size
+            scaled = (
+                max(1, int(tile_w * size[0] * zoom)),
+                max(1, int(tile_h * size[1] * zoom)),
+            )
+        cache_key = (id(pil_image), scaled[0], scaled[1], image_fit)
         photo = self._photo_cache.get(cache_key)
         if photo is None:
             resized = ghost_pil.resize(scaled, Image.NEAREST)  # type: ignore
@@ -163,8 +170,16 @@ class CanvasPlacementGhost:
         top_left = top_left_position(world_pos, size)
         canvas_grid = self.canvas.camera.world_to_canvas_grid_pos(top_left)
         screen_tile_w, screen_tile_h = self.canvas.tile_size
-        screen_x = canvas_grid[0] * screen_tile_w
-        screen_y = canvas_grid[1] * screen_tile_h
+        footprint_x = canvas_grid[0] * screen_tile_w
+        footprint_y = canvas_grid[1] * screen_tile_h
+        if image_fit == "native":
+            footprint_w = size[0] * screen_tile_w
+            footprint_h = size[1] * screen_tile_h
+            screen_x = footprint_x + (footprint_w - photo.width()) / 2
+            screen_y = footprint_y + footprint_h - photo.height()
+        else:
+            screen_x = footprint_x
+            screen_y = footprint_y
 
         self.canvas.create_image(
             screen_x,

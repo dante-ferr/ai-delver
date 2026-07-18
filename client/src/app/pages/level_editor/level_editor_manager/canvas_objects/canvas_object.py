@@ -1,8 +1,10 @@
 from PIL import Image
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Literal
 
 if TYPE_CHECKING:
     from ._canvas_objects_layer import CanvasObjectsLayer
+
+ImageFit = Literal["stretch", "native"]
 
 
 class CanvasObject:
@@ -11,15 +13,21 @@ class CanvasObject:
         name: str,
         image_path: str,
         world_object_args: dict[str, Any] | None = None,
+        image_fit: ImageFit = "stretch",
     ):
         """
         Args:
             name: The name of the canvas object.
             image_path: The path to the image of the canvas object.
             world_object_args: Args forwarded when creating the underlying world object.
+            image_fit: How the image maps to the footprint on the canvas.
+                ``stretch`` fills the footprint exactly; ``native`` keeps pixel
+                aspect (1 image px ≈ 1 world px) and may overflow the footprint
+                visually while occupancy stays ``size``.
         """
         self.name = name
         self.world_object_args = world_object_args or {}
+        self.image_fit: ImageFit = image_fit
 
         self._create_element_callback: Callable | None = None
         self._remove_element_callback: Callable | None = None

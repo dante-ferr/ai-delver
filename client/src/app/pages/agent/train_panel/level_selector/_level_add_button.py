@@ -27,7 +27,7 @@ class _LevelAdderOverlay(FileLoaderOverlay):
         super()._load()
 
         tlc = training_level_list_component()
-        tlc.add_box(self.option_menu.get())
+        tlc.add_box(self.get_selected_name())
         tlc.repack_layout(with_placeholder=False)
 
 

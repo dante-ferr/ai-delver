@@ -94,8 +94,23 @@ class CanvasScroller:
         self.last_y = canvas_center_y
 
     def _on_mouse_wheel(self, event):
-        """Handle mouse wheel scrolling for zooming."""
+        """Handle mouse wheel: Shift adjusts brush size, otherwise zoom."""
         from state_managers import canvas_state_manager
+
+        # Tk Shift mask (0x0001) — used for brush size instead of zoom.
+        if event.state & 0x0001:
+            delta = 0
+            if event.num == 5 or event.delta < 0:
+                delta = -1
+            elif event.num == 4 or event.delta > 0:
+                delta = 1
+            if delta == 0:
+                return
+
+            size = int(round(float(canvas_state_manager.get_value("brush_size")))) + delta
+            size = max(config.MIN_BRUSH_SIZE, min(config.MAX_BRUSH_SIZE, size))
+            canvas_state_manager.set_value("brush_size", size)
+            return
 
         zoom = -1
         if event.num == 5 or event.delta < 0:
@@ -106,14 +121,42 @@ class CanvasScroller:
             zoom = self.canvas.zoom_level + 1
 
         if zoom != -1:
-            self._execute_zoom(zoom)
+            self._execute_zoom(zoom, origin=(event.x, event.y))
             canvas_state_manager.set_value("zoom", zoom)
 
-    def _execute_zoom(self, new_zoom):
-        """Clamp new_zoom and execute the zoom at each frame."""
+    def _execute_zoom(self, new_zoom, origin: tuple[int, int] | None = None):
+        """Clamp and apply zoom, keeping ``origin`` (viewport px) stable.
+
+        ``origin`` defaults to the canvas center (e.g. zoom slider). Wheel zoom
+        passes the mouse position so the level scales toward the cursor.
+        """
         new_zoom = max(self.min_zoom, min(self.max_zoom, new_zoom))
-        if new_zoom != self.canvas.zoom_level:
-            self.canvas.set_zoom_level(new_zoom, 0, 0)
+        old_zoom = self.canvas.zoom_level
+        if new_zoom == old_zoom:
+            return
+
+        if origin is None:
+            origin = (
+                self.canvas.winfo_width() // 2,
+                self.canvas.winfo_height() // 2,
+            )
+
+        # Content coordinate currently under the zoom origin.
+        content_x = self.canvas.canvasx(origin[0])
+        content_y = self.canvas.canvasy(origin[1])
+        scale = new_zoom / old_zoom
+
+        self.canvas.set_zoom_level(new_zoom, 0, 0)
+
+        # After absolute zoom, that content point sits at content * scale.
+        # Pan so it still appears under the same viewport pixel.
+        # With scan_dragto, canvasx(screen) ≈ screen - last_x.
+        new_last_x = int(round(origin[0] - content_x * scale))
+        new_last_y = int(round(origin[1] - content_y * scale))
+        new_last_x, new_last_y = self._clamped_scroll_position(new_last_x, new_last_y)
+        self.canvas.scan_dragto(new_last_x, new_last_y, gain=1)
+        self.last_x = new_last_x
+        self.last_y = new_last_y
 
     @property
     def canvas_size(self):

@@ -1,9 +1,11 @@
 """Hover ghost preview for the tile or multi-tile footprint about to be placed."""
 
 from typing import TYPE_CHECKING, Optional
+import math
 from PIL import Image, ImageTk
 from loaders import level_loader
 from pytiling import footprint_positions, top_left_position
+from src.utils import brush_bottom_left, brush_pivot
 from ..level_editor_manager import level_editor_manager
 
 if TYPE_CHECKING:
@@ -20,9 +22,12 @@ class CanvasPlacementGhost:
     ALPHA = 140
 
     def __init__(self, canvas: "LevelCanvas"):
+        from state_managers import canvas_state_manager
+
         self.canvas = canvas
         self._photo_cache: dict[tuple, ImageTk.PhotoImage] = {}
-        self._last_world_pos: Optional[tuple[int, int]] = None
+        self._last_continuous_world_pos: Optional[tuple[float, float]] = None
+        self._last_pivot: Optional[tuple[int, int]] = None
         self._ghost_image_ref: ImageTk.PhotoImage | None = None
 
         # <Motion> alone does not fire while button 1 is held; bind B1-Motion too.
@@ -30,41 +35,66 @@ class CanvasPlacementGhost:
         self.canvas.bind("<B1-Motion>", self._on_motion, add="+")
         self.canvas.bind("<Leave>", self._on_leave, add="+")
 
+        canvas_state_manager.add_callback("brush_size", lambda _value: self.refresh())
+        level_editor_manager.selector.set_select_callback(
+            "tool", lambda _value: self.refresh()
+        )
+
     def clear(self):
         self.canvas.delete(self.GHOST_TAG)
-        self._last_world_pos = None
+        self._last_continuous_world_pos = None
+        self._last_pivot = None
         self._ghost_image_ref = None
 
     def refresh(self):
         """Redraw ghost at the last known position (e.g. after zoom)."""
-        if self._last_world_pos is not None:
-            self._draw_at(self._last_world_pos)
+        if self._last_continuous_world_pos is not None:
+            self._draw_at(self._last_continuous_world_pos)
 
     def _on_leave(self, _event):
         self.clear()
 
     def _on_motion(self, event):
-        canvas_grid_pos = self._canvas_grid_from_mouse((event.x, event.y))
-        if canvas_grid_pos is None:
+        continuous_canvas = self._continuous_canvas_from_mouse((event.x, event.y))
+        if continuous_canvas is None:
             self.clear()
             return
 
-        world_pos = self.canvas.camera.canvas_to_world_grid_pos(canvas_grid_pos)
-        if world_pos == self._last_world_pos:
+        offset = self.canvas.camera.grid_draw_offset
+        continuous_world = (
+            continuous_canvas[0] - offset[0],
+            continuous_canvas[1] - offset[1],
+        )
+        pivot = brush_pivot(continuous_world, self._brush_size())
+        if pivot == self._last_pivot:
+            self._last_continuous_world_pos = continuous_world
             return
-        self._draw_at(world_pos)
+        self._draw_at(continuous_world)
 
-    def _canvas_grid_from_mouse(
+    def _continuous_canvas_from_mouse(
         self, mouse_position: tuple[int, int]
-    ) -> Optional[tuple[int, int]]:
+    ) -> Optional[tuple[float, float]]:
         canvas_x = self.canvas.canvasx(mouse_position[0])
         canvas_y = self.canvas.canvasy(mouse_position[1])
         tile_width, tile_height = level_loader.level.map.tile_size
         zoom = self.canvas.camera.zoom_level
         return (
-            int(canvas_x // (tile_width * zoom)),
-            int(canvas_y // (tile_height * zoom)),
+            canvas_x / (tile_width * zoom),
+            canvas_y / (tile_height * zoom),
         )
+
+    def _selected_tool(self) -> str | None:
+        try:
+            return str(level_editor_manager.selector.get_selection("tool"))
+        except Exception:
+            return None
+
+    def _brush_size(self) -> int:
+        from state_managers import canvas_state_manager
+        from src.config import config
+
+        size = int(round(float(canvas_state_manager.get_value("brush_size"))))
+        return max(config.MIN_BRUSH_SIZE, min(config.MAX_BRUSH_SIZE, size))
 
     def _selected_canvas_object(self) -> "CanvasObject | None":
         try:
@@ -126,15 +156,37 @@ class CanvasPlacementGhost:
                     return False
         return True
 
-    def _draw_at(self, world_pos: tuple[int, int]):
+    def _draw_at(self, continuous_world_pos: tuple[float, float]):
         self.canvas.delete(self.GHOST_TAG)
-        self._last_world_pos = world_pos
+        self._last_continuous_world_pos = continuous_world_pos
+        brush_size = self._brush_size()
+        self._last_pivot = brush_pivot(continuous_world_pos, brush_size)
+
+        tool = self._selected_tool()
+
+        if tool == "eraser":
+            self._draw_brush_outline(continuous_world_pos, brush_size)
+            self.canvas.tag_raise(self.GHOST_TAG)
+            return
+
+        if tool != "pencil":
+            self.clear()
+            return
 
         canvas_object = self._selected_canvas_object()
         if canvas_object is None:
             self.clear()
             return
 
+        if brush_size > 1:
+            self._draw_brush_outline(continuous_world_pos, brush_size)
+            self.canvas.tag_raise(self.GHOST_TAG)
+            return
+
+        world_pos = (
+            math.floor(continuous_world_pos[0]),
+            math.floor(continuous_world_pos[1]),
+        )
         size = canvas_object.size
         layer_name = self._selected_layer_name()
         if not self._footprint_is_valid(world_pos, size, layer_name):
@@ -190,6 +242,27 @@ class CanvasPlacementGhost:
         )
         self._draw_outline(world_pos, size, self.VALID_OUTLINE)
         self.canvas.tag_raise(self.GHOST_TAG)
+
+    def _draw_brush_outline(
+        self, continuous_world_pos: tuple[float, float], brush_size: int
+    ):
+        bottom_left = brush_bottom_left(continuous_world_pos, brush_size)
+        size = (brush_size, brush_size)
+        if self._selected_tool() == "eraser":
+            in_bounds = all(
+                level_loader.level.map.position_is_valid(cell)
+                for cell in footprint_positions(bottom_left, size)
+            )
+            color = self.VALID_OUTLINE if in_bounds else self.INVALID_OUTLINE
+        else:
+            color = (
+                self.VALID_OUTLINE
+                if self._footprint_is_valid(
+                    bottom_left, size, self._selected_layer_name()
+                )
+                else self.INVALID_OUTLINE
+            )
+        self._draw_outline(bottom_left, size, color)
 
     def _draw_invalid_outline(
         self, world_pos: tuple[int, int], size: tuple[int, int]

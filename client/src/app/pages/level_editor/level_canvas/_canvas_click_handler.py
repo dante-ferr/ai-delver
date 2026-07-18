@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Optional, cast
-from src.utils import bresenham_line
+import math
+from src.utils import brush_cells
 from loaders import level_loader
 from pytiling import Tile
 from ..level_editor_manager import level_editor_manager
@@ -15,12 +16,14 @@ class CanvasClickHandler:
     It translates mouse coordinates to grid positions and applies the
     currently selected tool's logic.
     """
+
     def __init__(self, canvas: "LevelCanvas"):
         self.canvas = canvas
 
         self.platforms = level_loader.level.map.tilemap.get_layer("platforms")
 
         self.drawn_tile_positions: list[tuple[int, int]] = []
+        self.last_continuous_canvas_pos: tuple[float, float] | None = None
 
         self._bind_click_hold_events()
 
@@ -35,64 +38,73 @@ class CanvasClickHandler:
     def _start_click(self, event):
         """Handles the initial mouse button press on the canvas."""
         self.drawn_tile_positions = []
-        initial_canvas_grid_pos = self._get_canvas_grid_position((event.x, event.y))
-        if initial_canvas_grid_pos:
-            self.last_canvas_grid_pos = initial_canvas_grid_pos
-            self._process_single_canvas_grid_position(initial_canvas_grid_pos)
+        continuous_pos = self._get_continuous_canvas_grid_pos((event.x, event.y))
+        if continuous_pos is None:
+            return
+        self.last_continuous_canvas_pos = continuous_pos
+        self._process_continuous_canvas_pos(continuous_pos)
 
     def _on_click_hold(self, event):
         """
-        Handles mouse movement while the button is held down. It uses Bresenham's
-        line algorithm to ensure a continuous line of tiles is drawn or erased.
+        Handles mouse movement while the button is held down. Samples along the
+        continuous path so even brushes (crossing-pivoted) stay gap-free.
         """
-        current_canvas_grid_pos = self._get_canvas_grid_position((event.x, event.y))
-        if not current_canvas_grid_pos:
+        current = self._get_continuous_canvas_grid_pos((event.x, event.y))
+        if current is None:
             return
 
-        if not hasattr(self, "last_canvas_grid_pos"):
-            self.last_canvas_grid_pos = current_canvas_grid_pos
+        if self.last_continuous_canvas_pos is None:
+            self.last_continuous_canvas_pos = current
 
-        # Generate all grid positions between last and current
-        line_positions = bresenham_line(
-            self.last_canvas_grid_pos, current_canvas_grid_pos
-        )
-        for pos in line_positions:
-            world_pos = self.canvas.camera.canvas_to_world_grid_pos(pos)
-            if level_loader.level.map.position_is_valid(world_pos):
-                self._process_single_canvas_grid_position(pos)
+        for pos in self._sample_continuous_line(self.last_continuous_canvas_pos, current):
+            self._process_continuous_canvas_pos(pos)
 
-        self.last_canvas_grid_pos = current_canvas_grid_pos
+        self.last_continuous_canvas_pos = current
 
     def _stop_click(self, event):
         """Handles the mouse button release event."""
         self.drawn_tile_positions = []
-        if hasattr(self, "last_canvas_grid_pos"):
-            del self.last_canvas_grid_pos
+        self.last_continuous_canvas_pos = None
 
-    def _get_canvas_grid_position(
+    def _get_continuous_canvas_grid_pos(
         self, mouse_position: tuple[int, int]
-    ) -> Optional[tuple[int, int]]:
-        """
-        Converts raw mouse coordinates into canvas grid coordinates, accounting
-        for canvas scrolling and zoom level.
-        """
+    ) -> Optional[tuple[float, float]]:
+        """Canvas grid position with sub-tile precision."""
         canvas_x = self.canvas.canvasx(mouse_position[0])
         canvas_y = self.canvas.canvasy(mouse_position[1])
         tile_width, tile_height = level_loader.level.map.tile_size
-        canvas_grid_x = int(canvas_x // (tile_width * self.canvas.camera.zoom_level))
-        canvas_grid_y = int(canvas_y // (tile_height * self.canvas.camera.zoom_level))
+        zoom = self.canvas.camera.zoom_level
+        return (
+            canvas_x / (tile_width * zoom),
+            canvas_y / (tile_height * zoom),
+        )
 
-        return (canvas_grid_x, canvas_grid_y)
-
-    def _process_single_canvas_grid_position(self, canvas_grid_pos: tuple[int, int]):
-        """
-        Processes a single grid position by applying the selected tool's action.
-        It ensures a position is not processed multiple times in a single drag motion.
-        """
-        if canvas_grid_pos in self.drawn_tile_positions:
+    def _sample_continuous_line(
+        self,
+        start: tuple[float, float],
+        end: tuple[float, float],
+        step: float = 0.25,
+    ):
+        x0, y0 = start
+        x1, y1 = end
+        dist = math.hypot(x1 - x0, y1 - y0)
+        if dist < 1e-9:
+            yield start
             return
-        self.drawn_tile_positions.append(canvas_grid_pos)
+        n = max(1, int(math.ceil(dist / step)))
+        for i in range(n + 1):
+            t = i / n
+            yield (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)
 
+    def _brush_size(self) -> int:
+        from state_managers import canvas_state_manager
+        from src.config import config
+
+        size = int(round(float(canvas_state_manager.get_value("brush_size"))))
+        return max(config.MIN_BRUSH_SIZE, min(config.MAX_BRUSH_SIZE, size))
+
+    def _process_continuous_canvas_pos(self, canvas_pos: tuple[float, float]):
+        """Apply the selected tool across the brush at a continuous canvas position."""
         self.selected_layer_name = level_editor_manager.selector.get_selection("layer")
         self.selected_canvas_object_name = cast(
             str,
@@ -102,8 +114,13 @@ class CanvasClickHandler:
         )
         self.selected_tool_name = level_editor_manager.selector.get_selection("tool")
 
-        grid_pos = self.canvas.camera.canvas_to_world_grid_pos(canvas_grid_pos)
-        self._handle_interaction(grid_pos)
+        offset = self.canvas.camera.grid_draw_offset
+        world_pos = (canvas_pos[0] - offset[0], canvas_pos[1] - offset[1])
+        for cell in brush_cells(world_pos, self._brush_size()):
+            if cell in self.drawn_tile_positions:
+                continue
+            self.drawn_tile_positions.append(cell)
+            self._handle_interaction(cell)
 
     def _handle_interaction(self, grid_pos: tuple[int, int]):
         """
@@ -147,12 +164,16 @@ class CanvasClickHandler:
         A debug utility to print properties of the grid element under the mouse
         cursor when the 'i' key is pressed.
         """
-        canvas_grid_pos = self._get_canvas_grid_position((event.x, event.y))
-        if not canvas_grid_pos:
+        continuous_pos = self._get_continuous_canvas_grid_pos((event.x, event.y))
+        if continuous_pos is None:
             print("DEBUG: No canvas grid position found")
             return
 
-        grid_pos = self.canvas.camera.canvas_to_world_grid_pos(canvas_grid_pos)
+        offset = self.canvas.camera.grid_draw_offset
+        grid_pos = (
+            math.floor(continuous_pos[0] - offset[0]),
+            math.floor(continuous_pos[1] - offset[1]),
+        )
 
         if not level_loader.level.map.position_is_valid(grid_pos):
             print("DEBUG: Invalid grid position")

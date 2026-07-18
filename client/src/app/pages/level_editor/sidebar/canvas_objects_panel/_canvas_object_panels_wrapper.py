@@ -16,7 +16,7 @@ class CanvasObjectPanelsWrapper(ctk.CTkFrame):
         current_layer = level_editor_manager.selector.get_selection("layer")
         self._set_current_canvas_objects_panel_by_layer_name(current_layer)
 
-        level_editor_manager.selector.set_select_callback(
+        level_editor_manager.selector.add_select_callback(
             "layer", self._on_layer_select
         )
 

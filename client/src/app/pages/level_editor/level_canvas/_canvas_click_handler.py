@@ -103,6 +103,12 @@ class CanvasClickHandler:
         size = int(round(float(canvas_state_manager.get_value("brush_size"))))
         return max(config.MIN_BRUSH_SIZE, min(config.MAX_BRUSH_SIZE, size))
 
+    def _effective_brush_size(self) -> int:
+        """Pencil brush only applies to tile layers (platforms); world objects stay 1x1."""
+        if self.selected_tool_name == "pencil" and self.selected_layer_name != "platforms":
+            return 1
+        return self._brush_size()
+
     def _process_continuous_canvas_pos(self, canvas_pos: tuple[float, float]):
         """Apply the selected tool across the brush at a continuous canvas position."""
         self.selected_layer_name = level_editor_manager.selector.get_selection("layer")
@@ -116,7 +122,7 @@ class CanvasClickHandler:
 
         offset = self.canvas.camera.grid_draw_offset
         world_pos = (canvas_pos[0] - offset[0], canvas_pos[1] - offset[1])
-        for cell in brush_cells(world_pos, self._brush_size()):
+        for cell in brush_cells(world_pos, self._effective_brush_size()):
             if cell in self.drawn_tile_positions:
                 continue
             self.drawn_tile_positions.append(cell)

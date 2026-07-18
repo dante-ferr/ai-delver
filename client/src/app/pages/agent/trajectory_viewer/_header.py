@@ -51,15 +51,16 @@ class TrajectoryHeader(ctk.CTkFrame):
         )
         self.replay_button.grid(row=0, column=3, padx=(12, 4), pady=(0, 4), sticky="w")
 
-        # Row 1: Scrubber slider
+        # Row 1: scrubber aligned to summary/timeline width (synced by TrajectoryViewer)
         self.slider = ctk.CTkSlider(
             self,
             from_=1,
             to=1,
             number_of_steps=1,
-            command=self._on_slider_drag
+            width=280,
+            command=self._on_slider_drag,
         )
-        self.slider.grid(row=1, column=0, columnspan=4, padx=0, pady=(4, 8), sticky="ew")
+        self.slider.grid(row=1, column=0, columnspan=4, padx=0, pady=(4, 8), sticky="w")
 
         # Bind slider release and mouse scroll wheel
         self.slider.bind("<ButtonRelease-1>", lambda e: self._on_slider_release())
@@ -78,6 +79,13 @@ class TrajectoryHeader(ctk.CTkFrame):
 
         # Initial load
         self.refresh_from_metadata()
+
+    def set_slider_width(self, width: int):
+        """Match the scrubber width to the summary/timeline column."""
+        width = max(160, int(width))
+        if int(self.slider.cget("width")) == width:
+            return
+        self.slider.configure(width=width)
 
     @property
     def total_trajectories(self) -> int:

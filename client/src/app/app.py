@@ -26,7 +26,7 @@ class App(ctk.CTk):
 
         self.title("Ai Delver")
         self.attributes("-zoomed", True)
-        self.minsize(width=800, height=600)
+        self.minsize(width=360, height=480)
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=0)

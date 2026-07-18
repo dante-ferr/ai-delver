@@ -23,25 +23,71 @@ class TrainButtonsContainer(ctk.CTkFrame):
     It runs the CLI training client script as a subprocess in a separate thread.
     """
 
+    STACK_BELOW_WIDTH = 280
+    DEBOUNCE_MS = 80
+
     def __init__(self, master):
         super().__init__(master, fg_color="transparent")
+        self._stacked: bool | None = None
+        self._configure_after_id: str | None = None
+
         self.train_button = StandardButton(
             self, text="Train", command=self._start_train_thread
         )
-        self.train_button.grid(row=0, column=0, padx=(0, 4))
 
         self.interrupt_training_button = StandardButton(
             self,
             text="Interrupt Training",
             command=self._start_interrupt_thread,
         )
-        self.interrupt_training_button.grid(row=0, column=1, padx=(4, 0))
+
+        self._apply_button_layout(stacked=False)
 
         training_state_manager.add_disable_on_train_element(self.train_button)
         training_state_manager.add_enable_on_train_element(
             self.interrupt_training_button
         )
         self.train_process = None
+
+        self.bind("<Configure>", self._on_configure)
+
+    def _on_configure(self, event):
+        if event.widget is not self:
+            return
+        if self._configure_after_id is not None:
+            self.after_cancel(self._configure_after_id)
+        self._configure_after_id = self.after(self.DEBOUNCE_MS, self._update_layout)
+
+    def _update_layout(self):
+        self._configure_after_id = None
+        width = self.winfo_width()
+        if width <= 1:
+            return
+        self._apply_button_layout(stacked=width < self.STACK_BELOW_WIDTH)
+
+    def _apply_button_layout(self, stacked: bool):
+        if stacked == self._stacked:
+            return
+        self._stacked = stacked
+
+        for col in range(2):
+            self.grid_columnconfigure(col, weight=0)
+        for row in range(2):
+            self.grid_rowconfigure(row, weight=0)
+
+        if stacked:
+            self.grid_columnconfigure(0, weight=1)
+            self.train_button.grid(row=0, column=0, padx=0, pady=(0, 4), sticky="ew")
+            self.interrupt_training_button.grid(
+                row=1, column=0, padx=0, pady=(4, 0), sticky="ew"
+            )
+        else:
+            self.grid_columnconfigure(0, weight=1)
+            self.grid_columnconfigure(1, weight=1)
+            self.train_button.grid(row=0, column=0, padx=(0, 4), pady=0, sticky="ew")
+            self.interrupt_training_button.grid(
+                row=0, column=1, padx=(4, 0), pady=0, sticky="ew"
+            )
 
     def _start_train_thread(self):
         """

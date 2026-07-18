@@ -128,18 +128,28 @@ pub async fn episode_trajectory(
         )
             .into_response();
     };
-    ws.on_upgrade(move |socket| stream_trajectory(socket, receiver))
+    ws.on_upgrade(move |socket| stream_trajectory(socket, session, receiver))
         .into_response()
 }
 
 async fn stream_trajectory(
     socket: WebSocket,
+    session: Arc<TrainingSession>,
     mut receiver: tokio::sync::mpsc::UnboundedReceiver<ReplayMessage>,
 ) {
-    let (mut sender, mut _client_messages) = socket.split();
-    // Keep the client half polled so ping/close frames are handled.
-    tokio::spawn(async move {
-        while let Some(Ok(_)) = _client_messages.next().await {}
+    let interrupted = Arc::clone(&session.interrupted);
+    let (mut sender, mut client_messages) = socket.split();
+
+    // Drain the client half so ping/close frames are handled. When the client
+    // disconnects (window close, process kill, network drop), stop training.
+    let interrupted_on_close = Arc::clone(&interrupted);
+    let client_reader = tokio::spawn(async move {
+        while let Some(Ok(message)) = client_messages.next().await {
+            if matches!(message, Message::Close(_)) {
+                break;
+            }
+        }
+        interrupted_on_close.store(true, Ordering::Relaxed);
     });
 
     while let Some(message) = receiver.recv().await {
@@ -152,12 +162,14 @@ async fn stream_trajectory(
             Err(_) => break,
         };
         if sender.send(Message::Text(text.into())).await.is_err() {
+            interrupted.store(true, Ordering::Relaxed);
             break;
         }
         if payload.get("end").and_then(Value::as_bool) == Some(true) {
             break;
         }
     }
+    client_reader.abort();
     let _ = sender.close().await;
 }
 

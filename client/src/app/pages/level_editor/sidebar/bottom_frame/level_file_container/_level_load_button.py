@@ -15,7 +15,9 @@ class _LevelLoaderOverlay(FileLoaderOverlay):
         if level is None:
             raise RuntimeError("Failed to load level")
         level_loader.level = level
-        app_manager.editor_app.restart_all_pages()
+        # Only reload the editor; restarting Agent would wipe the training level
+        # list and zero out the progress total while training state still lives.
+        app_manager.editor_app.restart_page("level_editor")
 
 
 class LevelLoadButton(LoadButton):

@@ -144,6 +144,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
                 bufsize=1,
                 cwd=client_dir
             )
+            training_state_manager.train_process = self.train_process
         except Exception as e:
             training_state_manager.reset_states()
             print(f"[GUI Error] Failed to start training subprocess: {e}")
@@ -213,7 +214,9 @@ class TrainButtonsContainer(ctk.CTkFrame):
                 
         # Wait for process to exit
         self.train_process.wait()
-        
+        if training_state_manager.train_process is self.train_process:
+            training_state_manager.train_process = None
+
         # In case it exited without sending completed/interrupted events (e.g. crash)
         if training_state_manager.get_value("training") or training_state_manager.get_value("sending_training_request"):
             stderr_out = self.train_process.stderr.read().strip()

@@ -1,9 +1,10 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 import customtkinter as ctk
 from .state_manager import StateManager
 
 if TYPE_CHECKING:
     import customtkinter as ctk
+    from subprocess import Popen
     from app.pages.agent.train_panel._train_logs_panel import TrainLogsPanel
     from app.pages.agent.train_panel.level_selector._level_list import (
         LevelList as TrainingLevelList,
@@ -25,6 +26,8 @@ class TrainingStateManager(StateManager):
         self.enable_on_train_elements: "set[ctk.CTkBaseClass]" = set()
         self.train_logs_panel: "TrainLogsPanel | None" = None
         self.training_level_list_component: "TrainingLevelList | None" = None
+        # Owned by TrainButtonsContainer while a CLI train subprocess is alive.
+        self.train_process: "Optional[Popen]" = None
 
         # Set by the UI before training starts.
         self.amount_of_cycles: int = 0

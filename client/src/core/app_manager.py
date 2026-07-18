@@ -81,10 +81,55 @@ class AppManager:
     def _on_editor_close(self):
         """Handles the editor window closing, which shuts down everything."""
         logging.info("Editor closing, shutting down application.")
+        self._stop_active_training()
         self._is_running = False  # Stop the master_tick loop.
         self.stop_viewable_runtimes()
         if self._editor:
             self._editor.destroy()
+
+    def _stop_active_training(self):
+        """Interrupt any in-flight training so the server does not keep going."""
+        from state_managers import training_state_manager
+        from client_requests.gui_training_client import gui_training_client
+        import signal
+        import subprocess
+        import sys
+        import os
+        from bootstrap import PROJECT_ROOT
+
+        proc = training_state_manager.train_process
+        if proc is not None and proc.poll() is None:
+            try:
+                logging.info("Sending SIGINT to training subprocess on editor close.")
+                proc.send_signal(signal.SIGINT)
+                return
+            except Exception as e:
+                logging.warning(f"Failed to SIGINT training subprocess: {e}")
+
+        session_id = gui_training_client.session_id
+        if not session_id:
+            return
+        if not (
+            training_state_manager.training
+            or training_state_manager.sending_training_request
+        ):
+            return
+
+        client_dir = os.path.abspath(os.path.join(PROJECT_ROOT, ".."))
+        cmd = [
+            sys.executable,
+            "src/cli/main.py",
+            "interrupt",
+            "--session-id",
+            str(session_id),
+            "--server",
+            gui_training_client.server_url,
+        ]
+        try:
+            logging.info("Sending interrupt request for session %s on editor close.", session_id)
+            subprocess.run(cmd, cwd=client_dir, timeout=5)
+        except Exception as e:
+            logging.warning(f"Failed to interrupt training on editor close: {e}")
 
     def _start_runtime(self, runtime_name, runtime_class, *args):
         if getattr(self, f"_{runtime_name}") is not None:

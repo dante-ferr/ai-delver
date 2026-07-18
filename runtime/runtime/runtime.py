@@ -1,5 +1,7 @@
 from typing import Any, TYPE_CHECKING
 
+from pytiling import footprint_positions
+
 from .world_objects import WorldObjectsController
 from .world_objects.delver import Delver
 from .world_objects.goal import Goal
@@ -7,6 +9,29 @@ from . import runtime_core
 
 if TYPE_CHECKING:
     from level.level import Level
+
+
+def _delver_player_height_px() -> float:
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # Python < 3.11
+        import tomli as tomllib  # type: ignore
+
+    from level.world_object_sizes import default_delver_toml
+
+    with default_delver_toml().open("rb") as handle:
+        return float(tomllib.load(handle)["player_height"])
+
+
+def _element_footprint_size(element) -> tuple[int, int]:
+    """Prefer persisted size; fall back to the registry for legacy 1x1 saves."""
+    from level.world_object_sizes import world_object_size
+
+    size = getattr(element, "size", (1, 1))
+    size = (int(size[0]), int(size[1]))
+    if size == (1, 1):
+        return world_object_size(element.name)
+    return size
 
 
 class Runtime:
@@ -27,17 +52,29 @@ class Runtime:
         ]
 
         essentials = level.map.world_objects_map.get_layer("essentials")
-        goal_tiles = []
-        delver_start = None
+        goal_tiles: list[tuple[int, int]] = []
+        delver_element = None
         for element in essentials.elements:
             if element.name == "goal":
-                goal_tiles.append((element.position[0], element.position[1]))
+                goal_tiles.extend(
+                    footprint_positions(
+                        element.position, _element_footprint_size(element)
+                    )
+                )
             elif element.name == "delver":
-                delver_start = element.position
+                delver_element = element
 
-        actual_pos = level.map.grid_pos_to_actual_pos(delver_start)
-        start_x = actual_pos[0] + level.map.tile_size[0] / 2
-        start_y = actual_pos[1] + level.map.tile_size[1] / 2
+        if delver_element is None:
+            raise ValueError("Level is missing a delver world object.")
+
+        tile_w, tile_h = level.map.tile_size
+        player_height = _delver_player_height_px()
+        bx, by = delver_element.position
+        size_w = _element_footprint_size(delver_element)[0]
+        # Match Rust Level::delver_spawn_center (Rapier Y-up).
+        start_x = (bx + size_w * 0.5) * tile_w
+        cell_bottom = (height - by - 1) * tile_h
+        start_y = cell_bottom + player_height / 2.0
 
         self.physics_engine = runtime_core.RustPhysicsEngine(
             width,
@@ -46,12 +83,12 @@ class Runtime:
             goal_tiles,
             start_x,
             start_y,
-            level.map.tile_size[0],
+            tile_w,
         )
 
         self.world_objects_controller = WorldObjectsController()
         self.delver = Delver(self, render=render)
-        self.goal = Goal(self, variation="default", render=render)
+        self.goal = Goal(self, render=render)
 
         self.world_objects_controller.add_world_object(self.delver, unique_identifier="delver")
         self.world_objects_controller.add_world_object(self.goal, unique_identifier="goal")

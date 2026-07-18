@@ -9,10 +9,15 @@ class WorldObjectRepresentation(GridElement):
     """A representation of a world object (parent of game entities). Its name should be the same as the canvas object that represents it."""
 
     def __init__(
-        self, position: tuple[int, int], name: str, tags: list[str] = [], **args
+        self,
+        position: tuple[int, int],
+        name: str,
+        tags: list[str] | None = None,
+        size: tuple[int, int] = (1, 1),
+        **args,
     ):
-        super().__init__(position, name, **args)
-        self.tags = tags
+        super().__init__(position, name, size=size, **args)
+        self.tags = list(tags) if tags is not None else []
 
     def to_dict(self):
         """Serialize the world object representation to a dictionary."""
@@ -22,16 +27,19 @@ class WorldObjectRepresentation(GridElement):
             "name": self.name,
             "locked": self.locked,
             "unique": self.unique,
+            "size": list(self.size),
             "tags": sorted(self.tags),
         }
 
     @classmethod
     def from_dict(cls, data: dict):
         """Deserialize a world object representation from a dictionary."""
+        raw_size = data.get("size", (1, 1))
         instance = cls(
             position=tuple(data["position"]),
             name=data["name"],
             tags=data.get("tags", []),
+            size=(int(raw_size[0]), int(raw_size[1])),
         )
         instance.locked = data.get("locked", False)
         instance.unique = data.get("unique", False)

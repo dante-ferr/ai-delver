@@ -1,12 +1,27 @@
-# Agentic Fine-Tuning Protocol (CLI)
+# Agentic Fine-Tuning Protocol (Training Engine)
 
-This protocol tells an **orchestrating AI agent** (or a human following the same ritual) how to fine-tune the Delver using the CLI. Prefer the CLI over calling the intelligence HTTP API directly—the same rule as the [GUI-to-CLI Integration Protocol](gui_cli_protocol.md).
+This protocol tells an **orchestrating AI agent** (or a developer following the same ritual) how to improve the **training engine** — hyperparameters, rewards, defaults in `intelligence/config.toml`, and (when needed) intelligence / runtime architecture so the sim teaches what the game contains.
 
-Near-term goal: confirm a **capable platforming** Delver. Later big features (traps, enemies, puzzles) each get another fine-tune pass once they exist in the training sim.
+**It is not the player’s coaching loop.** Growing a Delver’s policy weights is the **player’s** job (GUI / CLI `train` as coach). The agent’s deliverable is a better trainer for those players to use — not a finished Delver model.
+
+Prefer the client CLI over ad-hoc HTTP clients — same rule as the [GUI-to-CLI Integration Protocol](gui_cli_protocol.md).
 
 ---
 
-## 1. Hard rules for orchestrators
+## 0. Roles (do not conflate)
+
+| Actor | Owns | Does *not* own |
+| :--- | :--- | :--- |
+| **Player (coach)** | Training *their* Delver on levels they care about; warm-starts, curriculum order, when to stop | Shipping project-wide HP defaults or sim architecture |
+| **Agentic AI / developer** | Tuning the **engine**: HPs, rewards, `config.toml`, Optuna `tune`, sim support for new mechanics, short **evaluation** trains to measure engine quality | Producing the product’s “capable Delver” as the goal of this protocol |
+
+Evaluation `train` runs that the agent starts are **smoke tests / benchmarks of the engine** (does a blank or fixed agent learn the human eval set under these defaults?). They are not a substitute for player coaching, and their checkpoints are not the shipped player experience unless a developer explicitly decides otherwise.
+
+Near-term engine goal: **platforming learnability** — blank agents make steady progress on the human curriculum pack under current defaults. Later: after traps/enemies/puzzles land in the **training sim**, retune rewards/HPs (and extend the sim) so players can coach those skills too.
+
+---
+
+## 1. Hard rules for engine orchestrators
 
 1. **Orchestrate through the client CLI**, not by inventing ad-hoc HTTP clients:
    ```bash
@@ -17,197 +32,197 @@ Near-term goal: confirm a **capable platforming** Delver. Later big features (tr
    ```bash
    # from repo root
    make run-ai-dev
-   # or: cargo run --release --manifest-path intelligence/Cargo.toml --features tch/download-libtorch -- serve --host 127.0.0.1 --port 8001
    ```
 3. **Use `--mode static` only.** Dynamic curriculum still errors on the server.
-4. **Parse JSON lines on stdout.** Every lifecycle signal is a single JSON object with an `event` field. Do not scrape human prose logs.
-5. **Prefer `--runs-per-cycle`.** A run is a full-length play (up to `max_seconds_per_episode`). Intelligence converts runs into collect-window episode slots (`episodes_per_run = max_seconds_per_episode / collect_seconds_per_env`, default 12). Legacy `--episodes-per-cycle` remains for low-level control; when using it, align to `env_batch_size` from `GET /init` (the CLI auto-rounds and emits an `info` event).
-6. **Warm-start expects libtorch `.ot` bytes.** Legacy TF-Agents zip payloads are ignored by the Rust server. Prefer checkpoints / weights produced by the current intelligence binary.
-7. **Do not call the intelligence API from GUI or one-off scripts** for training lifecycle actions—extend the CLI instead.
+4. **Parse JSON lines on stdout.** Every lifecycle signal is a single JSON object with an `event` field.
+5. **Prefer `--runs-per-cycle`** for human-facing train docs; `tune` may still use `--episodes-per-cycle` (align to `env_batch_size` from `GET /init`).
+6. **Do not treat “ship a strong Delver checkpoint” as success** for this protocol. Success is better defaults / a healthier learning curve on the eval set.
+7. **Do not invent complex level layouts.** Use human-authored eval / curriculum levels — [Level Authoring Protocol](level_authoring_protocol.md).
+8. **Do not call the intelligence API from GUI or one-off scripts** for lifecycle actions—extend the CLI instead.
 
-Command reference: [CLI Commands Reference](cli_commands.md). Curriculum / forgetting behavior: [Curriculum & Forgetting Prevention](curriculum_and_forgetting.md).
-
----
-
-## 2. Standard fine-tune ritual (`train`)
-
-### Prerequisites
-
-| Check | How |
-| :--- | :--- |
-| Server healthy | `GET http://localhost:8001/init` succeeds |
-| Levels exist | Names resolve under `client/data/level_saves/<name>/level.json` |
-| Agent folder | `create-agent` / `load-agent`, or an existing `data/agents/<agent>/` |
-| Platforming-only for now | Trainer loads **platforms + delver + goal** only; other world objects are ignored until the sim is extended |
-
-### Train session
-
-```bash
-cd client
-poetry run python src/cli/main.py train \
-    --levels "Ai Test #1,Ai Test #2" \
-    --cycles 10 \
-    --runs-per-cycle 5 \
-    --mode static \
-    --agent ppo_delver \
-    --server localhost:8001 \
-    --checkpoint-interval 5
-```
-
-Prefer `--runs-per-cycle` (full-length run equivalents). The intelligence server converts runs → episode slots via `max_seconds_per_episode / collect_seconds_per_env` (default **12**). Legacy `--episodes-per-cycle` still works for low-level budgets.
-
-Optional overrides (`--learning-rate`, `--entropy-regularization`, reward knobs, etc.) map into `config_overrides` for the server. Defaults live in `intelligence/config.toml`.
-
-### What the CLI already automates
-
-- Batch-size alignment for `--episodes-per-cycle`
-- Level prepare / hash for the `/train` payload
-- Weight upload when agent weights exist (warm-start)
-- **New-challenge LR scaling**: if warm-starting and any target level is absent from `trained_levels` in metadata, LR becomes `0.000075` unless the user/orchestrator set `--learning-rate`
-- Weight / checkpoint download on complete or interrupt
-- Append trained levels to metadata on success
-- Final `stats` emission
-
-### Events to watch
-
-| Event | Meaning for the orchestrator |
-| :--- | :--- |
-| `session_created` | Training started; keep `session_id` for `interrupt` |
-| `progress` | Cycle finished |
-| `metrics` | Loss / return snapshot (nerd stats) |
-| `checkpoint` | Intermediate weights saved under the agent |
-| `completed` / `interrupted` | Terminal success paths |
-| `error` | Stop; fix the message before retrying |
-| `stats` | Aggregate victories / amount after the run |
-
-Interrupt:
-
-```bash
-poetry run python src/cli/main.py interrupt \
-    --session-id <uuid> \
-    --server localhost:8001
-```
-
-### Success criteria (platforming)
-
-Treat the Delver as “capable enough to proceed” when:
-
-1. Training completes without `error`.
-2. `stats` shows a clear rise in victories vs early cycles / a prior blank run.
-3. Warm-start on a **new platform layout** still improves (or at least does not collapse) with the auto-reduced LR.
-4. Optional: mix several platform levels in one `--levels` list so the policy sees layout diversity in one session.
-
-Native one-shot Rust `train` (see `intelligence/README.md`) is fine for benchmarks; for the product / orchestrator loop, prefer this client CLI so agent folders, forgetting prevention, and stats stay consistent.
+Command reference: [CLI Commands Reference](cli_commands.md). Player-side curriculum / forgetting: [Curriculum & Forgetting Prevention](curriculum_and_forgetting.md).
 
 ---
 
-## 3. Auto fine-tuning (`tune`)
+## 2. What to change (engine surface)
 
-AI Delver includes **Optuna-based automatic hyperparameter search** as a developer CLI command. Use it when defaults feel wrong after a big change, or when an orchestrator needs to search for a better HP set before a long train.
+| Lever | Where | When |
+| :--- | :--- | :--- |
+| Learning rate, entropy, PPO knobs | `intelligence/config.toml` and/or CLI overrides | Instability, no learning, or after `tune` |
+| Reward weights | `config.toml` / CLI | Wrong incentives (goal ignored, wall-hugging, etc.) |
+| Collect / episode timing | `config.toml` | Eval signal too noisy or too slow |
+| Optuna search | CLI `tune` | Systematic HP search after a big change |
+| Training sim (platforms/traps/…) | `intelligence` + `runtime` / level load | New mechanic exists in editor but is ignored in rollouts |
+| Physics feel (jump, gaps) | `delver.toml` / `world.toml` | Rare; also re-run `platforming-limits` and warn humans to re-check levels |
+
+Document non-obvious default changes with comments in `config.toml` (why this value).
+
+---
+
+## 3. Hyperparameter search (`tune`)
+
+Primary tool for **engine** fine-tuning. Optuna maximizes **win rate** on a short static train per trial.
 
 ### Behavior
 
-`tune` (implemented in `client/src/cli/commands/tune.py`):
+`tune` (`client/src/cli/commands/tune.py`):
 
-1. Creates an Optuna study that **maximizes win rate**.
-2. For each trial, suggests:
-   - `learning_rate` ∈ `[5e-5, 8e-4]` (log scale)
-   - `entropy_reg` ∈ `[0.05, 0.30]`
-   - `finished_reward` ∈ `[50, 200]`
-3. Spawns `poetry run python src/cli/main.py train ...` as a **subprocess** with those overrides (`--mode static`).
-4. Streams the child process JSON events:
-   - If a `metrics` event has `abs(loss) > 20`, the trial is **pruned** early (`TrialPruned`).
-   - If a `stats` event arrives, win rate = `victories / amount`.
-5. Emits `completed` with `best_params` and `best_value` when the study finishes.
+1. Creates an Optuna study that maximizes win rate.
+2. Each trial suggests `learning_rate`, `entropy_reg`, `finished_reward` (ranges in `tune.py`).
+3. Spawns `train ... --mode static` with those overrides.
+4. Prunes a trial early if `metrics` reports `abs(loss) > 20`.
+5. Emits `completed` with `best_params` / `best_value`.
 
 ### Invocation
 
 ```bash
 cd client
 poetry run python src/cli/main.py tune \
-    --levels "Ai Test #1" \
+    --levels "Eval Gap A,Eval Rise A" \
     --cycles 5 \
     --episodes-per-cycle 38 \
-    --agent ppo_delver \
+    --agent engine_eval_agent \
     --trials 10 \
     --server localhost:8001
 ```
 
-`tune` still uses legacy `--episodes-per-cycle` for trial subprocesses.
-### Orchestrator protocol for `tune`
+Use a **human-authored representative eval set** (see level authoring pack). Prefer `--episodes-per-cycle` = `env_batch_size` so trials are not silently rounded.
 
-1. Start the intelligence server.
-2. Run `tune` with a **representative platforming level set** and enough `--cycles` that win rate is meaningful (too few cycles → noisy objective).
-3. Read the final `completed` event’s `best_params`.
-4. Apply those values on a longer `train` run (CLI flags and/or update comments in `intelligence/config.toml` if they should become project defaults).
-5. Do **not** treat `tune` as a substitute for feature work: it only searches HPs for the current sim and reward stack.
+### After `tune`
+
+1. Read `best_params` from the final `completed` event.
+2. **Promote into project defaults** when they beat the current baseline on a longer evaluation train (update `intelligence/config.toml` with a short comment).
+3. Optionally confirm with one longer smoke `train` under the new defaults (still an engine check, not player coaching).
+4. Do **not** treat `tune` as a substitute for sim feature work.
 
 ### Caveats
 
-- Search ranges are coded in `tune.py`. The shipped default `entropy_regularization` in `config.toml` is `0.01`; Optuna’s current entropy band starts at `0.05`. If tuned entropy looks high vs known-good defaults, prefer a follow-up `train` with an explicit lower entropy override.
-- Prefer `--episodes-per-cycle` equal to `env_batch_size` (e.g. `38`) so trials are not silently rounded.
-- `tune` is developer-oriented (no GUI button). Orchestrators may run it headlessly; parse JSON the same way as `train`.
+- Search ranges live in `tune.py`. Shipped `entropy_regularization` in `config.toml` may sit outside the Optuna band — sanity-check before promoting.
+- Keep eval agents / folders separate from any personal “play” agents if you care about clean bookkeeping.
 
 ---
 
-## 4. When new big features are added
+## 4. Evaluation `train` (engine smoke test only)
 
-Adding enemies, traps, puzzles, or other gameplay systems is a **developer fine-tune ritual**, not a reason to discard the platforming Delver.
+Short `train` sessions are allowed **to measure whether the engine learns**, not to finish a product Delver.
+
+```bash
+cd client
+poetry run python src/cli/main.py train \
+    --levels "Eval Walk,Eval Gap A,Eval Rise A" \
+    --cycles 5 \
+    --runs-per-cycle 5 \
+    --mode static \
+    --agent engine_eval_agent \
+    --server localhost:8001
+```
+
+### Engine success criteria (platforming)
+
+The **engine** is good enough to hand to players when, under current defaults and the human eval pack:
+
+1. Runs complete without `error`.
+2. `stats` / metrics show a clear rise in victories (or return) vs a known-bad baseline or early cycles.
+3. Changes promoted to `config.toml` are commented and reproducible.
+4. (After a mechanic lands in the sim) blank or warm-start eval agents can make progress on levels that use that mechanic — again as an engine check.
+
+Player success (“my Delver cleared my custom map”) is out of scope here.
+
+### Useful CLI automation (for eval runs)
+
+- Batch-size alignment, level prepare/hash, weight upload, checkpoint download, `stats`
+- New-challenge LR scaling when warm-starting onto unseen level names (relevant if an eval agent carries weights between engine experiments)
+
+Events: `session_created`, `progress`, `metrics`, `checkpoint`, `completed` / `interrupted`, `error`, `stats` — same JSON contracts as player `train`.
+
+---
+
+## 5. When new big features are added (engine ritual)
+
+Adding enemies, traps, puzzles, etc. is a **developer / agent engine ritual**. Players will coach Delvers on those features later; first the trainer must simulate them and have sane rewards/HPs.
 
 ```text
 implement feature in editor + training sim
-        → fine-tune via orchestrator + CLI (warm-start)
-        → confirm learning / retention
-        → next feature
+        → retune engine (rewards / HPs / tune)
+        → confirm eval learnability
+        → players coach Delvers with the improved engine
 ```
 
 ### Required order
 
 1. **Land the feature in the training environment**  
-   Extend level loading and physics/observations so the new objects affect rollouts. Today `Level::from_json` only keeps platforms, one delver, and one goal; other world-object names are ignored. Fine-tuning on levels that *visually* contain traps does nothing until those objects are simulated.
+   Extend level loading and physics/observations so new objects affect rollouts. Today training only keeps platforms, one delver, and one goal; other world-object names are ignored until simulated.
 
-2. **Warm-start from the last capable checkpoint**  
-   Keep the same `--agent` (or load prior weights). The CLI uploads existing weights and may auto-cut LR when new level names appear in the session.
+2. **Retune the engine**  
+   Adjust rewards / HPs; run `tune` on a small human eval set that exercises the new mechanic (prefer **combo** maps: platforming + new feature — see [Curriculum & Forgetting Prevention](curriculum_and_forgetting.md)).
 
-3. **Fine-tune with `train` (static)**  
-   Include levels that exercise the new feature. Prefer **combo levels** (old platforming + new mechanic) so prior skills are not wiped—see [Curriculum & Forgetting Prevention](curriculum_and_forgetting.md).
+3. **Confirm engine quality**  
+   Short evaluation trains: progress on new-feature levels and no catastrophic collapse on older platforming eval levels.
 
-4. **Optionally run `tune`**  
-   If rewards or exploration need retuning for the new mechanic (e.g. new death conditions change return scale), run `tune` on a small representative set, then lock HPs into a longer `train`.
+4. **Optional**  
+   Document new defaults; only then invite players to coach with the updated engine.
 
-5. **Confirm**  
-   Check `stats` / victories on levels that use the new feature **and** on older platform-only levels if retention matters. Roll back to a checkpoint if the run diverges.
-
-6. **Optional product step**  
-   Refresh any shipped foundation weights for players only after the developer Delver is capable on the expanded game. That is separate from this ritual.
-
-### What does *not* require a full feature ritual
+### What does *not* require this ritual
 
 | Change | Action |
 | :--- | :--- |
-| New platform **layouts** only | `train` with mixed `--levels`; rely on auto LR scaling for truly new names |
-| HP / reward tweak only | Short `train`, or `tune` then `train` |
-| New mechanic in the editor but **not** in the training sim | Do not fine-tune yet—extend the sim first |
-
-### What you should expect
-
-- **Yes**, plan another orchestrator+CLI fine-tune after each big mechanic family lands in the sim.
-- **No**, you do not start from random weights every time—warm-start and extend.
-- One shared policy + `config.toml` remains the architecture; **checkpoints advance** as the game grows.
+| New platform **layouts** only | No engine change; players (or eval) just `train` on new names |
+| HP / reward tweak only | `tune` and/or short eval `train`; promote defaults if better |
+| Mechanic in editor but **not** in training sim | Do not tune yet — extend the sim first |
 
 ---
 
-## 5. Minimal orchestrator checklist
+## 6. Levels for engine work
 
-```text
-[ ] Server up (serve / make run-ai-dev)
-[ ] Agent created or loaded
-[ ] Levels are real platforming maps (or maps whose mechanics exist in the sim)
-[ ] train --mode static --runs-per-cycle set (or legacy --episodes-per-cycle aligned to env_batch_size)
-[ ] Watch JSON: session_created → progress/metrics → completed|error
-[ ] Inspect stats / checkpoints
-[ ] If HPs unstable after a feature change: tune → apply best_params → longer train
-[ ] After a new mechanic: sim support first, then warm-start train (combo levels), then confirm
+**Humans author levels.** Agents validate spacing (`platforming-limits`), may import sketches, and use them as the **eval / curriculum pack** for `tune` and smoke trains.
+
+Full rules and the recommended **~8–11 level platforming pack**: [Level Authoring Protocol](level_authoring_protocol.md).
+
+Sketch import (when the human used a sketch):
+
+```bash
+poetry run python src/cli/main.py import-level-sketch \
+    --from "data/level_sketches/Some Eval.json" \
+    --name "Some Eval"
 ```
 
-For subprocess wiring and event parsing patterns shared with the GUI, see [GUI-to-CLI Integration Protocol](gui_cli_protocol.md).
+Schema details: [Level Authoring Protocol](level_authoring_protocol.md) and sketch notes below if you need the grid format.
+
+### Sketch schema (reference)
+
+```json
+{
+  "name": "Eval Gap A",
+  "grid_size": [20, 12],
+  "cells": [
+    [null, null, "platform"],
+    ["delver", null, "goal"]
+  ]
+}
+```
+
+| Rule | Detail |
+| :--- | :--- |
+| IDs | `platform`, `delver`, `goal` only (MVP) |
+| Concurrent layers | No `platform` + `delver`/`goal` in one cell |
+| Uniques | Exactly one `delver` and one `goal` **anchor**, both interior |
+| Footprints | Anchors are **bottom-left**. Delver is currently **1×3**; Goal is **2×2** (body above/right of the standing cell) |
+| Borders | Perimeter sealed with `platform` on import |
+
+---
+
+## 7. Minimal engine-orchestrator checklist
+
+```text
+[ ] Human eval / curriculum levels available (do not invent complex layouts)
+[ ] platforming-limits if reviewing spacing or after physics TOML changes
+[ ] Server up (serve / make run-ai-dev)
+[ ] Decide change: config HPs/rewards vs sim architecture vs both
+[ ] If new mechanic: sim support first
+[ ] tune on representative eval levels (optional but preferred after big changes)
+[ ] Promote best_params to config.toml with comments when justified
+[ ] Short eval train under new defaults; check stats / metrics (engine quality)
+[ ] Do not conflate eval checkpoints with “the” player Delver
+```
+
+For subprocess wiring and JSON event patterns shared with the GUI, see [GUI-to-CLI Integration Protocol](gui_cli_protocol.md).

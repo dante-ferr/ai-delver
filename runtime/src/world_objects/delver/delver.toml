@@ -12,9 +12,10 @@ braking_force = 900.0
 # Below this horizontal speed with no run input, velocity snaps to zero
 idle_stop_speed = 10.0
 
-# Jump takeoff velocity (px/s). Target: 3 tiles (48px) under world gravity.
-# h = v^2 / (2|g|) => v = sqrt(2 * 1000 * 48) ≈ 310
-jump_impulse = 310.0
+# Jump takeoff velocity (px/s). Target: reliable +4 surface rise under world gravity.
+# Apex ~70px (~4.4 tiles) so +4 ledges (64px) clear with margin (wall-kiss friendly).
+# h = v^2 / (2|g|) => v = sqrt(2 * 1000 * 70) ≈ 374
+jump_impulse = 374.0
 # How long after leaving the ground can the player still jump (coyote time)
 jump_tolerance_max = 0.105
 # Minimum time between consecutive jumps

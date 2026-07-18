@@ -32,6 +32,11 @@ def build():
         suffix = ".so"
 
     src = os.path.join(script_dir, "target", "release", "libruntime_core.so")
+    cargo_target_dir = os.environ.get("CARGO_TARGET_DIR")
+    if cargo_target_dir:
+        src = os.path.join(cargo_target_dir, "release", "libruntime_core.so")
+    if not os.path.exists(src):
+        src = os.path.join(script_dir, "target", "release", "libruntime_core.so")
     if not os.path.exists(src):
         src = os.path.join(script_dir, "target", "release", "libruntime_core.dylib")
     if not os.path.exists(src):

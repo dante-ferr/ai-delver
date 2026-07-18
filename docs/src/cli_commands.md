@@ -119,6 +119,45 @@ poetry run python src/cli/main.py load-agent --path "data/agents/Brave Delver"
 
 ---
 
+### `import-level-sketch`
+Imports a simplified dense-grid level sketch into a full editor `level.json` under `data/level_saves/<name>/`. The importer fills default autotile visuals; training still only uses `platform` / `delver` / `goal`.
+
+```bash
+poetry run python src/cli/main.py import-level-sketch \
+    --from "data/level_sketches/Sketch Gap Jump A.json" \
+    --name "Coach Gap Jump A"
+```
+
+* `--from <path>`: Sketch JSON path (required).
+* `--name <str>`: Optional override for the saved level name (defaults to the sketch `name`).
+* `--force`: Overwrite an existing save with the same name.
+
+Also seals the grid perimeter with `platform` after placement (so concurrent delver/goal cannot leave border holes).
+
+Events: `info`, `level_imported`, `error`.
+
+Sketch schema and curriculum / eval levels: [Level Authoring Protocol](level_authoring_protocol.md). Engine orchestrators: [Agentic Fine-Tuning Protocol](agentic_fine_tuning_protocol.md#6-levels-for-engine-work).
+
+**GUI Trigger**: Developer CLI command only.
+
+---
+
+### `platforming-limits`
+Reads `delver.toml` + `world.toml`, computes ballistic jump height / horizontal reach from the same steady-run and gravity model as the runtime, and emits a `platforming_limits` JSON event. Orchestrators must run this before authoring sketches when physics constants may have changed.
+
+```bash
+poetry run python src/cli/main.py platforming-limits
+```
+
+* `--delver-toml <path>`: Optional override (default: repo `runtime/src/world_objects/delver/delver.toml`).
+* `--world-toml <path>`: Optional override (default: repo `runtime/src/engine/world.toml`).
+
+Key fields: `recommended_max_gap_tiles`, `recommended_max_rise_tiles` (surface-to-surface; ~4 with current tunables), `recommended_max_stack_tiles_including_floor` (rise+1), `recommended_min_ceiling_clearance_tiles`, plus raw `max_jump_*` values.
+
+**GUI Trigger**: Developer CLI command only.
+
+---
+
 ### `tune`
 Runs a developer-only automated hyperparameter tuning session using Optuna. It suggests parameters (learning rate, entropy regularization, finished reward) across multiple trials, runs `train` as a subprocess, prunes bad trials early if `abs(loss) > 20`, maximizes win rate from the child `stats` event, and emits `completed` with `best_params` / `best_value`.
 
@@ -133,7 +172,7 @@ poetry run python src/cli/main.py tune \
 
 **GUI Trigger**: Developer CLI command only.
 
-For the full orchestrator ritual (when to `train` vs `tune`, warm-starts, and fine-tuning after new features), see [Agentic Fine-Tuning Protocol](agentic_fine_tuning_protocol.md).
+For improving the **training engine** (`tune`, promoting defaults, sim support after new features — not player coaching), see [Agentic Fine-Tuning Protocol](agentic_fine_tuning_protocol.md).
 
 ---
 
@@ -172,6 +211,8 @@ for line in iter(self.train_process.stdout.readline, ""):
 | `agent_created` | `create-agent` | Emitted when a new agent is successfully created |
 | `agent_saved` | `save-agent` | Emitted when an agent's state is successfully saved |
 | `agent_loaded` | `load-agent` | Emitted when an agent is successfully loaded |
+| `level_imported` | `import-level-sketch` | Sketch converted and saved as a full level |
+| `platforming_limits` | `platforming-limits` | Physics-derived jump/gap authoring limits |
 | `error` | any | An unrecoverable error occurred |
 
 ### `metrics` Event (Nerd Stats)

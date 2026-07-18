@@ -18,8 +18,12 @@ pub struct Level {
     pub height: usize,
     pub tile_size: f32,
     pub solid_tiles: Vec<(usize, usize)>,
+    /// Bottom-left anchor of the Delver footprint.
     pub delver: (usize, usize),
+    pub delver_size: (usize, usize),
+    /// Bottom-left anchor of the Goal footprint.
     pub goal: (usize, usize),
+    pub goal_size: (usize, usize),
 }
 
 #[derive(Deserialize)]
@@ -52,6 +56,12 @@ struct Layer {
 struct Element {
     name: String,
     position: [usize; 2],
+    #[serde(default = "default_size")]
+    size: [usize; 2],
+}
+
+fn default_size() -> [usize; 2] {
+    [1, 1]
 }
 
 impl Level {
@@ -104,9 +114,11 @@ impl Level {
             .flat_map(|layer| &layer.elements)
         {
             validate_position(element.position, width, height)?;
+            let size = normalize_size(element.size)?;
+            validate_footprint(element.position, size, width, height)?;
             match element.name.as_str() {
-                "delver" => delvers.push((element.position[0], element.position[1])),
-                "goal" => goals.push((element.position[0], element.position[1])),
+                "delver" => delvers.push((element.position[0], element.position[1], size)),
+                "goal" => goals.push((element.position[0], element.position[1], size)),
                 _ => {}
             }
         }
@@ -119,14 +131,19 @@ impl Level {
             );
         }
 
+        let (dx, dy, dsize) = delvers[0];
+        let (gx, gy, gsize) = goals[0];
+
         Ok(Self {
             name: root.name,
             width,
             height,
             tile_size: tile_width,
             solid_tiles,
-            delver: delvers[0],
-            goal: goals[0],
+            delver: (dx, dy),
+            delver_size: dsize,
+            goal: (gx, gy),
+            goal_size: gsize,
         })
     }
 
@@ -157,11 +174,68 @@ impl Level {
             (self.height as f32 - tile.1 as f32 - 0.5) * self.tile_size,
         )
     }
+
+    /// Cells occupied by a bottom-left–anchored footprint (Y increases downward).
+    pub fn footprint(position: (usize, usize), size: (usize, usize)) -> Vec<(usize, usize)> {
+        let (x, y) = position;
+        let (w, h) = size;
+        let top_y = y + 1 - h;
+        let mut cells = Vec::with_capacity(w * h);
+        for dy in 0..h {
+            for dx in 0..w {
+                cells.push((x + dx, top_y + dy));
+            }
+        }
+        cells
+    }
+
+    pub fn goal_tiles(&self) -> Vec<(usize, usize)> {
+        Self::footprint(self.goal, self.goal_size)
+    }
+
+    /// World-space spawn for the Delver body center: horizontal center of the
+    /// footprint, feet on the bottom of the standing (bottom-left) cell.
+    pub fn delver_spawn_center(&self, player_height: f32) -> (f32, f32) {
+        let (x, y) = self.delver;
+        let (w, _) = self.delver_size;
+        let cx = (x as f32 + w as f32 * 0.5) * self.tile_size;
+        let cell_bottom = (self.height as f32 - y as f32 - 1.0) * self.tile_size;
+        let cy = cell_bottom + player_height / 2.0;
+        (cx, cy)
+    }
+}
+
+fn normalize_size(size: [usize; 2]) -> Result<(usize, usize)> {
+    let [w, h] = size;
+    if w == 0 || h == 0 {
+        bail!("element size must be at least [1, 1], got {size:?}");
+    }
+    Ok((w, h))
 }
 
 fn validate_position(position: [usize; 2], width: usize, height: usize) -> Result<()> {
     if position[0] >= width || position[1] >= height {
         bail!("element position {:?} is outside grid bounds", position);
+    }
+    Ok(())
+}
+
+fn validate_footprint(
+    position: [usize; 2],
+    size: (usize, usize),
+    width: usize,
+    height: usize,
+) -> Result<()> {
+    let (x, y) = (position[0], position[1]);
+    let (w, h) = size;
+    if y + 1 < h || x + w > width || y >= height {
+        bail!(
+            "element footprint at {:?} size {:?} is outside grid bounds {}x{}",
+            position,
+            size,
+            width,
+            height
+        );
     }
     Ok(())
 }
@@ -195,8 +269,36 @@ mod tests {
         assert_eq!((level.width, level.height), (5, 4));
         assert_eq!(level.solid_tiles, vec![(1, 3)]);
         assert_eq!(level.delver, (1, 2));
+        assert_eq!(level.delver_size, (1, 1));
         assert_eq!(level.goal, (3, 2));
+        assert_eq!(level.goal_size, (1, 1));
         assert_eq!(level.tile_center(level.goal), (56.0, 24.0));
+    }
+
+    #[test]
+    fn expands_multi_tile_footprints() {
+        let json = r#"{
+            "_name":"tall",
+            "map":{
+                "grid_size":[5,6],
+                "tile_size":[16,16],
+                "tilemap":{"layers":[{"elements":[]}]},
+                "world_objects_map":{"layers":[{"elements":[
+                    {"name":"delver","position":[1,4],"size":[1,3]},
+                    {"name":"goal","position":[3,3],"size":[1,1]}
+                ]}]}
+            }
+        }"#;
+        let level = Level::from_json(json).unwrap();
+        assert_eq!(level.delver_size, (1, 3));
+        assert_eq!(
+            Level::footprint(level.delver, level.delver_size),
+            vec![(1, 2), (1, 3), (1, 4)]
+        );
+        let (sx, sy) = level.delver_spawn_center(38.0);
+        assert!((sx - 24.0).abs() < 1e-3);
+        // cell bottom of y=4 in height 6: (6-4-1)*16 = 16; + half height 19 = 35
+        assert!((sy - 35.0).abs() < 1e-3);
     }
 
     #[test]

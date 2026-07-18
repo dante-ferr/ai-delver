@@ -166,12 +166,14 @@ impl LevelEnvironment {
 }
 
 fn create_physics(level: &Level) -> RustPhysicsEngine {
-    let (start_x, start_y) = level.tile_center(level.delver);
+    let player_height = runtime_core::DelverConfig::default().player_height;
+    let (start_x, start_y) = level.delver_spawn_center(player_height);
+    let goal_tiles = level.goal_tiles();
     RustPhysicsEngine::from_geometry_ref(
         level.width,
         level.height,
         &level.solid_tiles,
-        &[level.goal],
+        &goal_tiles,
         start_x,
         start_y,
         level.tile_size,

@@ -120,6 +120,12 @@ class CanvasClickHandler:
             canvas_object = level_editor_manager.objects_manager.get_canvas_object(
                 self.selected_canvas_object_name
             )
+            from pytiling import footprint_positions
+
+            size = getattr(canvas_object, "size", (1, 1))
+            for cell in footprint_positions(grid_pos, size):
+                if not level_loader.level.map.position_is_valid(cell):
+                    return
             canvas_object.create_element_callback(grid_pos)
 
         elif self.selected_tool_name == "eraser":

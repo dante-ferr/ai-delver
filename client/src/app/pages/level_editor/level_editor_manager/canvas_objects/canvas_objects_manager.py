@@ -63,12 +63,24 @@ class CanvasObjectsManager:
         canvas_object.create_element_callback = (
             lambda position: self._create_world_object_at(position, canvas_object)
         )
+        canvas_object.remove_element_callback = (
+            lambda position, co=canvas_object: self._remove_world_object_at(
+                position, co
+            )
+        )
 
     def _assign_layer_to_variated_world_canvas_object(self, world_object_name: str):
         for variation in self.factory.VARIATIONS[world_object_name]:
             canvas_object = self.get_canvas_object(variation)
-            canvas_object.create_element_callback = lambda position, co=canvas_object: self._create_variated_world_object_at(
-                position, co
+            canvas_object.create_element_callback = (
+                lambda position, co=canvas_object: self._create_variated_world_object_at(
+                    position, co
+                )
+            )
+            canvas_object.remove_element_callback = (
+                lambda position, co=canvas_object: self._remove_world_object_at(
+                    position, co
+                )
             )
 
     def _create_world_object_at(
@@ -77,10 +89,18 @@ class CanvasObjectsManager:
         layer = cast(
             "WorldObjectsLayer", self._get_grid_layer_of_canvas_object(canvas_object)
         )
-        args = canvas_object.world_object_args
+        args = dict(canvas_object.world_object_args)
+        if "size" not in args:
+            args["size"] = canvas_object.size
         world_object = layer.create_world_object_at(position, **args)
 
         return world_object
+
+    def _remove_world_object_at(
+        self, position: tuple[int, int], canvas_object: "CanvasObject"
+    ):
+        layer = self._get_grid_layer_of_canvas_object(canvas_object)
+        return layer.remove_element_at(position)
 
     def _create_variated_world_object_at(
         self,
@@ -92,6 +112,7 @@ class CanvasObjectsManager:
             self._get_grid_layer_of_canvas_object(canvas_object),
         )
 
+        # Variations share the world-object name (e.g. "goal"); uniqueness handles replace.
         variations = self.factory.VARIATIONS[canvas_object.world_object_args["name"]]
         for element in layer.get_elements(
             *[v for v in variations if v != canvas_object.name]

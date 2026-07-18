@@ -16,8 +16,11 @@ impl DijkstraGrid {
         for &(x, y) in &level.solid_tiles {
             blocked[y * level.width + x] = true;
         }
-        let mut queue = VecDeque::from([(level.goal.0, level.goal.1)]);
-        distances[level.goal.1 * level.width + level.goal.0] = 0;
+        let goal_tiles = level.goal_tiles();
+        let mut queue = VecDeque::from(goal_tiles.clone());
+        for &(gx, gy) in &goal_tiles {
+            distances[gy * level.width + gx] = 0;
+        }
         while let Some((x, y)) = queue.pop_front() {
             let distance = distances[y * level.width + x] + 1;
             for (nx, ny) in [

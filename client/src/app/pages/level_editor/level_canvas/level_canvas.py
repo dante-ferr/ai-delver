@@ -6,6 +6,7 @@ from ._canvas_scroller import CanvasScroller
 from ._canvas_camera import CanvasCamera
 from ._canvas_grid_element_renderer import CanvasGridElementRenderer
 from ._canvas_overlay import CanvasOverlay
+from ._canvas_placement_ghost import CanvasPlacementGhost
 
 if TYPE_CHECKING:
     from pytiling import Direction, GridMap
@@ -33,6 +34,7 @@ class LevelCanvas(ctk.CTkCanvas):
         self.click_handler = CanvasClickHandler(self)
         self.grid_element_renderer = CanvasGridElementRenderer(self)
         self.overlay = CanvasOverlay(self)
+        self.placement_ghost = CanvasPlacementGhost(self)
         self.scroller = CanvasScroller(self)
 
         self.refresh()
@@ -61,6 +63,7 @@ class LevelCanvas(ctk.CTkCanvas):
 
         # Redraw non-image overlays like grid lines and borders
         self.overlay.refresh()
+        self.placement_ghost.refresh()
 
     def _add_event_listeners(self):
         """Binds canvas methods to events from the underlying level map data model."""
@@ -123,6 +126,7 @@ class LevelCanvas(ctk.CTkCanvas):
             self.tag_raise(tag)
         self.tag_raise("line")
         self.tag_raise("border")
+        self.tag_raise("placement_ghost")
 
     def items_with_tags(self, *tags):
         """

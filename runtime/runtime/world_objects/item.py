@@ -39,21 +39,19 @@ class Item(WorldObject):
 
         if sprite_path:
             img = image.load(sprite_path)
-            img.anchor_x = img.width // 2
-            img.anchor_y = img.height // 2
-
             return self._get_sprite(img)
         elif animation:
-            for frame in animation.frames:
-                frame.image.anchor_x = frame.image.width // 2
-                frame.image.anchor_y = frame.image.height // 2
-
             return self._get_sprite(animation)
 
     def _get_sprite(self, img: Any):
         from pyglet import sprite
 
         spr = sprite.Sprite(img, batch=self.batch)
+        # Sprite() may wrap a Texture that does not keep ImageData anchors —
+        # set them on the sprite's image or the sprite is bottom-left anchored
+        # while callers position it as if it were center-anchored.
+        spr.image.anchor_x = spr.width // 2
+        spr.image.anchor_y = spr.height // 2
         return spr
 
     def _compensate_offset_centering(self):

@@ -13,7 +13,7 @@ We have migrated the configuration from `config.json` to `config.toml` (using `t
 * **Why**: TOML supports native comments (`#`). In Reinforcement Learning, hyperparameter decisions (e.g., why `entropy_regularization` is `0.2` or why `wall_hugging_reward` is negative) are highly empirical. Having inline comments allows developers and AI orchestrators to document changes and understand tuning logic.
 
 ### Parameters to Expose
-We intend to make these parameters fully configurable via the CLI (and eventually GUI knobs) so that an orchestrating AI agent can automatically tune the policy:
+We intend to make these parameters fully configurable via the CLI (and eventually GUI knobs) so that an orchestrating AI agent can automatically tune the **training engine** (see [Agentic Fine-Tuning Protocol](agentic_fine_tuning_protocol.md)):
 
 | Parameter | Type | Default | Description |
 | :--- | :---: | :---: | :--- |

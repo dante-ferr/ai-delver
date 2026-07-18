@@ -147,10 +147,23 @@ impl RustPhysicsEngine {
 
         let mut goal_x = 0.0;
         let mut goal_y = 0.0;
-        for &(x, y) in goal_tiles {
-            grid.set(x, y, 3);
-            goal_x = (x as f32 + 0.5) * tile_size;
-            goal_y = (height as f32 - y as f32 - 0.5) * tile_size;
+        if !goal_tiles.is_empty() {
+            let mut min_x = usize::MAX;
+            let mut max_x = 0usize;
+            let mut min_y = usize::MAX;
+            let mut max_y = 0usize;
+            for &(x, y) in goal_tiles {
+                grid.set(x, y, 3);
+                min_x = min_x.min(x);
+                max_x = max_x.max(x);
+                min_y = min_y.min(y);
+                max_y = max_y.max(y);
+            }
+            // Sprite / BaseGoal sit at the geometric center of the full footprint
+            // (physics space). Python Goal rendering adds +tile_size on Y to match
+            // pytiling tile sprites.
+            goal_x = (min_x as f32 + max_x as f32 + 1.0) * 0.5 * tile_size;
+            goal_y = (height as f32 - (min_y as f32 + max_y as f32 + 1.0) * 0.5) * tile_size;
         }
 
         let mut entities = HashMap::new();
@@ -434,5 +447,131 @@ mod tests {
         assert_eq!(engine.goal_position(), (56.0, 24.0));
         assert_eq!(engine.local_view("delver", 7).unwrap().len(), 225);
         assert_eq!(engine.max_velocity(), (500.0, 1000.0));
+    }
+
+    #[test]
+    fn goal_sprite_uses_footprint_center() {
+        // Bottom-left (2, 3), size 2x2 → cells (2,2),(3,2),(2,3),(3,3)
+        let goals = [(2, 2), (3, 2), (2, 3), (3, 3)];
+        let engine =
+            RustPhysicsEngine::from_geometry_ref(6, 5, &[], &goals, 24.0, 40.0, 16.0);
+        // Footprint center: x midpoint of tiles 2..3 → 48; y midpoint → 32
+        assert_eq!(engine.goal_position(), (48.0, 32.0));
+    }
+
+    /// Empirical jump envelope vs tile surfaces (y-up world, row 0 = top of grid).
+    ///
+    /// Tuned for reliable +4 surface rise (~64px) with apex ~70px (~4.4 tiles) so
+    /// wall-kiss landings are not subframe-fragile. A +5 rise (80px) stays unreachable.
+    #[test]
+    fn measures_jump_apex_and_ledge_landing() {
+        let tile = 16.0_f32;
+        let width = 16_usize;
+        let height = 14_usize;
+        let floor_row = height - 1; // bottom row
+        let half_h = DelverConfig::default().player_height / 2.0;
+        let half_w = DelverConfig::default().player_width / 2.0;
+
+        // Continuous floor on the bottom row.
+        let mut solids: Vec<(usize, usize)> = (0..width).map(|x| (x, floor_row)).collect();
+        // Floating +4 ledge (row delta 4) — wide enough to stand on after a wall-kiss.
+        let ledge4 = floor_row - 4;
+        for x in 6..10 {
+            solids.push((x, ledge4));
+        }
+        // Floating +5 ledge further right (should remain unreachable).
+        let ledge5 = floor_row - 5;
+        for x in 12..15 {
+            solids.push((x, ledge5));
+        }
+
+        let floor_top = (height - floor_row) as f32 * tile; // == tile
+        let ledge4_top = (height - ledge4) as f32 * tile;
+        let ledge5_top = (height - ledge5) as f32 * tile;
+        // Start kissing the left face of the +4 ledge (wall-kiss takeoff).
+        let ledge4_left = 6.0 * tile;
+        let start_x = ledge4_left - half_w - 0.5;
+        let start_y = floor_top + half_h + 1.0;
+
+        let mut engine = RustPhysicsEngine::from_geometry_ref(
+            width,
+            height,
+            &solids,
+            &[],
+            start_x,
+            start_y,
+            tile,
+        );
+
+        // Settle onto the floor.
+        engine.set_delver_action(0.0, false).unwrap();
+        for _ in 0..120 {
+            let _ = engine.step_native(1.0 / 60.0).unwrap();
+        }
+        let grounded = engine.delver().unwrap();
+        let stand_y = grounded.y;
+        let stand_feet = stand_y - half_h;
+        assert!(
+            grounded.is_on_ground,
+            "expected to be grounded after settle; feet={stand_feet}, floor_top={floor_top}"
+        );
+
+        // Jump while holding run into the ledge face (wall-kiss ascent).
+        engine.set_delver_action(1.0, true).unwrap();
+        let mut max_y = stand_y;
+        let mut max_feet = stand_feet;
+        let mut landed_on_4 = false;
+        let mut landed_on_5 = false;
+
+        for i in 0..300 {
+            if i == 4 {
+                // Release jump after takeoff; keep pressing into the ledge.
+                engine.set_delver_action(1.0, false).unwrap();
+            }
+            let d = engine.step_native(1.0 / 60.0).unwrap();
+            max_y = max_y.max(d.y);
+            max_feet = max_feet.max(d.y - half_h);
+            if d.is_on_ground {
+                let feet = d.y - half_h;
+                if d.x >= 6.0 * tile && d.x < 10.0 * tile && (feet - ledge4_top).abs() < 4.0 {
+                    landed_on_4 = true;
+                }
+                if d.x >= 12.0 * tile && d.x < 15.0 * tile && (feet - ledge5_top).abs() < 4.0 {
+                    landed_on_5 = true;
+                }
+            }
+        }
+
+        let rise_px = max_y - stand_y;
+        let rise_tiles = rise_px / tile;
+        let feet_rise_px = max_feet - stand_feet;
+        eprintln!(
+            "jump_measure stand_y={stand_y:.3} stand_feet={stand_feet:.3} floor_top={floor_top:.3}"
+        );
+        eprintln!(
+            "jump_measure max_y={max_y:.3} rise_px={rise_px:.3} rise_tiles={rise_tiles:.3}"
+        );
+        eprintln!(
+            "jump_measure max_feet={max_feet:.3} feet_rise_px={feet_rise_px:.3} feet_rise_tiles={}",
+            feet_rise_px / tile
+        );
+        eprintln!(
+            "jump_measure ledge4_top={ledge4_top:.3} ledge5_top={ledge5_top:.3} landed4={landed_on_4} landed5={landed_on_5}"
+        );
+
+        // Ballistic target ~70px / 4.375 tiles; Rapier should land in a tight band.
+        // Contact with the ledge face can shave a little off free-apex, so allow a wider floor.
+        assert!(
+            (4.2..=4.5).contains(&rise_tiles),
+            "expected ~4.2–4.5 tile COM rise, got {rise_tiles}"
+        );
+        assert!(
+            landed_on_4,
+            "must land on +4 via wall-kiss approach; feet apex was {max_feet}, ledge4_top={ledge4_top}"
+        );
+        assert!(
+            !landed_on_5,
+            "must not land on a +5 surface rise (80px); feet apex was {max_feet}"
+        );
     }
 }

@@ -4,6 +4,7 @@ from ..grid_map.world_objects_map import WorldObjectsLayer
 from ..grid_map import MixedMap
 from ..level import Level
 from level.config import *
+from level.world_object_sizes import world_object_size
 
 MAP_SIZE = (START_MAP_WIDTH, START_MAP_HEIGHT)
 TILE_SIZE = (TILE_WIDTH, TILE_HEIGHT)
@@ -12,8 +13,15 @@ TILE_SIZE = (TILE_WIDTH, TILE_HEIGHT)
 class LevelFactory:
 
     def create_level(self):
+        level = self.create_blank_level(MAP_SIZE)
+        self._create_starting_tiles()
+        self.tilemap.lock_edges_if_needed()
+        self._create_starting_world_objects()
+        return level
 
-        mixed_map = MixedMap(TILE_SIZE, MAP_SIZE, MIN_GRID_SIZE, MAX_GRID_SIZE)
+    def create_blank_level(self, grid_size: tuple[int, int]) -> Level:
+        """Create an empty level shell (layers configured, no platforms or world objects)."""
+        mixed_map = MixedMap(TILE_SIZE, grid_size, MIN_GRID_SIZE, MAX_GRID_SIZE)
         self.tilemap = mixed_map.tilemap
         self.world_objects_map = mixed_map.world_objects_map
         self._configure_tilemap()
@@ -22,11 +30,6 @@ class LevelFactory:
 
         level = Level(mixed_map)
         level.map.add_layer_concurrence("platforms", "essentials")
-
-        self._create_starting_tiles()
-        self.tilemap.lock_edges_if_needed()
-        self._create_starting_world_objects()
-
         return level
 
     def _configure_tilemap(self):
@@ -58,8 +61,15 @@ class LevelFactory:
         essentials_layer = self.world_objects_map.get_layer("essentials")
 
         essentials_layer.create_world_object_at(
-            START_DELVER_POSITION, "delver", unique=True
+            START_DELVER_POSITION,
+            "delver",
+            unique=True,
+            size=world_object_size("delver"),
         )
         essentials_layer.create_world_object_at(
-            START_GOAL_POSITION, "goal", tags=["variation_battery_snack"], unique=True
+            START_GOAL_POSITION,
+            "goal",
+            tags=["variation_battery_snack"],
+            unique=True,
+            size=world_object_size("goal"),
         )

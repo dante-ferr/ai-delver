@@ -2,6 +2,7 @@ from ._canvas_objects_layer import CanvasObjectsLayer
 from src.config import config
 from .canvas_object import CanvasObject
 from typing import Any
+from level import world_object_size
 
 
 class CanvasObjectsFactory:
@@ -14,7 +15,11 @@ class CanvasObjectsFactory:
         platforms.add_canvas_object(self._create_canvas_object("platform"))
 
         essentials = CanvasObjectsLayer("essentials")
-        essentials.add_canvas_object(self._create_canvas_object("delver", unique=True))
+        essentials.add_canvas_object(
+            self._create_canvas_object(
+                "delver", unique=True, size=world_object_size("delver")
+            )
+        )
         for canvas_object in self._create_variated_canvas_objects("goal", unique=True):
             essentials.add_canvas_object(canvas_object)
 
@@ -25,16 +30,18 @@ class CanvasObjectsFactory:
     ):
         canvas_objects = []
         variations = self.VARIATIONS.get(world_object_name, [])
+        size = world_object_size(world_object_name)
 
         for variation in variations:
             canvas_object = self._create_canvas_object(
                 variation,
                 path=str(
                     config.ASSETS_PATH
-                    / f"img/representations/{world_object_name}/{variation}.png"
+                    / f"img/nxt/{world_object_name}/{variation}.png"
                 ),
                 name=world_object_name,
                 tags=[f"variation_{variation}"],
+                size=size,
                 **world_object_args,
             )
             canvas_objects.append(canvas_object)
@@ -52,7 +59,7 @@ class CanvasObjectsFactory:
 
         if path is None:
             path = str(
-                config.ASSETS_PATH / f"img/representations/{canvas_object_name}.png"
+                config.ASSETS_PATH / f"img/nxt/{canvas_object_name}.png"
             )
 
         return CanvasObject(canvas_object_name, path, world_object_args)

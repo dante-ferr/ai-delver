@@ -16,10 +16,7 @@ class CanvasObject:
         Args:
             name: The name of the canvas object.
             image_path: The path to the image of the canvas object.
-            create_element_callback: The function to call when the canvas object is created.
-            remove_element_callback: The function to call when the canvas object is removed.
-            unique: Whether the canvas object is unique.
-            world_object_name: The name of the world object that the canvas object represents. By default, the name of the canvas object is used (the first parameter).
+            world_object_args: Args forwarded when creating the underlying world object.
         """
         self.name = name
         self.world_object_args = world_object_args or {}
@@ -29,6 +26,12 @@ class CanvasObject:
 
         self.image = Image.open(image_path)
         self.layer: "CanvasObjectsLayer | None" = None
+
+    @property
+    def size(self) -> tuple[int, int]:
+        """Footprint in tiles (width, height). Defaults to 1x1."""
+        raw = self.world_object_args.get("size", (1, 1))
+        return (int(raw[0]), int(raw[1]))
 
     @property
     def create_element_callback(self):
@@ -44,10 +47,6 @@ class CanvasObject:
 
     @property
     def remove_element_callback(self):
-        if self._remove_element_callback is None:
-            raise ValueError(
-                f"remove_element_callback is not set for {self.name} canvas object."
-            )
         return self._remove_element_callback
 
     @remove_element_callback.setter

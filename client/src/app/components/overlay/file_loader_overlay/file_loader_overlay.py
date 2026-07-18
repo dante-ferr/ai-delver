@@ -31,7 +31,7 @@ class FileLoaderOverlay(Overlay):
 
         label = ctk.CTkLabel(
             self,
-            text=f"Choose a {file_type} file to load.",
+            text=self._prompt_text(),
             wraplength=320,
             font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
         )
@@ -47,7 +47,7 @@ class FileLoaderOverlay(Overlay):
             font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         self.filter_entry.pack(padx=12, pady=(0, 8), fill="x")
-        self.filter_entry.bind("<Return>", lambda _e: self._load())
+        self.filter_entry.bind("<Return>", lambda _e: self._on_action())
         self.filter_entry.bind("<Escape>", lambda _e: self._close())
 
         self.list_frame = MouseWheelScrollableFrame(
@@ -68,19 +68,28 @@ class FileLoaderOverlay(Overlay):
 
         self._select(self._selected_name)
 
-        load_button = StandardButton(
+        action_button = StandardButton(
             self,
-            text="Load",
-            command=self._load,
+            text=self._action_button_text(),
+            command=self._on_action,
             font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
         )
-        load_button.pack(padx=12, pady=(0, 12), anchor="e")
+        action_button.pack(padx=12, pady=(0, 12), anchor="e")
 
-        self.bind("<Return>", lambda _e: self._load())
+        self.bind("<Return>", lambda _e: self._on_action())
         self.bind("<Escape>", lambda _e: self._close())
 
         self._post_init_config()
         self.after(50, self.filter_entry.focus_set)
+
+    def _prompt_text(self) -> str:
+        return f"Choose a {self.file_type} file to load."
+
+    def _action_button_text(self) -> str:
+        return "Load"
+
+    def _on_action(self):
+        self._load()
 
     def _post_init_config(self):
         self.minsize(width=360, height=420)
@@ -106,13 +115,13 @@ class FileLoaderOverlay(Overlay):
         def on_select(_event=None, selected=name):
             self._select(selected)
 
-        def on_load(_event=None, selected=name):
+        def on_activate(_event=None, selected=name):
             self._select(selected)
-            self._load()
+            self._on_action()
 
         for widget in (row, label):
             widget.bind("<Button-1>", on_select)
-            widget.bind("<Double-Button-1>", on_load)
+            widget.bind("<Double-Button-1>", on_activate)
 
         self.list_frame.bind_scroll_events_recursively(row)
         row.pack(fill="x", pady=1)

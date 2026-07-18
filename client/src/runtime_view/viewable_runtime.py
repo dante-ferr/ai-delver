@@ -16,20 +16,19 @@ class ViewableRuntime(Runtime):
 
     def __init__(self, level: "Level", physics: bool = True):
         self.camera: None | Camera = None
+        # Fixed initial size from config; leave resizable so the compositor
+        # (Hyprland/XWayland) can tile/float without fighting pyglet.
         self._window: Window | None = pyglet.window.Window(
-            fullscreen=False, resizable=False
+            width=config.WINDOW_WIDTH,
+            height=config.WINDOW_HEIGHT,
+            caption=config.WINDOW_TITLE,
+            fullscreen=False,
+            resizable=True,
         )
         super().__init__(level, render=True, physics=physics)
 
         self.execution_speed = 1.0
         self.set_clear_color()
-
-        def _maximize_callback(dt):
-            if self._window:
-                self.window.maximize()
-                pyglet.clock.schedule_once(self._on_screen_maximize_interval, 0.01)
-
-        pyglet.clock.schedule_once(_maximize_callback, 0.1)
 
         self.keys = pyglet.window.key.KeyStateHandler()
         self._create_controls()
@@ -39,6 +38,7 @@ class ViewableRuntime(Runtime):
                 on_close=self._on_window_close,
             )
         self.tilemap_renderer = self.tilemap_renderer_factory()
+        self._setup_camera()
 
     def tilemap_renderer_factory(self):
         tilemap_renderer = TilemapRenderer(self.level.map.tilemap)
@@ -59,10 +59,9 @@ class ViewableRuntime(Runtime):
         self.controls = ViewControls(self.keys)
         self.controls.append_delver(self.delver)
 
-    def _on_screen_maximize_interval(self, dt):
+    def _setup_camera(self):
         if not self._window:
             return
-        self._lock_window_size()
         self.camera = Camera(self.window)
         self.camera.start_following(self.delver)
         self.controls.append_camera(self.camera)
@@ -73,21 +72,6 @@ class ViewableRuntime(Runtime):
         from app_manager import app_manager
         app_manager.stop_viewable_runtimes()
         return pyglet.event.EVENT_HANDLED
-
-    def _lock_window_size(self):
-        """Locks the window size completely (even on Linux)"""
-        if not self._window:
-            return
-        width, height = self.window.width, self.window.height
-        self.window.set_minimum_size(width, height)
-        self.window.set_maximum_size(width, height)
-        self.window.set_size(width, height)
-
-        @self.window.event
-        def on_resize(new_width, new_height):
-            if new_width != width or new_height != height:
-                self.window.set_size(width, height)
-            return pyglet.event.EVENT_HANDLED
 
     def update(self, dt):
         """Main update and drawing loop, called by pyglet's clock."""

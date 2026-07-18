@@ -45,7 +45,16 @@ class TrainingClient:
             if not os.path.exists(save_path):
                 level.save(save_path)
 
-    def create_training_payload(self, levels: list[str], episodes_per_cycle: int, mode: str, amount_of_cycles: int, config_overrides: dict = None, model_bytes_b64: str = None) -> dict:
+    def create_training_payload(
+        self,
+        levels: list[str],
+        mode: str,
+        amount_of_cycles: int,
+        runs_per_cycle: int | None = None,
+        episodes_per_cycle: int | None = None,
+        config_overrides: dict = None,
+        model_bytes_b64: str = None,
+    ) -> dict:
         """Builds the request payload dictionary expected by the server."""
         level_jsons = []
         for level_name in levels:
@@ -59,10 +68,13 @@ class TrainingClient:
 
         payload = {
             "levels": level_jsons,
-            "episodes_per_cycle": episodes_per_cycle,
             "level_transitioning_mode": mode,
-            "amount_of_cycles": amount_of_cycles if mode == "static" else None
+            "amount_of_cycles": amount_of_cycles if mode == "static" else None,
         }
+        if runs_per_cycle is not None:
+            payload["runs_per_cycle"] = runs_per_cycle
+        if episodes_per_cycle is not None:
+            payload["episodes_per_cycle"] = episodes_per_cycle
         if config_overrides:
             payload["config_overrides"] = config_overrides
         if model_bytes_b64:

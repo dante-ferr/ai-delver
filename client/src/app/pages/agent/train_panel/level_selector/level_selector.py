@@ -8,7 +8,7 @@ from src.config import config
 
 class LevelSelector(ctk.CTkFrame):
 
-    def __init__(self, master, on_amount_of_episodes_change: Callable, *args):
+    def __init__(self, master, on_amount_of_runs_change: Callable, *args):
         super().__init__(master, *args, height=240, corner_radius=8)
 
         section_title = SectionTitle(self, "Training Levels")
@@ -27,7 +27,7 @@ class LevelSelector(ctk.CTkFrame):
         level_add_button = LevelAddButton(header)
         level_add_button.pack(side="right", pady=0)
 
-        self.level_list = LevelList(self, on_amount_of_episodes_change)
+        self.level_list = LevelList(self, on_amount_of_runs_change)
         self.level_list.pack(fill="both", padx=8, expand=True)
 
         last_label = ctk.CTkLabel(

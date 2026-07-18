@@ -33,7 +33,13 @@ use std::{
 pub struct TrainRequest {
     pub levels: Vec<Value>,
     pub amount_of_cycles: Option<usize>,
-    pub episodes_per_cycle: usize,
+    /// Preferred user-facing budget: full-length run equivalents per cycle.
+    /// Intelligence converts these into collect-window episode slots.
+    #[serde(default)]
+    pub runs_per_cycle: Option<usize>,
+    /// Legacy / low-level collect-window slot budget. Used when `runs_per_cycle` is absent.
+    #[serde(default)]
+    pub episodes_per_cycle: Option<usize>,
     pub level_transitioning_mode: String,
     pub config_overrides: Option<Value>,
     pub model_bytes_b64: Option<String>,
@@ -44,6 +50,9 @@ pub async fn init(State(state): State<Arc<AppState>>) -> Json<Value> {
         "message": "AI Delver Intelligence API is up and running.",
         "env_batch_size": state.base_config.env_batch_size,
         "max_training_levels": state.base_config.max_training_levels,
+        "collect_seconds_per_env": state.base_config.collect_seconds_per_env,
+        "max_seconds_per_episode": state.base_config.max_seconds_per_episode,
+        "episodes_per_run": state.base_config.episodes_per_run(),
     }))
 }
 
@@ -60,11 +69,13 @@ pub async fn train(
         ));
     }
     let cycles = request.amount_of_cycles.unwrap_or(1);
-    if cycles == 0 || request.episodes_per_cycle == 0 || request.levels.is_empty() {
+    let has_runs = request.runs_per_cycle.unwrap_or(0) > 0;
+    let has_episodes = request.episodes_per_cycle.unwrap_or(0) > 0;
+    if cycles == 0 || request.levels.is_empty() || (!has_runs && !has_episodes) {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(json!({
-                "message": "levels, amount_of_cycles, and episodes_per_cycle must be positive"
+                "message": "levels, amount_of_cycles, and runs_per_cycle (or episodes_per_cycle) must be positive"
             })),
         ));
     }
@@ -190,6 +201,20 @@ fn run_session_training(
     }
     apply_config_overrides(&mut config, request.config_overrides.as_ref());
 
+    let episodes_per_cycle = resolve_episodes_per_cycle(&request, &config)?;
+    let _ = session.event_tx.send(ReplayMessage::Event(json!({
+        "type": "info",
+        "message": format!(
+            "Training budget: {} episode slot(s) per cycle ({} run(s) × {} slots/run, or legacy episodes).",
+            episodes_per_cycle,
+            request.runs_per_cycle.unwrap_or(0),
+            config.episodes_per_run()
+        ),
+        "runs_per_cycle": request.runs_per_cycle,
+        "episodes_per_cycle": episodes_per_cycle,
+        "episodes_per_run": config.episodes_per_run(),
+    })));
+
     let mut levels = Vec::with_capacity(request.levels.len());
     let mut level_hashes = Vec::with_capacity(request.levels.len());
     for value in &request.levels {
@@ -282,7 +307,7 @@ fn run_session_training(
         &level_hashes,
         config,
         cycles,
-        request.episodes_per_cycle,
+        episodes_per_cycle,
         "server",
         checkpoint_interval,
         &state.data_root,
@@ -292,6 +317,17 @@ fn run_session_training(
         on_event,
     )?;
     Ok(())
+}
+
+/// Prefer `runs_per_cycle` (converted via config timing) over legacy `episodes_per_cycle`.
+fn resolve_episodes_per_cycle(request: &TrainRequest, config: &Config) -> anyhow::Result<usize> {
+    if let Some(runs) = request.runs_per_cycle.filter(|&runs| runs > 0) {
+        return Ok(config.runs_to_episodes(runs).max(1));
+    }
+    if let Some(episodes) = request.episodes_per_cycle.filter(|&episodes| episodes > 0) {
+        return Ok(episodes);
+    }
+    anyhow::bail!("runs_per_cycle or episodes_per_cycle must be positive")
 }
 
 fn checkpoint_to_b64(path: Option<&Value>) -> Value {

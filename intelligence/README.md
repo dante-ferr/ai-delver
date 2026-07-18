@@ -45,8 +45,6 @@ One-shot train inside the same image (exits when done):
 | `POST /interrupt-training/{session_id}` | Cooperative cancel |
 | `WS /episode-trajectory/{session_id}` | Metrics, progress showcase stubs, checkpoints, weights |
 
-See [Training Server Gap After the Rust Migration](../docs/src/training_server_gap.md) for why this façade exists and what is still incomplete (full trajectory replay, TF→`.ot` weight migration).
-
 ## Local prerequisites
 
 Install libtorch **2.7.x** matching `tch 0.20`, or use the download feature.
@@ -79,10 +77,11 @@ cargo run --release \
   train \
   --levels "Ai Test #1" \
   --cycles 10 \
-  --episodes-per-cycle 38 \
+  --runs-per-cycle 5 \
   --agent ppo_delver
 ```
 
+`--runs-per-cycle` is preferred (full-length run equivalents). The trainer converts runs to collect-window episode slots using `max_seconds_per_episode / collect_seconds_per_env`. Legacy `--episodes-per-cycle` still works.
 ## Serve (CLI)
 
 ```bash

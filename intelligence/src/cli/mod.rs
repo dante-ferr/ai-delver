@@ -37,6 +37,11 @@ pub struct TrainArgs {
     pub levels: Vec<String>,
     #[arg(long, default_value_t = 1)]
     pub cycles: usize,
+    /// Full-length run equivalents per cycle. Converted to episode slots using
+    /// max_seconds_per_episode / collect_seconds_per_env.
+    #[arg(long)]
+    pub runs_per_cycle: Option<usize>,
+    /// Legacy collect-window slot budget. Ignored when --runs-per-cycle is set.
     #[arg(long, default_value_t = 38)]
     pub episodes_per_cycle: usize,
     #[arg(long, value_enum, default_value_t = TrainingMode::Static)]

@@ -118,7 +118,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
         # Build command args
         levels_str = ",".join(training_state_manager.training_levels)
         cycles = str(int(float(training_state_manager.amount_of_cycles)))
-        episodes_per_cycle = str(int(float(training_state_manager.episodes_per_cycle)))
+        runs_per_cycle = str(int(float(training_state_manager.runs_per_cycle)))
         mode = training_state_manager.get_value("level_transitioning_mode")
         agent_name = agent_loader.agent.name
         
@@ -129,7 +129,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
             "train",
             "--levels", levels_str,
             "--cycles", cycles,
-            "--episodes-per-cycle", episodes_per_cycle,
+            "--runs-per-cycle", runs_per_cycle,
             "--mode", mode,
             "--agent", agent_name,
             "--server", gui_training_client.server_url

@@ -22,7 +22,7 @@ class TrajectoryHeader(ctk.CTkFrame):
 
         # Row 0: controls
         self.label = ctk.CTkLabel(
-            self, text="Episode:", font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE, weight="bold")
+            self, text="Cycle:", font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE, weight="bold")
         )
         self.label.grid(row=0, column=0, padx=(0, 4), pady=(0, 4), sticky="w")
 

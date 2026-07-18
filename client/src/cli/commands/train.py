@@ -67,15 +67,31 @@ def run_train(args):
         try:
             init_data = await client_instance.get_initial_info()
             env_batch_size = init_data.get("env_batch_size", 32)
+            episodes_per_run = init_data.get("episodes_per_run", 12)
         except Exception as e:
             print_json("error", message=f"Failed to connect to training server at {args.server}: {e}")
             return
 
-        remainder = args.episodes_per_cycle % env_batch_size
-        if remainder != 0:
-            adjusted = max(env_batch_size, round(args.episodes_per_cycle / env_batch_size) * env_batch_size)
-            print_json("info", message=f"Adjusted episodes-per-cycle from {args.episodes_per_cycle} to {adjusted} to align with env_batch_size ({env_batch_size}) constraints.")
-            args.episodes_per_cycle = adjusted
+        runs_per_cycle = getattr(args, "runs_per_cycle", None)
+        if runs_per_cycle is not None and runs_per_cycle > 0:
+            print_json(
+                "info",
+                message=(
+                    f"Using runs_per_cycle={runs_per_cycle}; server will convert to "
+                    f"~{runs_per_cycle * episodes_per_run} episode slots "
+                    f"({episodes_per_run} slots per run)."
+                ),
+            )
+        else:
+            if args.episodes_per_cycle is None or args.episodes_per_cycle <= 0:
+                print_json("error", message="train requires --runs-per-cycle or a positive --episodes-per-cycle")
+                return
+            remainder = args.episodes_per_cycle % env_batch_size
+            if remainder != 0:
+                adjusted = max(env_batch_size, round(args.episodes_per_cycle / env_batch_size) * env_batch_size)
+                print_json("info", message=f"Adjusted episodes-per-cycle from {args.episodes_per_cycle} to {adjusted} to align with env_batch_size ({env_batch_size}) constraints.")
+                args.episodes_per_cycle = adjusted
+            runs_per_cycle = None
 
         print_json("init_started", message="Preparing levels and verifying configuration...")
         try:
@@ -153,7 +169,17 @@ def run_train(args):
             else:
                 print_json("info", message=f"New challenge detected (levels: {', '.join(new_levels)}). Respecting user-specified learning rate override of {args.learning_rate}.")
 
-        standard_keys = {"levels", "cycles", "episodes_per_cycle", "mode", "agent", "server", "command", "checkpoint"}
+        standard_keys = {
+            "levels",
+            "cycles",
+            "episodes_per_cycle",
+            "runs_per_cycle",
+            "mode",
+            "agent",
+            "server",
+            "command",
+            "checkpoint",
+        }
         config_overrides = {
             key: val for key, val in vars(args).items()
             if key not in standard_keys and val is not None
@@ -161,9 +187,10 @@ def run_train(args):
 
         payload = client_instance.create_training_payload(
             levels_list,
-            args.episodes_per_cycle,
             args.mode,
             args.cycles,
+            runs_per_cycle=runs_per_cycle,
+            episodes_per_cycle=None if runs_per_cycle else args.episodes_per_cycle,
             config_overrides=config_overrides if config_overrides else None,
             model_bytes_b64=model_bytes_b64
         )

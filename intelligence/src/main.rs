@@ -64,8 +64,29 @@ fn run_train(args: TrainArgs) -> Result<()> {
             config.env_batch_size = value;
         }
     }
-    if config.env_batch_size == 0 || args.episodes_per_cycle == 0 {
-        bail!("environment and episode counts must be positive");
+    if config.env_batch_size == 0 {
+        bail!("environment batch size must be positive");
+    }
+    let episodes_per_cycle = match args.runs_per_cycle {
+        Some(runs) if runs > 0 => config.runs_to_episodes(runs),
+        _ => args.episodes_per_cycle,
+    };
+    if episodes_per_cycle == 0 {
+        bail!("run/episode counts must be positive");
+    }
+    if let Some(runs) = args.runs_per_cycle.filter(|&runs| runs > 0) {
+        cli::emit(
+            "info",
+            json!({
+                "message": format!(
+                    "Converted {runs} run(s) to {episodes_per_cycle} episode slot(s) per cycle ({} slots/run)",
+                    config.episodes_per_run()
+                ),
+                "runs_per_cycle": runs,
+                "episodes_per_cycle": episodes_per_cycle,
+                "episodes_per_run": config.episodes_per_run(),
+            }),
+        );
     }
     let device = resolve_device(&config.device)?;
     cli::emit(
@@ -116,7 +137,7 @@ fn run_train(args: TrainArgs) -> Result<()> {
         &level_hashes,
         config,
         args.cycles,
-        args.episodes_per_cycle,
+        episodes_per_cycle,
         &args.agent,
         checkpoint_interval,
         &intelligence_root.join("data"),

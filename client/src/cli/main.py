@@ -19,7 +19,18 @@ def main():
     train_p = subparsers.add_parser("train", help="Starts a training session")
     train_p.add_argument("--levels", required=True, help="Comma-separated level names")
     train_p.add_argument("--cycles", type=int, default=0, help="Amount of cycles for static mode")
-    train_p.add_argument("--episodes-per-cycle", type=int, required=True, help="Episodes per cycle")
+    train_p.add_argument(
+        "--runs-per-cycle",
+        type=int,
+        default=None,
+        help="Full-length run equivalents per cycle (preferred; server converts to episode slots)",
+    )
+    train_p.add_argument(
+        "--episodes-per-cycle",
+        type=int,
+        default=None,
+        help="Legacy collect-window slot budget (used when --runs-per-cycle is omitted)",
+    )
     train_p.add_argument("--mode", choices=["static", "dynamic"], required=True, help="Transitioning mode")
     train_p.add_argument("--agent", required=True, help="Agent name")
     train_p.add_argument("--server", default="localhost:8001", help="Training server URL")
@@ -75,6 +86,8 @@ def main():
     args = parser.parse_args()
 
     if args.command == "train":
+        if getattr(args, "runs_per_cycle", None) is None and getattr(args, "episodes_per_cycle", None) is None:
+            parser.error("train requires --runs-per-cycle or --episodes-per-cycle")
         run_train(args)
     elif args.command == "stats":
         run_stats(args.agent)

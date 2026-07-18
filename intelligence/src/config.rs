@@ -90,4 +90,17 @@ impl Config {
         .fold(0.0, f32::max)
         .max(1.0)
     }
+
+    /// How many collect-window training slots equal one full-length run.
+    ///
+    /// A run lasts up to `max_seconds_per_episode`; each training collect window
+    /// lasts `collect_seconds_per_env` (see trainer loop).
+    pub fn episodes_per_run(&self) -> usize {
+        (self.max_seconds_per_episode / self.collect_seconds_per_env.max(1)).max(1)
+    }
+
+    /// Converts a user-facing run budget into the trainer's episode-slot budget.
+    pub fn runs_to_episodes(&self, runs: usize) -> usize {
+        runs.saturating_mul(self.episodes_per_run())
+    }
 }

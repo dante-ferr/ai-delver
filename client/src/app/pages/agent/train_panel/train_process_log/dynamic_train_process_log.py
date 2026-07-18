@@ -31,5 +31,5 @@ class DynamicTrainProcessLog(TrainProcessLog):
 
     def update_level_episode_count(self, _):
         self.level_episode_count_label.configure(
-            text=f"Amount of training episodes in the current level: {training_state_manager.get_value("level_episode_count")}"
+            text=f"Finished segments this cycle: {training_state_manager.get_value("level_episode_count")}"
         )

@@ -2,6 +2,8 @@
 
 To train a reinforcement learning agent to handle complex layouts (platforming, traps, combat), AI Delver employs a **Player-Driven Curriculum** with **Automated Forgetting Prevention** safety nets.
 
+Orchestrating AIs that drive this loop via the CLI should also read the [Agentic Fine-Tuning Protocol](agentic_fine_tuning_protocol.md).
+
 ---
 
 ## 1. Player-Driven Curriculum (AI Coaching)

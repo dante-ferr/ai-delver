@@ -21,12 +21,12 @@ class TrainPanel(ctk.CTkFrame):
         )
 
         self.level_selector = LevelSelector(
-            self, on_amount_of_episodes_change=self._set_amount_of_episodes
+            self, on_amount_of_runs_change=self._set_amount_of_runs
         )
 
         self.episodes_setting_panel = EpisodesSettingPanel(
             self,
-            on_amount_of_episodes_change=self._set_amount_of_episodes,
+            on_amount_of_runs_change=self._set_amount_of_runs,
         )
         self.episodes_setting_panel.pack(pady=(0, 16), fill="x")
 
@@ -40,12 +40,12 @@ class TrainPanel(ctk.CTkFrame):
         )
         self.cycles_label.pack(anchor="w")
 
-        self.episodes_label = ctk.CTkLabel(
+        self.runs_label = ctk.CTkLabel(
             self.info_frame,
-            text=f"",
+            text="",
             font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
         )
-        self.episodes_label.pack(anchor="w")
+        self.runs_label.pack(anchor="w")
 
         self.level_selector.pack(
             pady=(config.STYLE.SECTION_SPACING, config.STYLE.SECTION_SPACING), fill="x"
@@ -60,7 +60,7 @@ class TrainPanel(ctk.CTkFrame):
             "level_transitioning_mode", self._on_transition_mode_change
         )
 
-        self._set_amount_of_episodes()
+        self._set_amount_of_runs()
 
     def _on_transition_mode_change(self, value):
         if value == "dynamic":
@@ -71,9 +71,9 @@ class TrainPanel(ctk.CTkFrame):
                 before=self.level_selector,
             )
 
-        self._set_amount_of_episodes()
+        self._set_amount_of_runs()
 
-    def _set_amount_of_episodes(self):
+    def _set_amount_of_runs(self):
         if not hasattr(self, "level_selector") or not hasattr(self, "episodes_setting_panel"):
             return
 
@@ -86,12 +86,12 @@ class TrainPanel(ctk.CTkFrame):
             text=f"{cycles_per_level} cycles per level (total: {total_cycles})"
         )
 
-        episodes_per_level = int(
+        runs_per_level = int(
             cycles_per_level
-            * self.episodes_setting_panel.episodes_per_cycle_input.get()
+            * self.episodes_setting_panel.runs_per_cycle_input.get()
         )
-        total_episodes = episodes_per_level * amount_of_levels
+        total_runs = runs_per_level * amount_of_levels
 
-        self.episodes_label.configure(
-            text=f"{episodes_per_level} episodes per level (total: {total_episodes})"
+        self.runs_label.configure(
+            text=f"{runs_per_level} runs per level (total: {total_runs})"
         )

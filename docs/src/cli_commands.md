@@ -16,13 +16,17 @@ Runs a full training session by submitting a training request to the intelligenc
 poetry run python src/cli/main.py train \
     --levels "Ai Test #1" \
     --cycles 10 \
-    --episodes-per-cycle 32 \
+    --runs-per-cycle 5 \
     --mode static \
     --agent ppo_delver
 ```
 
+> Prefer `--runs-per-cycle` (full-length run equivalents). The intelligence server converts runs into collect-window episode slots using `max_seconds_per_episode / collect_seconds_per_env` (default 60/5 = 12). Legacy `--episodes-per-cycle` remains for low-level / Optuna use.
+
 #### Optional Parameters and Hyperparameter Overrides
 You can optionally configure checkpoints or override individual training and reward parameters from `config.toml` for the duration of the training session:
+* `--runs-per-cycle <int>`: Full-length run equivalents of experience per cycle (preferred).
+* `--episodes-per-cycle <int>`: Legacy collect-window slot budget (used when `--runs-per-cycle` is omitted).
 * `--checkpoint-interval <int>`: Frequency (in cycles) to save intermediate checkpoints under `data/agents/<agent_name>/checkpoints/cycle_<N>.zip` (default `0`, which disables periodic saving).
 * `--checkpoint <name_or_number>`: Name or cycle number of an existing checkpoint to load from the checkpoints directory for warm-starting training.
 * `--learning-rate <float>`: Learning rate for the policy optimizer.
@@ -43,7 +47,7 @@ The CLI and the intelligence server employ a dynamic mapping pattern to transfer
 1. **Client-Side Filtering**:
    In `client/src/cli/commands/train.py`, the CLI separates session control arguments and client-side parameters from hyperparameter overrides by checking parsed inputs against a set of `standard_keys` (e.g., `levels`, `mode`, `agent`, etc.). Anything else is dynamically gathered into a `config_overrides` dictionary:
    ```python
-   standard_keys = {"levels", "cycles", "episodes_per_cycle", "mode", "agent", "server", "command", "checkpoint"}
+   standard_keys = {"levels", "cycles", "episodes_per_cycle", "runs_per_cycle", "mode", "agent", "server", "command", "checkpoint"}
    config_overrides = {
        key: val for key, val in vars(args).items()
        if key not in standard_keys and val is not None
@@ -116,18 +120,20 @@ poetry run python src/cli/main.py load-agent --path "data/agents/Brave Delver"
 ---
 
 ### `tune`
-Runs a developer-only automated hyperparameter tuning session using Optuna. It suggests parameters (learning rate, entropy regularization, finished reward) across multiple trials, runs the training script as a subprocess, prunes bad trials early if the loss diverges, and reports the best parameter set upon completion.
+Runs a developer-only automated hyperparameter tuning session using Optuna. It suggests parameters (learning rate, entropy regularization, finished reward) across multiple trials, runs `train` as a subprocess, prunes bad trials early if `abs(loss) > 20`, maximizes win rate from the child `stats` event, and emits `completed` with `best_params` / `best_value`.
 
 ```bash
 poetry run python src/cli/main.py tune \
     --levels "Ai Test #1" \
     --cycles 5 \
-    --episodes-per-cycle 32 \
+    --episodes-per-cycle 38 \
     --agent ppo_delver \
     --trials 10
 ```
 
 **GUI Trigger**: Developer CLI command only.
+
+For the full orchestrator ritual (when to `train` vs `tune`, warm-starts, and fine-tuning after new features), see [Agentic Fine-Tuning Protocol](agentic_fine_tuning_protocol.md).
 
 ---
 

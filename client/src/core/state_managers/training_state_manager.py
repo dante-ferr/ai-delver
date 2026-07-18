@@ -31,7 +31,7 @@ class TrainingStateManager(StateManager):
 
         # Set by the UI before training starts.
         self.amount_of_cycles: int = 0
-        self.episodes_per_cycle: int = 0
+        self.runs_per_cycle: int = 0
 
         # Real-time deep learning metrics accumulated during training
         self.nerd_loss_history: list[float] = []

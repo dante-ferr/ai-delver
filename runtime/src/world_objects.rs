@@ -1,4 +1,4 @@
-pub mod base_delver;
-pub mod base_goal;
 pub mod components;
+pub mod delver;
+pub mod goal;
 pub mod physics_entity;

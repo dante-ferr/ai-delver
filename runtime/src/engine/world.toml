@@ -1,0 +1,13 @@
+# World-level physics tunables.
+
+gravity = -1000.0
+physics_fps = 60.0
+
+# Static tile collider material
+tile_friction = 0.0
+tile_restitution = 0.0
+
+# Rapier integration / solver
+num_solver_iterations = 12
+num_additional_friction_iterations = 8
+num_internal_pgs_iterations = 2

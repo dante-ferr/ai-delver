@@ -1,0 +1,33 @@
+# Delver archetype physics / locomotion tunables.
+
+player_width = 10.0
+player_height = 38.0
+
+max_vx = 500.0
+max_vy = 1000.0
+
+move_force = 2300.0
+linear_damping = 15.0
+braking_force = 900.0
+# Below this horizontal speed with no run input, velocity snaps to zero
+idle_stop_speed = 10.0
+
+jump_impulse = 370.0
+# How long after leaving the ground can the player still jump (coyote time)
+jump_tolerance_max = 0.105
+# Minimum time between consecutive jumps
+jump_cooldown_max = 0.2
+
+# Rigid body mass
+mass = 100.0
+
+# Player collider shape / material
+border_radius = 0.2
+collider_density = 0.0
+collider_friction = 0.0
+collider_restitution = 0.0
+
+# Ground detector raycast parameters
+ray_offset_inward = 3.0
+ray_y_offset = 5.0
+max_toi = 5.2

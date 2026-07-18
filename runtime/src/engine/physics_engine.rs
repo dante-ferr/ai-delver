@@ -6,10 +6,10 @@ use pyo3::prelude::*;
 use rapier2d::prelude::*;
 
 use crate::engine::grid::TileGrid;
-use crate::engine::physics_constants::PhysicsConstants;
 use crate::engine::physics_world::PhysicsWorld;
-use crate::world_objects::base_delver::BaseDelver;
-use crate::world_objects::base_goal::BaseGoal;
+use crate::engine::world_config::WorldConfig;
+use crate::world_objects::delver::{BaseDelver, DelverConfig};
+use crate::world_objects::goal::BaseGoal;
 use crate::world_objects::physics_entity::PhysicsEntity;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -36,7 +36,7 @@ pub struct RustPhysicsEngine {
     grid: TileGrid,
     entities: HashMap<String, PhysicsEntity>,
     goal: BaseGoal,
-    consts: PhysicsConstants,
+    world_config: WorldConfig,
     world: PhysicsWorld,
 }
 
@@ -72,7 +72,8 @@ impl RustPhysicsEngine {
         start_y: f32,
         tile_size: f32,
     ) -> Self {
-        let consts = PhysicsConstants::default();
+        let delver_config = DelverConfig::default();
+        let world_config = WorldConfig::default();
         let mut grid = TileGrid::new(width, height, tile_size);
         let mut world = PhysicsWorld::new();
 
@@ -80,22 +81,22 @@ impl RustPhysicsEngine {
         let player_body = RigidBodyBuilder::dynamic()
             .translation(vector![start_x, start_y])
             .lock_rotations()
-            .additional_mass(100.0)
+            .additional_mass(delver_config.mass)
             .ccd_enabled(true)
             .build();
         let player_body_handle = world.rigid_bodies.insert(player_body);
 
-        let half_w = consts.player_width / 2.0;
-        let half_h = consts.player_height / 2.0;
-        let border_radius = 0.2;
+        let half_w = delver_config.player_width / 2.0;
+        let half_h = delver_config.player_height / 2.0;
+        let border_radius = delver_config.border_radius;
         let player_collider = ColliderBuilder::round_cuboid(
             half_w - border_radius,
             half_h - border_radius,
             border_radius,
         )
-        .density(0.0)
-        .friction(0.0)
-        .restitution(0.0)
+        .density(delver_config.collider_density)
+        .friction(delver_config.collider_friction)
+        .restitution(delver_config.collider_restitution)
         .build();
         world.colliders.insert_with_parent(
             player_collider,
@@ -135,8 +136,8 @@ impl RustPhysicsEngine {
 
                 let tile_collider = ColliderBuilder::cuboid(segment_width / 2.0, half_tile)
                     .translation(vector![cx, cy])
-                    .friction(0.0)
-                    .restitution(0.0)
+                    .friction(world_config.tile_friction)
+                    .restitution(world_config.tile_restitution)
                     .build();
                 world.colliders.insert(tile_collider);
 
@@ -153,7 +154,7 @@ impl RustPhysicsEngine {
         }
 
         let mut entities = HashMap::new();
-        let mut delver = BaseDelver::new("delver".to_string(), start_x, start_y);
+        let mut delver = BaseDelver::new("delver".to_string(), start_x, start_y, delver_config);
         delver.body_handle = player_body_handle;
         entities.insert("delver".to_string(), PhysicsEntity::Delver(delver));
 
@@ -161,7 +162,7 @@ impl RustPhysicsEngine {
             grid,
             entities,
             goal: BaseGoal::new(goal_x, goal_y),
-            consts,
+            world_config,
             world,
         }
     }
@@ -200,7 +201,7 @@ impl RustPhysicsEngine {
             return self.get_delver_native();
         }
 
-        let sub_dt = 1.0 / 60.0;
+        let sub_dt = 1.0 / self.world_config.physics_fps;
         let mut elapsed = 0.0;
         while elapsed < dt {
             let tick_dt = (dt - elapsed).min(sub_dt);
@@ -259,7 +260,13 @@ impl RustPhysicsEngine {
     }
 
     pub fn max_velocity(&self) -> (f32, f32) {
-        (self.consts.max_vx, self.consts.max_vy)
+        match self.entities.get("delver") {
+            Some(PhysicsEntity::Delver(delver)) => (delver.config.max_vx, delver.config.max_vy),
+            None => {
+                let config = DelverConfig::default();
+                (config.max_vx, config.max_vy)
+            }
+        }
     }
 
     pub fn get_entity_rotation_native(&self, id: &str) -> RuntimeResult<f32> {
@@ -392,12 +399,12 @@ impl RustPhysicsEngine {
         let entity_ids: Vec<String> = self.entities.keys().cloned().collect();
         for id in &entity_ids {
             let entity = self.entities.get_mut(id).unwrap();
-            entity.pre_step(dt, &mut self.world, &self.consts);
+            entity.pre_step(dt, &mut self.world);
         }
 
         // 2. Step the Physics World simulation
-        let gravity = vector![0.0, self.consts.gravity];
-        self.world.step(&gravity, dt);
+        let gravity = vector![0.0, self.world_config.gravity];
+        self.world.step(&gravity, dt, &self.world_config);
 
         // Update query pipeline after step so post-step raycasts query the new positions
         self.world
@@ -407,7 +414,7 @@ impl RustPhysicsEngine {
         // 3. Delegate post-step updates
         for id in &entity_ids {
             let entity = self.entities.get_mut(id).unwrap();
-            entity.post_step(&mut self.world, &self.consts, &self.grid);
+            entity.post_step(&mut self.world, &self.grid);
         }
     }
 }
@@ -429,4 +436,3 @@ mod tests {
         assert_eq!(engine.max_velocity(), (500.0, 1000.0));
     }
 }
-

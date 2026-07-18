@@ -12,7 +12,9 @@ default = ["python"]
 python = ["dep:pyo3"]
 
 [dependencies]
+anyhow = "1"
 pyo3 = { version = "0.22", features = ["extension-module"], optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+toml = "0.9"
 rapier2d = { version = "0.18", features = ["serde-serialize"] }

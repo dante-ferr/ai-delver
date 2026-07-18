@@ -1,5 +1,7 @@
 use rapier2d::prelude::*;
 
+use crate::engine::world_config::WorldConfig;
+
 pub struct PhysicsWorld {
     pub pipeline: PhysicsPipeline,
     pub island_manager: IslandManager,
@@ -29,12 +31,15 @@ impl PhysicsWorld {
         }
     }
 
-    pub fn step(&mut self, gravity: &Vector<f32>, dt: f32) {
+    pub fn step(&mut self, gravity: &Vector<f32>, dt: f32, world_config: &WorldConfig) {
         let mut integration_parameters = IntegrationParameters::default();
         integration_parameters.dt = dt;
-        integration_parameters.num_solver_iterations = std::num::NonZeroUsize::new(12).unwrap();
-        integration_parameters.num_additional_friction_iterations = 8;
-        integration_parameters.num_internal_pgs_iterations = 2;
+        integration_parameters.num_solver_iterations =
+            std::num::NonZeroUsize::new(world_config.num_solver_iterations.max(1)).unwrap();
+        integration_parameters.num_additional_friction_iterations =
+            world_config.num_additional_friction_iterations;
+        integration_parameters.num_internal_pgs_iterations =
+            world_config.num_internal_pgs_iterations;
         let physics_hooks = ();
         let event_handler = ();
 

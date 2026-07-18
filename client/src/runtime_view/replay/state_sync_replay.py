@@ -29,19 +29,22 @@ class StateSyncReplay(Replay):
     """
 
     def __init__(self, trajectory: "EpisodeTrajectory"):
-        print(
-            f"data/agents/{agent_loader.agent.name}/level_saves/{trajectory.level_hash}.json"
-        )
-        trajectory_level = level_loader.load_level(
-            f"data/agents/{agent_loader.agent.name}/level_saves",
-            f"{trajectory.level_hash}.json",
-        )
-        if trajectory_level is None:
+        level_dir = f"data/agents/{agent_loader.agent.name}/level_saves"
+        try:
+            trajectory_level = level_loader.load_level(
+                level_dir,
+                f"{trajectory.level_hash}.json",
+            )
+        except Exception:
             MessageOverlay(
                 "The level for the trajectory does not exist. You should never delete levels saved on the agent, because it may corrupt saved trajectories.",
                 "Error",
             )
-            logging.error("Level for trajectory does not exist.")
+            logging.exception(
+                "Level for trajectory does not exist: %s/%s.json",
+                level_dir,
+                trajectory.level_hash,
+            )
             return
 
         super().__init__(trajectory_level, trajectory, physics=False)

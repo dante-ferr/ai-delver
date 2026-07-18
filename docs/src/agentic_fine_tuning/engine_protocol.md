@@ -23,7 +23,7 @@ Eval checkpoints are smoke tests of the engine, not the shipped player Delver (u
 
 As soon as the human asks to fine-tune the engine for a skill family (or “bootstrap platforming”), **before** `tune` / long discussion / inventing maps, the agent must:
 
-1. Set **S** and **P** ([Eval Packs §1](eval_packs.md#1-inputs)).
+1. Propose **S** and **P** ([Eval Packs §1](eval_packs.md#1-inputs)), and explicitly ask the human to confirm or specify them.
 2. Confirm (or ask once) whether **S** is already in the **training sim**. If not → stop and plan sim work first ([Skill Ladder](skill_ladder.md)).
 3. Run `platforming-limits` when jumps/gaps matter; record rise/gap caps.
 4. **Emit the full eval pack request** using the [output template](eval_packs.md#4-output-template-agent--human) — every row filled from the [category + count formula](eval_packs.md).
@@ -148,7 +148,7 @@ IDs / footprints / borders: [Level Authoring](../levels/authoring.md).
 ## 7. Checklist
 
 ```text
-[ ] §1: emitted eval pack table (S, P, every category row)
+[ ] §1: aligned S and P with human, and emitted eval pack table (S, P, every category row)
 [ ] Human confirmed level save names
 [ ] Sim supports S
 [ ] Server up

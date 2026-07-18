@@ -44,28 +44,21 @@ class Level:
         instance.name = data["_name"]
         return instance
 
-    def to_hash(self):
-        """Generate a hash representation of the level."""
-        """
-        Generate a hash representation of the level.
+    @staticmethod
+    def hash_json(level_data: dict) -> str:
+        """SHA-256 of gameplay-relevant level JSON (matches Rust `hash_level_json`).
 
-        This is based on a JSON dump of the level's data, excluding any
-        display-only properties (like 'icon_path' or a potential 'display' key)
-        to ensure the hash only changes when gameplay-relevant data changes.
+        Strips display-only keys (`display`, `icon_path`), sorts object keys, and
+        uses compact JSON. Prefer this when hashing on-disk / wire JSON so the
+        digest matches the training server (do not round-trip through load/save
+        first — that can inject fields like default `size` and change the hash).
         """
-        level_dict = self.to_dict()
-
-        dict_for_hash = copy.deepcopy(level_dict)
+        dict_for_hash = copy.deepcopy(level_data)
 
         def _clean_dict_for_hash(d):
-            """Recursively remove display-only keys from the dictionary."""
             if isinstance(d, dict):
-                # As per the request, we filter out 'display' properties.
-                # 'icon_path' is another such property found on layers.
-                keys_to_remove = ["display", "icon_path"]
-                for key in keys_to_remove:
+                for key in ("display", "icon_path"):
                     d.pop(key, None)
-
                 for value in d.values():
                     _clean_dict_for_hash(value)
             elif isinstance(d, list):
@@ -73,16 +66,14 @@ class Level:
                     _clean_dict_for_hash(item)
 
         _clean_dict_for_hash(dict_for_hash)
-
-        # Serialize to a compact, sorted JSON string to ensure determinism.
         deterministic_json = json.dumps(
             dict_for_hash, sort_keys=True, separators=(",", ":")
         )
+        return hashlib.sha256(deterministic_json.encode("utf-8")).hexdigest()
 
-        hasher = hashlib.sha256()
-        hasher.update(deterministic_json.encode("utf-8"))
-
-        return hasher.hexdigest()
+    def to_hash(self):
+        """Hash of this in-memory level (`to_dict()`), same algorithm as `hash_json`."""
+        return self.hash_json(self.to_dict())
 
     @staticmethod
     def load(filepath: str):

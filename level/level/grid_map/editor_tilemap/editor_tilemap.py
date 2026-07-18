@@ -152,7 +152,7 @@ class EditorTilemap(Tilemap):
         if new_tile.edges is None:
             return
         for edge in new_tile.edges:
-            self.mixed_map.expand_towards(edge)
+            self.mixed_map.expand_towards(edge, dynamic_resizing=True)
             self.lock_edge_axis_if_needed(edge)
 
     def lock_edge(self, edge: "Direction"):

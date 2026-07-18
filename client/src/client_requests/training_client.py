@@ -31,19 +31,27 @@ class TrainingClient:
             raise ClientError(f"Failed to connect to training server at {uri}: {e}") from e
 
     def ensure_levels_saved(self, levels: list[str], agent_name: str):
-        """Hashes and saves referenced training levels under the agent's folder structure."""
+        """Hashes and saves referenced training levels under the agent's folder structure.
+
+        Hashes the on-disk JSON with the same algorithm as the training server so
+        trajectory ``level_hash`` values resolve to these files. Do not round-trip
+        through ``Level.load`` before hashing — deserialization can inject fields
+        (e.g. default ``size``) and produce a different digest.
+        """
         for level_name in levels:
             level_path = f"{level_config.LEVEL_SAVE_FOLDER_PATH}/{level_name}/level.json"
             if not os.path.exists(level_path):
                 from level.exceptions import LevelLoadError
                 raise LevelLoadError(level_path, "Level file not found.")
-            level = Level.load(level_path)
-            level_hash = level.to_hash()
+            with open(level_path, "r") as file:
+                level_data = json.load(file)
+            level_hash = Level.hash_json(level_data)
             save_dir = f"data/agents/{agent_name}/level_saves"
             os.makedirs(save_dir, exist_ok=True)
             save_path = f"{save_dir}/{level_hash}.json"
             if not os.path.exists(save_path):
-                level.save(save_path)
+                with open(save_path, "w") as file:
+                    json.dump(level_data, file, indent=2, sort_keys=True)
 
     def create_training_payload(
         self,

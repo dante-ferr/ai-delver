@@ -251,36 +251,33 @@ pub fn train(
                 "message": format!("Completed cycle {cycle}")
             }),
         );
-        let showcase_level = Arc::clone(&levels[0]);
-        let showcase_hash = level_hashes
-            .first()
-            .map(String::as_str)
-            .unwrap_or("");
-        match showcase::run_showcase(
-            showcase_level,
-            showcase_hash,
-            config.as_ref(),
-            &ppo,
-            device,
-        ) {
-            Ok(trajectory_json) => {
-                on_event(
-                    "showcase",
-                    json!({
-                        "trajectory": trajectory_json,
-                        "level_episode_count": completed_episodes
-                    }),
-                );
-            }
-            Err(error) => {
-                on_event(
-                    "showcase",
-                    json!({
-                        "trajectory": Value::Null,
-                        "level_episode_count": completed_episodes,
-                        "error": format!("{error:#}")
-                    }),
-                );
+        for (showcase_level, showcase_hash) in levels.iter().zip(level_hashes.iter()) {
+            match showcase::run_showcase(
+                Arc::clone(showcase_level),
+                showcase_hash,
+                config.as_ref(),
+                &ppo,
+                device,
+            ) {
+                Ok(trajectory_json) => {
+                    on_event(
+                        "showcase",
+                        json!({
+                            "trajectory": trajectory_json,
+                            "level_episode_count": completed_episodes
+                        }),
+                    );
+                }
+                Err(error) => {
+                    on_event(
+                        "showcase",
+                        json!({
+                            "trajectory": Value::Null,
+                            "level_episode_count": completed_episodes,
+                            "error": format!("{error:#}")
+                        }),
+                    );
+                }
             }
         }
         if checkpoint_interval > 0 && cycle % checkpoint_interval == 0 {

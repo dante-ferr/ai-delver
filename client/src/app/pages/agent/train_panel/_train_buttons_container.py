@@ -19,11 +19,11 @@ from bootstrap import PROJECT_ROOT
 
 class TrainButtonsContainer(ctk.CTkFrame):
     """
-    A UI container with buttons to start and interrupt agent training.
-    It runs the CLI training client script as a subprocess in a separate thread.
+    A UI container with buttons to start training, put Delver to play selected levels,
+    and interrupt training. It runs the CLI training client script as a subprocess in a separate thread.
     """
 
-    STACK_BELOW_WIDTH = 280
+    STACK_BELOW_WIDTH = 380
     DEBOUNCE_MS = 80
 
     def __init__(self, master):
@@ -35,6 +35,10 @@ class TrainButtonsContainer(ctk.CTkFrame):
             self, text="Train", command=self._start_train_thread
         )
 
+        self.play_button = StandardButton(
+            self, text="Play Levels", command=self._start_play_thread
+        )
+
         self.interrupt_training_button = StandardButton(
             self,
             text="Interrupt Training",
@@ -44,6 +48,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
         self._apply_button_layout(stacked=False)
 
         training_state_manager.add_disable_on_train_element(self.train_button)
+        training_state_manager.add_disable_on_train_element(self.play_button)
         training_state_manager.add_enable_on_train_element(
             self.interrupt_training_button
         )
@@ -70,23 +75,26 @@ class TrainButtonsContainer(ctk.CTkFrame):
             return
         self._stacked = stacked
 
-        for col in range(2):
+        for col in range(3):
             self.grid_columnconfigure(col, weight=0)
-        for row in range(2):
+        for row in range(3):
             self.grid_rowconfigure(row, weight=0)
 
         if stacked:
             self.grid_columnconfigure(0, weight=1)
             self.train_button.grid(row=0, column=0, padx=0, pady=(0, 4), sticky="ew")
+            self.play_button.grid(row=1, column=0, padx=0, pady=(0, 4), sticky="ew")
             self.interrupt_training_button.grid(
-                row=1, column=0, padx=0, pady=(4, 0), sticky="ew"
+                row=2, column=0, padx=(4, 0), pady=(4, 0), sticky="ew"
             )
         else:
             self.grid_columnconfigure(0, weight=1)
             self.grid_columnconfigure(1, weight=1)
-            self.train_button.grid(row=0, column=0, padx=(0, 4), pady=0, sticky="ew")
+            self.grid_columnconfigure(2, weight=1)
+            self.train_button.grid(row=0, column=0, padx=(0, 2), pady=0, sticky="ew")
+            self.play_button.grid(row=0, column=1, padx=(2, 2), pady=0, sticky="ew")
             self.interrupt_training_button.grid(
-                row=0, column=1, padx=(4, 0), pady=0, sticky="ew"
+                row=0, column=2, padx=(2, 0), pady=0, sticky="ew"
             )
 
     def _start_train_thread(self):
@@ -109,6 +117,23 @@ class TrainButtonsContainer(ctk.CTkFrame):
         )
         thread.start()
 
+    def _start_play_thread(self):
+        """
+        Starts the play subprocess in a new thread to avoid blocking the GUI.
+        Puts Delver to play each selected level once, generating and saving trajectories.
+        """
+        if verify_level_issues():
+            return
+
+        if not training_state_manager.training_levels:
+            MessageOverlay("No training levels selected.", subject="Error")
+            return
+
+        thread = threading.Thread(
+            target=self._run_subprocess_play, daemon=True
+        )
+        thread.start()
+
     def _start_interrupt_thread(self):
         """
         Starts the interrupt request/signal in a new thread to avoid blocking the GUI.
@@ -117,6 +142,107 @@ class TrainButtonsContainer(ctk.CTkFrame):
             target=self._interrupt_training, daemon=True
         )
         thread.start()
+
+    def _run_subprocess_play(self):
+        training_state_manager.set_value("sending_training_request", True)
+        training_state_manager.clear_nerd_metrics()
+
+        levels_str = ",".join(training_state_manager.training_levels)
+        mode = "static"
+        agent_name = agent_loader.agent.name
+
+        client_dir = os.path.abspath(os.path.join(PROJECT_ROOT, ".."))
+
+        cmd = [
+            sys.executable, "src/cli/main.py",
+            "train",
+            "--levels", levels_str,
+            "--mode", mode,
+            "--agent", agent_name,
+            "--server", gui_training_client.server_url,
+            "--play"
+        ]
+
+        try:
+            self.train_process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+                cwd=client_dir
+            )
+            training_state_manager.train_process = self.train_process
+        except Exception as e:
+            training_state_manager.reset_states()
+            print(f"[GUI Error] Failed to start play subprocess: {e}")
+            MessageOverlay(f"Failed to start play subprocess: {e}", subject="Error")
+            return
+
+        start_time = time.time()
+
+        for line in iter(self.train_process.stdout.readline, ""):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+            except json.JSONDecodeError:
+                print(f"[CLI Output] {line}")
+                continue
+
+            event = data.get("event")
+            if event == "info":
+                print(f"[CLI Info] {data.get('message')}")
+                continue
+            elif event == "error":
+                msg = data.get("message", "An unknown error occurred.")
+                print(f"[CLI Error] {msg}")
+                training_state_manager.reset_states()
+                MessageOverlay(msg, subject="Error")
+                continue
+            elif event == "init_started" or event == "request_sent" or event == "interrupt_started":
+                if event == "interrupt_started":
+                    training_state_manager.set_value("sending_interrupt_training_request", True)
+                else:
+                    training_state_manager.set_value("sending_training_request", True)
+            elif event == "session_created":
+                training_state_manager.set_value("sending_training_request", False)
+                training_state_manager.set_value("training", True)
+                gui_training_client.session_id = data.get("session_id")
+            elif event == "progress":
+                cycle = data.get("cycle", 0)
+                level_episode_count = data.get("level_episode_count", 0)
+                training_state_manager.set_value("level_episode_count", level_episode_count)
+                training_state_manager.update_training_process_log(cycle)
+                trajectory_stats_state_manager.notify_trajectory_added()
+            elif event == "showcase":
+                trajectory_stats_state_manager.notify_trajectory_added()
+            elif event == "level_transition":
+                levels_trained = data.get("levels_trained", 0)
+                training_state_manager.set_value("levels_trained", levels_trained)
+            elif event == "completed":
+                duration = time.time() - start_time
+                minutes, seconds = divmod(duration, 60)
+                time_str = f"{int(minutes)}m {int(seconds)}s" if minutes > 0 else f"{seconds:.2f}s"
+                training_state_manager.reset_states()
+                trajectory_stats_state_manager.refresh_stats()
+                MessageOverlay(f"Play session completed in {time_str}.", subject="Success")
+            elif event == "interrupted":
+                training_state_manager.reset_states()
+                trajectory_stats_state_manager.refresh_stats()
+                MessageOverlay("Play session interrupted.", subject="Success")
+
+        self.train_process.wait()
+        if training_state_manager.train_process is self.train_process:
+            training_state_manager.train_process = None
+
+        if training_state_manager.get_value("training") or training_state_manager.get_value("sending_training_request"):
+            stderr_out = self.train_process.stderr.read().strip()
+            err_msg = f"\nStderr: {stderr_out}" if stderr_out else ""
+            training_state_manager.reset_states()
+            print(f"[GUI Error] Play process exited with code {self.train_process.returncode}.{err_msg}")
+            MessageOverlay(f"Play process exited with code {self.train_process.returncode}.{err_msg}", subject="Error")
 
     def _run_subprocess_train(self):
         # Clear state/set sending

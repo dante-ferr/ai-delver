@@ -43,6 +43,8 @@ pub struct TrainRequest {
     pub level_transitioning_mode: String,
     pub config_overrides: Option<Value>,
     pub model_bytes_b64: Option<String>,
+    #[serde(default)]
+    pub play: bool,
 }
 
 pub async fn init(State(state): State<Arc<AppState>>) -> Json<Value> {
@@ -71,11 +73,19 @@ pub async fn train(
     let cycles = request.amount_of_cycles.unwrap_or(1);
     let has_runs = request.runs_per_cycle.unwrap_or(0) > 0;
     let has_episodes = request.episodes_per_cycle.unwrap_or(0) > 0;
-    if cycles == 0 || request.levels.is_empty() || (!has_runs && !has_episodes) {
+    if request.levels.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(json!({
-                "message": "levels, amount_of_cycles, and runs_per_cycle (or episodes_per_cycle) must be positive"
+                "message": "levels list must not be empty"
+            })),
+        ));
+    }
+    if !request.play && (cycles == 0 || (!has_runs && !has_episodes)) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "message": "amount_of_cycles, and runs_per_cycle (or episodes_per_cycle) must be positive for training"
             })),
         ));
     }
@@ -246,6 +256,51 @@ fn run_session_training(
         }
     }
 
+    if request.play {
+        let _ = session.event_tx.send(ReplayMessage::Event(json!({
+            "type": "info",
+            "message": format!("Play mode: putting Delver to play {} selected level(s)...", levels.len()),
+        })));
+
+        for (i, level) in levels.iter().enumerate() {
+            if session.interrupted.load(Ordering::Relaxed) {
+                let _ = session.event_tx.send(ReplayMessage::Event(json!({
+                    "type": "interrupted",
+                    "message": "Play session interrupted."
+                })));
+                return Ok(());
+            }
+
+            let level_hash = &level_hashes[i];
+            match crate::trainer::showcase::run_showcase(Arc::clone(level), level_hash, &config, &ppo, device) {
+                Ok(trajectory_json) => {
+                    let _ = session.event_tx.send(ReplayMessage::Event(json!({
+                        "type": "showcase",
+                        "trajectory": trajectory_json,
+                        "level_episode_count": 1
+                    })));
+                }
+                Err(error) => {
+                    let _ = session.event_tx.send(ReplayMessage::Event(json!({
+                        "type": "info",
+                        "message": format!("Error playing level {}: {error:#}", level.name),
+                    })));
+                }
+            }
+
+            let _ = session.event_tx.send(ReplayMessage::Event(json!({
+                "type": "level_transition",
+                "levels_trained": i + 1
+            })));
+        }
+
+        let _ = session.event_tx.send(ReplayMessage::Event(json!({
+            "type": "completed",
+            "message": "Play session completed."
+        })));
+        return Ok(());
+    }
+
     let event_tx = session.event_tx.clone();
     let on_event: EventSink = Box::new(move |event, mut value| {
         if let Some(line) = crate::cli::format_human_event(event, &value) {
@@ -321,6 +376,9 @@ fn run_session_training(
 
 /// Prefer `runs_per_cycle` (converted via config timing) over legacy `episodes_per_cycle`.
 fn resolve_episodes_per_cycle(request: &TrainRequest, config: &Config) -> anyhow::Result<usize> {
+    if request.play {
+        return Ok(1);
+    }
     if let Some(runs) = request.runs_per_cycle.filter(|&runs| runs > 0) {
         return Ok(config.runs_to_episodes(runs).max(1));
     }

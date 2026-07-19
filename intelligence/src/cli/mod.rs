@@ -83,6 +83,9 @@ pub struct TrainArgs {
     /// Skip policy inference and PPO updates (random actions) for physics profiling.
     #[arg(long, action = ArgAction::SetTrue)]
     pub no_learning: bool,
+    /// Put the agent to play the selected levels once without training, generating trajectories.
+    #[arg(long, action = ArgAction::SetTrue)]
+    pub play: bool,
 }
 
 pub fn emit<T: Serialize>(event: &str, value: T) {

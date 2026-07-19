@@ -38,6 +38,7 @@ def main():
     train_p.add_argument("--checkpoint-interval", type=int, default=0, help="Cycle interval to save checkpoints (0 to disable; GUI requires >= 1)")
     train_p.add_argument("--checkpoint", default=None, help="Checkpoint id, cycle number, or filename to load for warm-start")
     train_p.add_argument("--no-learning", action="store_true", help="Execute random actions only without gradient updates for profiling/testing")
+    train_p.add_argument("--play", action="store_true", help="Puts the agent to play the selected levels once without training, generating trajectories.")
 
     # Optional hyperparameter overrides
     train_p.add_argument("--learning-rate", type=float, default=None, help="Learning rate (PPO)")
@@ -123,8 +124,8 @@ def main():
     args = parser.parse_args()
 
     if args.command == "train":
-        if getattr(args, "runs_per_cycle", None) is None and getattr(args, "episodes_per_cycle", None) is None:
-            parser.error("train requires --runs-per-cycle or --episodes-per-cycle")
+        if not getattr(args, "play", False) and getattr(args, "runs_per_cycle", None) is None and getattr(args, "episodes_per_cycle", None) is None:
+            parser.error("train requires --runs-per-cycle or --episodes-per-cycle (unless --play is set)")
         from cli.commands.train import run_train
         run_train(args)
     elif args.command == "stats":

@@ -78,8 +78,12 @@ def run_train(args):
             print_json("error", message=f"Failed to connect to training server at {args.server}: {e}")
             return
 
+        is_play_mode = getattr(args, "play", False)
         runs_per_cycle = getattr(args, "runs_per_cycle", None)
-        if runs_per_cycle is not None and runs_per_cycle > 0:
+        if is_play_mode:
+            print_json("info", message=f"Play mode enabled: putting Delver to play {len(levels_list)} selected level(s).")
+            args.cycles = 1
+        elif runs_per_cycle is not None and runs_per_cycle > 0:
             print_json(
                 "info",
                 message=(
@@ -187,6 +191,7 @@ def run_train(args):
             "server",
             "command",
             "checkpoint",
+            "play",
         }
         config_overrides = {
             key: val for key, val in vars(args).items()
@@ -198,9 +203,10 @@ def run_train(args):
             args.mode,
             args.cycles,
             runs_per_cycle=runs_per_cycle,
-            episodes_per_cycle=None if runs_per_cycle else args.episodes_per_cycle,
+            episodes_per_cycle=None if (runs_per_cycle or is_play_mode) else args.episodes_per_cycle,
             config_overrides=config_overrides if config_overrides else None,
-            model_bytes_b64=model_bytes_b64
+            model_bytes_b64=model_bytes_b64,
+            play=is_play_mode,
         )
 
         print_json("request_sent", message=f"Sending training request to http://{args.server}/train...")

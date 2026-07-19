@@ -71,7 +71,7 @@ fn run_train(args: TrainArgs) -> Result<()> {
         Some(runs) if runs > 0 => config.runs_to_episodes(runs),
         _ => args.episodes_per_cycle,
     };
-    if episodes_per_cycle == 0 {
+    if episodes_per_cycle == 0 && !args.play {
         bail!("run/episode counts must be positive");
     }
     if let Some(runs) = args.runs_per_cycle.filter(|&runs| runs > 0) {
@@ -122,6 +122,43 @@ fn run_train(args: TrainArgs) -> Result<()> {
         signal.store(true, std::sync::atomic::Ordering::Relaxed);
     })
     .context("failed to install Ctrl-C handler")?;
+
+    let level_hashes = levels.iter().map(|_| String::new()).collect::<Vec<_>>();
+
+    if args.play {
+        cli::emit(
+            "info",
+            json!({"message": format!("Play mode: putting Delver to play {} level(s)", levels.len())}),
+        );
+        for (i, level) in levels.iter().enumerate() {
+            if interrupted.load(std::sync::atomic::Ordering::Relaxed) {
+                cli::emit("interrupted", json!({"message": "Play session interrupted."}));
+                return Ok(());
+            }
+            let level_hash = level_hashes.get(i).map(String::as_str).unwrap_or("");
+            match trainer::showcase::run_showcase(Arc::clone(level), level_hash, &config, &ppo, device) {
+                Ok(trajectory_json) => {
+                    cli::emit(
+                        "showcase",
+                        json!({
+                            "trajectory": trajectory_json,
+                            "level_episode_count": 1
+                        }),
+                    );
+                }
+                Err(error) => {
+                    cli::emit(
+                        "info",
+                        json!({"message": format!("Error playing level {}: {error:#}", level.name)}),
+                    );
+                }
+            }
+            cli::emit("level_transition", json!({"levels_trained": i + 1}));
+        }
+        cli::emit("completed", json!({"message": "Play session completed successfully."}));
+        return Ok(());
+    }
+
     let checkpoint_interval = args
         .checkpoint_interval
         .unwrap_or(config.checkpoint_interval);

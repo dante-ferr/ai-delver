@@ -62,6 +62,7 @@ class TrainingClient:
         episodes_per_cycle: int | None = None,
         config_overrides: dict = None,
         model_bytes_b64: str = None,
+        play: bool = False,
     ) -> dict:
         """Builds the request payload dictionary expected by the server."""
         level_jsons = []
@@ -79,6 +80,8 @@ class TrainingClient:
             "level_transitioning_mode": mode,
             "amount_of_cycles": amount_of_cycles,
         }
+        if play:
+            payload["play"] = True
         if runs_per_cycle is not None:
             payload["runs_per_cycle"] = runs_per_cycle
         if episodes_per_cycle is not None:

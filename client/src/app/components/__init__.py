@@ -18,6 +18,7 @@ from .range_slider_input import RangeSliderInput
 from .sortable_list import SortableList
 from .standard_button import StandardButton
 from .add_button import AddButton
+from .animated_gif_label import AnimatedGifLabel
 
 __all__ = [
     "IconButton",
@@ -38,4 +39,5 @@ __all__ = [
     "StandardButton",
     "LoadButton",
     "DeleteButton",
+    "AnimatedGifLabel",
 ]

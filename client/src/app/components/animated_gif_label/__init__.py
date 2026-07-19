@@ -1,0 +1,1 @@
+from .animated_gif_label import AnimatedGifLabel

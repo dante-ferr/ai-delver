@@ -5,7 +5,7 @@ import subprocess
 import json
 import os
 from state_managers import trajectory_stats_state_manager, training_state_manager
-from src.app.components import LoadingLogsPanel, SectionTitle
+from src.app.components import LoadingLogsPanel, SectionTitle, MouseWheelScrollableFrame
 from loaders import agent_loader
 from app.components import StandardButton
 from src.config import config
@@ -221,34 +221,13 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
         )
         self.stats_container.pack(fill="x")
 
-        # Inline custom charts
-        self.graphs_container = ctk.CTkFrame(self, fg_color="transparent")
-        self.graphs_container.pack(fill="x", pady=(8, 0))
-
-        self.victories_graph = StatsMiniGraph(
-            self.graphs_container,
-            title="Accumulated Victories",
-            line_color="#10b981", # Emerald Green
-            height=100
-        )
-        self.victories_graph.pack(fill="x", pady=(0, 8))
-
-        self.steps_graph = StatsMiniGraph(
-            self.graphs_container,
-            title="Trajectory Steps",
-            line_color="#8b5cf6", # Violet
-            height=100
-        )
-        self.steps_graph.pack(fill="x", pady=0)
-
-        # Nerd stats button
-        self.nerd_stats_button = StandardButton(
+        self.all_stats_button = StandardButton(
             self,
-            text="Nerd Stats",
-            command=self._open_nerd_stats,
+            text="All Stats",
+            command=self._open_all_stats,
             width=120
         )
-        self.nerd_stats_button.pack(anchor="w", pady=(12, 0))
+        self.all_stats_button.pack(anchor="w", pady=(12, 0))
 
         # Register callbacks to refresh stats automatically
         trajectory_stats_state_manager.add_on_refresh_stats_callback(
@@ -318,6 +297,26 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
                 training_state_manager.all_time_return_history = nerd_stats_result.get("return_history", []) or []
                 training_state_manager.all_time_step_history = nerd_stats_result.get("step_history", []) or []
 
+                # Restore latest session from disk when not actively training.
+                # Prefer disk when it has at least as much data as memory so a
+                # just-saved session wins; keep longer in-memory data if save
+                # is still in flight (e.g. interrupt race).
+                is_training = (
+                    training_state_manager.get_value("training")
+                    or training_state_manager.get_value("sending_training_request")
+                )
+                if not is_training:
+                    latest = nerd_stats_result.get("latest_session") or {}
+                    latest_loss = list(latest.get("loss_history", []) or [])
+                    if len(latest_loss) >= len(training_state_manager.nerd_loss_history):
+                        training_state_manager.nerd_loss_history = latest_loss
+                        training_state_manager.nerd_return_history = list(
+                            latest.get("return_history", []) or []
+                        )
+                        training_state_manager.nerd_step_history = list(
+                            latest.get("step_history", []) or []
+                        )
+
             self.after(0, self._update_ui, stats_result)
 
         except Exception as e:
@@ -342,9 +341,8 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
                     font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
                 )
                 label.pack(anchor="w", padx=4, pady=2)
-                # Reset graphs
-                self.victories_graph.set_data([])
-                self.steps_graph.set_data([])
+                trajectory_stats_state_manager.victories_history = []
+                trajectory_stats_state_manager.steps_history = []
             elif stats:
                 for stat_name, stat_value in stats.items():
                     # Avoid showing raw list histories as simple text labels
@@ -357,9 +355,12 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
                     )
                     label.pack(anchor="w", padx=4, pady=2)
 
-                # Update data on custom graphs
-                self.victories_graph.set_data(stats.get("victories_history", []))
-                self.steps_graph.set_data(stats.get("steps_history", []))
+                trajectory_stats_state_manager.victories_history = list(
+                    stats.get("victories_history", []) or []
+                )
+                trajectory_stats_state_manager.steps_history = list(
+                    stats.get("steps_history", []) or []
+                )
             else:
                 label = ctk.CTkLabel(
                     self.stats_container,
@@ -367,143 +368,167 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
                     font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
                 )
                 label.pack(anchor="w", padx=4, pady=2)
-                # Reset graphs
-                self.victories_graph.set_data([])
-                self.steps_graph.set_data([])
+                trajectory_stats_state_manager.victories_history = []
+                trajectory_stats_state_manager.steps_history = []
+
+            trajectory_stats_state_manager.notify_stats_updated()
 
         finally:
             # Ensure the loading state is always reset.
             trajectory_stats_state_manager.getting_stats = False
 
-    def _open_nerd_stats(self):
-        """Opens the Nerd Stats window, reusing an existing one if still open."""
-        if hasattr(self, "_nerd_win") and self._nerd_win.winfo_exists():
-            self._nerd_win.lift()
-            self._nerd_win.focus_set()
+    def _open_all_stats(self):
+        """Opens the All Stats window, reusing an existing one if still open."""
+        if hasattr(self, "_all_stats_win") and self._all_stats_win.winfo_exists():
+            self._all_stats_win.lift()
+            self._all_stats_win.focus_set()
             return
-        self._nerd_win = NerdStatsWindow(self)
+        self._all_stats_win = AllStatsWindow(self)
 
 
-class NerdStatsWindow(ctk.CTkToplevel):
+class AllStatsWindow(ctk.CTkToplevel):
     """
-    A Toplevel window that displays real-time deep learning training metrics
-    (Loss and Average Return) as mini line charts, updated live during training.
+    A Toplevel window that displays trajectory and deep learning training metrics
+    as mini line charts, with paginated All-Time and Current / Latest Session views.
     """
+
+    ALL_TIME = "All-Time"
+    CURRENT_SESSION = "Current / Latest Session"
+    GRAPH_HEIGHT = 180
 
     def __init__(self, master):
         super().__init__(master)
-        self.title("Dojo Nerd Stats")
-        self.geometry("900x550")
+        self.title("Dojo All Stats")
+        self.geometry("700x600")
         self.resizable(True, True)
         self.lift()
         self.focus_set()
 
         self.grid_columnconfigure(0, weight=1)
-        self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(2, weight=1)
+        self.grid_rowconfigure(3, weight=1)
 
-        # Header
         header = ctk.CTkLabel(
             self,
-            text="Dojo Nerd Stats",
+            text="Dojo All Stats",
             font=ctk.CTkFont(size=20, weight="bold"),
         )
-        header.grid(row=0, column=0, columnspan=2, padx=20, pady=(16, 4), sticky="w")
+        header.grid(row=0, column=0, padx=20, pady=(16, 4), sticky="w")
 
         subtitle = ctk.CTkLabel(
             self,
-            text="Comparing all-time training history with the active session metrics.",
+            text="Trajectory and training metrics across all-time history and the current or latest session.",
             font=ctk.CTkFont(size=11),
             text_color="#888888",
         )
-        subtitle.grid(row=1, column=0, columnspan=2, padx=20, pady=(0, 16), sticky="w")
+        subtitle.grid(row=1, column=0, padx=20, pady=(0, 12), sticky="w")
 
-        # All-Time History Panel (Left Column)
-        self.all_time_panel = ctk.CTkFrame(self, corner_radius=12)
-        self.all_time_panel.grid(row=2, column=0, padx=(20, 10), pady=(0, 20), sticky="nsew")
-        self.all_time_panel.grid_columnconfigure(0, weight=1)
-        self.all_time_panel.grid_rowconfigure(2, weight=1)
-        self.all_time_panel.grid_rowconfigure(4, weight=1)
-
-        # All-Time Header
-        all_time_title = ctk.CTkLabel(
-            self.all_time_panel,
-            text="All-Time History",
-            font=ctk.CTkFont(size=14, weight="bold"),
+        self.page_selector = ctk.CTkSegmentedButton(
+            self,
+            values=[self.ALL_TIME, self.CURRENT_SESSION],
+            command=self._on_page_selected,
+            font=ctk.CTkFont(size=13),
         )
-        all_time_title.grid(row=0, column=0, padx=15, pady=(12, 2), sticky="w")
+        self.page_selector.set(self.ALL_TIME)
+        self.page_selector.grid(row=2, column=0, padx=20, pady=(0, 12), sticky="ew")
 
-        # All-Time Loss Graph
-        all_time_loss_label = ctk.CTkLabel(
-            self.all_time_panel, text="Loss", font=ctk.CTkFont(size=12, weight="bold")
+        self.graphs_container = MouseWheelScrollableFrame(self, corner_radius=12)
+        self.graphs_container.grid(row=3, column=0, padx=20, pady=(0, 20), sticky="nsew")
+        self.graphs_container.grid_columnconfigure(0, weight=1)
+
+        # All-Time graphs
+        self.victories_graph = StatsMiniGraph(
+            self.graphs_container,
+            title="Accumulated Victories",
+            line_color="#10b981",
+            height=self.GRAPH_HEIGHT,
         )
-        all_time_loss_label.grid(row=1, column=0, padx=15, pady=(4, 2), sticky="sw")
-
+        self.steps_graph = StatsMiniGraph(
+            self.graphs_container,
+            title="Trajectory Steps",
+            line_color="#8b5cf6",
+            height=self.GRAPH_HEIGHT,
+        )
+        self.all_time_loss_label = ctk.CTkLabel(
+            self.graphs_container, text="Loss", font=ctk.CTkFont(size=12, weight="bold")
+        )
         self.all_time_loss_graph = StatsMiniGraph(
-            self.all_time_panel, title="", line_color="#ef4444"  # Red
+            self.graphs_container, title="", line_color="#ef4444", height=self.GRAPH_HEIGHT
         )
-        self.all_time_loss_graph.grid(row=2, column=0, padx=15, pady=(0, 10), sticky="nsew")
-
-        # All-Time Average Return Graph
-        all_time_ret_label = ctk.CTkLabel(
-            self.all_time_panel, text="Average Return", font=ctk.CTkFont(size=12, weight="bold")
+        self.all_time_return_label = ctk.CTkLabel(
+            self.graphs_container,
+            text="Average Return",
+            font=ctk.CTkFont(size=12, weight="bold"),
         )
-        all_time_ret_label.grid(row=3, column=0, padx=15, pady=(4, 2), sticky="sw")
-
         self.all_time_return_graph = StatsMiniGraph(
-            self.all_time_panel, title="", line_color="#3b82f6"  # Blue
+            self.graphs_container, title="", line_color="#3b82f6", height=self.GRAPH_HEIGHT
         )
-        self.all_time_return_graph.grid(row=4, column=0, padx=15, pady=(0, 15), sticky="nsew")
 
-        # Current Session Panel (Right Column)
-        self.current_panel = ctk.CTkFrame(self, corner_radius=12)
-        self.current_panel.grid(row=2, column=1, padx=(10, 20), pady=(0, 20), sticky="nsew")
-        self.current_panel.grid_columnconfigure(0, weight=1)
-        self.current_panel.grid_rowconfigure(2, weight=1)
-        self.current_panel.grid_rowconfigure(4, weight=1)
-
-        # Current Session Header
-        current_title = ctk.CTkLabel(
-            self.current_panel,
-            text="Current/Last Session",
-            font=ctk.CTkFont(size=14, weight="bold"),
+        # Current Session graphs
+        self.current_loss_label = ctk.CTkLabel(
+            self.graphs_container, text="Loss", font=ctk.CTkFont(size=12, weight="bold")
         )
-        current_title.grid(row=0, column=0, padx=15, pady=(12, 2), sticky="w")
-
-        # Current Session Loss Graph
-        current_loss_label = ctk.CTkLabel(
-            self.current_panel, text="Loss", font=ctk.CTkFont(size=12, weight="bold")
-        )
-        current_loss_label.grid(row=1, column=0, padx=15, pady=(4, 2), sticky="sw")
-
         self.current_loss_graph = StatsMiniGraph(
-            self.current_panel, title="", line_color="#ec4899", empty_text="No active session"  # Pink
+            self.graphs_container,
+            title="",
+            line_color="#ec4899",
+            empty_text="No session data",
+            height=self.GRAPH_HEIGHT,
         )
-        self.current_loss_graph.grid(row=2, column=0, padx=15, pady=(0, 10), sticky="nsew")
-
-        # Current Session Average Return Graph
-        current_ret_label = ctk.CTkLabel(
-            self.current_panel, text="Average Return", font=ctk.CTkFont(size=12, weight="bold")
+        self.current_return_label = ctk.CTkLabel(
+            self.graphs_container,
+            text="Average Return",
+            font=ctk.CTkFont(size=12, weight="bold"),
         )
-        current_ret_label.grid(row=3, column=0, padx=15, pady=(4, 2), sticky="sw")
-
         self.current_return_graph = StatsMiniGraph(
-            self.current_panel, title="", line_color="#10b981", empty_text="No active session"  # Green
+            self.graphs_container,
+            title="",
+            line_color="#10b981",
+            empty_text="No session data",
+            height=self.GRAPH_HEIGHT,
         )
-        self.current_return_graph.grid(row=4, column=0, padx=15, pady=(0, 15), sticky="nsew")
 
-        # Populate with any already-accumulated metrics from state
+        self._show_all_time_page()
         self._refresh_from_state()
 
-        # Register as a live listener for updates during training
-        self._on_update = self._handle_metrics_update
-        training_state_manager.register_nerd_stats_listener(self._on_update)
+        self._on_metrics_update = self._handle_metrics_update
+        self._on_stats_updated = self._handle_stats_updated
+        training_state_manager.register_nerd_stats_listener(self._on_metrics_update)
+        trajectory_stats_state_manager.add_on_stats_updated_callback(self._on_stats_updated)
 
-        # Unregister when the window closes
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _on_page_selected(self, value: str):
+        if value == self.CURRENT_SESSION:
+            self._show_current_session_page()
+        else:
+            self._show_all_time_page()
+
+    def _clear_graphs_container(self):
+        for widget in self.graphs_container.winfo_children():
+            widget.pack_forget()
+
+    def _show_all_time_page(self):
+        self._clear_graphs_container()
+        self.victories_graph.pack(fill="x", padx=10, pady=(10, 8))
+        self.steps_graph.pack(fill="x", padx=10, pady=(0, 8))
+        self.all_time_loss_label.pack(anchor="w", padx=15, pady=(4, 2))
+        self.all_time_loss_graph.pack(fill="x", padx=10, pady=(0, 8))
+        self.all_time_return_label.pack(anchor="w", padx=15, pady=(4, 2))
+        self.all_time_return_graph.pack(fill="x", padx=10, pady=(0, 15))
+        self.graphs_container.bind_scroll_events_recursively(self.graphs_container)
+
+    def _show_current_session_page(self):
+        self._clear_graphs_container()
+        self.current_loss_label.pack(anchor="w", padx=15, pady=(10, 2))
+        self.current_loss_graph.pack(fill="x", padx=10, pady=(0, 8))
+        self.current_return_label.pack(anchor="w", padx=15, pady=(4, 2))
+        self.current_return_graph.pack(fill="x", padx=10, pady=(0, 15))
+        self.graphs_container.bind_scroll_events_recursively(self.graphs_container)
 
     def _refresh_from_state(self):
         """Populates graphs with any metrics already accumulated in state."""
+        self.victories_graph.set_data(list(trajectory_stats_state_manager.victories_history))
+        self.steps_graph.set_data(list(trajectory_stats_state_manager.steps_history))
         self.all_time_loss_graph.set_data(list(training_state_manager.all_time_loss_history))
         self.all_time_return_graph.set_data(list(training_state_manager.all_time_return_history))
         self.current_loss_graph.set_data(list(training_state_manager.nerd_loss_history))
@@ -513,6 +538,10 @@ class NerdStatsWindow(ctk.CTkToplevel):
         """Called from the background thread — schedule UI update on the main thread."""
         self.after(0, self._apply_metrics_update)
 
+    def _handle_stats_updated(self):
+        """Called when trajectory stats refresh completes."""
+        self.after(0, self._apply_metrics_update)
+
     def _apply_metrics_update(self):
         """Applies the new data to the charts (always called on main thread)."""
         if not self.winfo_exists():
@@ -520,7 +549,8 @@ class NerdStatsWindow(ctk.CTkToplevel):
         self._refresh_from_state()
 
     def _on_close(self):
-        """Unregisters listener and destroys the window."""
-        training_state_manager.unregister_nerd_stats_listener(self._on_update)
+        """Unregisters listeners and destroys the window."""
+        training_state_manager.unregister_nerd_stats_listener(self._on_metrics_update)
+        trajectory_stats_state_manager.remove_on_stats_updated_callback(self._on_stats_updated)
         self.destroy()
 

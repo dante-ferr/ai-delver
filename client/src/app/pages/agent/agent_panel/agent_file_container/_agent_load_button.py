@@ -50,6 +50,11 @@ class _AgentLoaderOverlay(FileLoaderOverlay):
             if event_data.get("event") == "agent_loaded":
                 super()._load()
                 agent_loader.load_agent(agent_path)
+                from state_managers import training_state_manager
+                training_state_manager.clear_nerd_metrics()
+                training_state_manager.all_time_loss_history = []
+                training_state_manager.all_time_return_history = []
+                training_state_manager.all_time_step_history = []
                 app_manager.editor_app.restart_all_pages()
             else:
                 raise RuntimeError(event_data.get("message", "Failed to load agent via CLI."))

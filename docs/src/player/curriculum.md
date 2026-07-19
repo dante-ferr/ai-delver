@@ -20,7 +20,7 @@ Instead of employing a fully automated curriculum on the server, AI Delver imple
 
 In sequential task training, reinforcement learning agents suffer from **catastrophic forgetting**—modifying neural pathways to adapt to new environments (hazards) while overwriting the pathways used for older skills (precise platforming).
 
-To manage this, the system incorporates two defensive strategies:
+To manage this, the system incorporates three defensive strategies:
 
 ### A. Level Mixing (Multi-Task Combo Levels)
 To cement multiple skills together, the player should train the agent on combo levels that feature both challenges (e.g. platforming *and* traps). This forces the weights to optimize against both distributions simultaneously.
@@ -28,19 +28,22 @@ To cement multiple skills together, the player should train the agent on combo l
 ### B. Adaptive Learning Rate Scaling
 When transferring an agent to a new level layout, modifying weights too aggressively will erase existing skills. To shield learned weights, the system automatically dials down the learning rate, allowing the agent to adapt to new elements with minimal disruption to old knowledge.
 
+### C. Automatic Review Passes
+After enough focus training (measured in episodes), the client inserts review-pass sessions that replay every previously trained level. See [§5](#5-automatic-reviews).
+
 ---
 
 ## 3. Automated Forgetting Prevention System
 
 To make the coaching experience smooth and prevent accidental skill wipes, the client CLI automatically manages forgetting prevention:
 
-1. **Curriculum Tracking**: The client tracks the agent's training history in `data/agents/<agent_name>/trajectories/metadata.json` under the `trained_levels` list.
-2. **Challenge Detection**: When starting a training session, the CLI compares the target levels with the historical `trained_levels` list.
+1. **Curriculum Tracking**: The client tracks the agent's training history in `data/agents/<agent_name>/trajectories/metadata.json` under the `trained_levels` list (plus `level_hashes` and `review_state`).
+2. **Challenge Detection**: When starting a focus training session, the CLI compares the coach-selected levels with the historical `trained_levels` list.
 3. **Automatic Scaling**:
    * If the agent is warm-starting AND facing a new level (not in the trained history):
      * The system automatically scales the default learning rate down to `0.000075` (1/4 of the default `0.0003` value).
      * If the user has explicitly overridden the learning rate in their arguments, the CLI respects their override and logs the choice.
-4. **History Consolidation**: Upon successful training completion, the new levels are appended to `metadata.json`'s `trained_levels` list.
+4. **History Consolidation**: When new model weights are written from the server (`model_weights` WebSocket event), the session levels are merged into `trained_levels` and review state is updated (see §5). Interrupted sessions that still deliver weights commit the same way.
 
 ---
 
@@ -56,4 +59,61 @@ To give the player full agency over the coaching experience, the application off
 ### B. Pre-Trained Foundation Mode (Warm-Start Shipped Weights)
 *   **Concept**: The agent is initialized with a copy of the developer's pre-trained model weights (e.g. `default_weights.zip`).
 *   **Player Experience**: The agent starts with basic motor skills (walking, jumping, hazard evasion) already mastered. The player can immediately jump into training the agent on advanced, specialized custom tasks.
+
+---
+
+## 5. Automatic Reviews
+
+Weight drift tracks **how much new experience** the Delver collects, not how many times the coach clicked Train. The CLI therefore arms a **review pass** from cumulative **focus episodes**.
+
+| Knob | Default | Meaning |
+| --- | --- | --- |
+| Arming unit | Focus episodes | Episodes collected during focus sessions (not review-pass sessions) |
+| `focus_episodes_between_passes` (`E`) | `2000` | After this many focus episodes since the last pass completed, arm a review pass |
+| Exposure per prior level | One **session inclusion** per pass | The level is in the `/train` mix for an entire review-pass session (static mix share ≈ `(cycles × episodes_per_cycle) / L`), not a single run |
+| Session cap | `max_training_levels` (from `/init`, default 10) | Per-session concurrent mix only — lifetime `trained_levels` is unbounded |
+
+### Cadence
+
+1. **Focus sessions** (empty `review_pass_queue`): send coach-selected levels only.
+2. On successful `model_weights` write, add this session’s episode count to `focus_episodes_since_pass`.
+3. When that total reaches `E`, set `review_pass_queue` to all `trained_levels` (oldest first) and reset the counter.
+4. **Review-pass sessions** (non-empty queue): take up to `max_training_levels` levels from the queue; coach picks only fill leftover slots. Review-pass episodes do **not** advance the focus counter.
+5. After `model_weights`, remove included levels from the queue. Large histories chunk across multiple consecutive review sessions.
+6. `--play` never arms or advances the review state.
+
+The CLI emits a `review_plan` JSON event at session start (focus vs review, queue remaining, episode progress). Curriculum mutations happen **only** after model weights are saved — not on interval checkpoints and not on failed streams without weights.
+
+`metadata.json` shape (curriculum fields):
+
+```json
+{
+  "trained_levels": ["L1", "L2"],
+  "level_hashes": { "L1": "<hash>" },
+  "review_state": {
+    "focus_episodes_between_passes": 2000,
+    "focus_episodes_since_pass": 650,
+    "review_pass_queue": []
+  }
+}
+```
+
+Use a normal training budget on review-pass sessions (same cycles / runs as coaching). A token 1-cycle review is a weak inclusion even though the level “counts” as reviewed for the queue.
+
+---
+
+## 6. Checkpoint Bundles (Weights + Curriculum)
+
+Checkpoints under `data/agents/<agent>/checkpoints/` are **bundles**:
+
+```text
+checkpoints/<uuid>/
+  model_weights.ot
+  curriculum.json
+manifest.json
+```
+
+`curriculum.json` snapshots `trained_levels`, `level_hashes`, and `review_state` from the **committed** curriculum at save time (pre-session for `pre_level` / mid-run `interval` checkpoints). Restoring a checkpoint copies weights onto `model_weights.zip` **and** restores those curriculum fields so policy and review state stay aligned.
+
+Legacy single-file `cycle_*.zip` / flat `{uuid}.zip` checkpoints still resolve for weights-only restore (curriculum left unchanged, with no bundle metadata).
 

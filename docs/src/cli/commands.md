@@ -27,8 +27,8 @@ poetry run python src/cli/main.py train \
 You can optionally configure checkpoints or override individual training and reward parameters from `config.toml` for the duration of the training session:
 * `--runs-per-cycle <int>`: Full-length run equivalents of experience per cycle (preferred).
 * `--episodes-per-cycle <int>`: Legacy collect-window slot budget (used when `--runs-per-cycle` is omitted).
-* `--checkpoint-interval <int>`: Frequency (in cycles) to save intermediate checkpoints under `data/agents/<agent_name>/checkpoints/cycle_<N>.zip` (default `0`, which disables periodic saving).
-* `--checkpoint <name_or_number>`: Name or cycle number of an existing checkpoint to load from the checkpoints directory for warm-starting training.
+* `--checkpoint-interval <int>`: Frequency (in cycles) to save intermediate checkpoint **bundles** under `data/agents/<agent_name>/checkpoints/<uuid>/` (default `0`, which disables periodic saving). Each bundle stores `model_weights.ot` plus a `curriculum.json` snapshot.
+* `--checkpoint <name_or_number>`: Checkpoint id, bundle dir name, or legacy cycle number to warm-start from. Restores weights and, when present, the bundled curriculum (review state).
 * `--learning-rate <float>`: Learning rate for the policy optimizer.
 * `--gamma <float>`: Discount factor for rewards.
 * `--entropy-regularization <float>`: Policy entropy weight to control exploration.
@@ -197,12 +197,13 @@ for line in iter(self.train_process.stdout.readline, ""):
 
 | Event | Source Command | Description |
 |:---|:---|:---|
-| `info` | `train` | Informational messages (e.g. batch-size adjustment) |
+| `info` | `train` | Informational messages (e.g. batch-size adjustment, review cadence) |
 | `init_started` | `train` | Levels are being prepared |
+| `review_plan` | `train` | Focus vs review-pass plan (session levels, queue remaining, episode progress) |
 | `request_sent` | `train` | Training request sent to server |
 | `session_created` | `train` | Server accepted and registered the session |
 | `progress` | `train` | A cycle completed (includes cycle number and episode count) |
-| `level_transition` | `train` | Agent graduated to a new level |
+| `level_transition` | `train` | Agent graduated to a new level (`is_review` when applicable) |
 | `metrics` | `train` | Deep learning metrics snapshot (loss, average return, step, episodes) |
 | `checkpoint` | `train` | Intermediate model weights checkpoint received from server |
 | `completed` | `train` | All cycles finished successfully |
@@ -226,4 +227,4 @@ The `metrics` event is emitted at each `LOG_INTERVAL` steps during training. It 
   "episodes": 64
 }
 ```
-The GUI's `TrainingStateManager.update_nerd_metrics()` appends these to running history lists and notifies any open `NerdStatsWindow` via its registered listener callback.
+The GUI's `TrainingStateManager.update_nerd_metrics()` appends these to running history lists and notifies any open `AllStatsWindow` via its registered listener callback.

@@ -14,6 +14,9 @@ class TrajectoryStatsStateManager(StateManager):
         self.stats_logs_panel: "LoadingLogsPanel | None" = None
         self.on_refresh_stats_callbacks: list[Callable[[], None]] = []
         self.on_trajectory_added_callbacks: list[Callable[[], None]] = []
+        self.on_stats_updated_callbacks: list[Callable[[], None]] = []
+        self.victories_history: list = []
+        self.steps_history: list = []
 
         self.add_variable("getting_stats", ctk.BooleanVar, False)
         self.add_callback("getting_stats", lambda _: self._update_ui_state())
@@ -30,6 +33,19 @@ class TrajectoryStatsStateManager(StateManager):
 
     def notify_trajectory_added(self):
         for callback in self.on_trajectory_added_callbacks:
+            callback()
+
+    def add_on_stats_updated_callback(self, callback: Callable[[], None]):
+        self.on_stats_updated_callbacks.append(callback)
+
+    def remove_on_stats_updated_callback(self, callback: Callable[[], None]):
+        try:
+            self.on_stats_updated_callbacks.remove(callback)
+        except ValueError:
+            pass
+
+    def notify_stats_updated(self):
+        for callback in list(self.on_stats_updated_callbacks):
             callback()
 
     def set_stats_logs_panel(self, panel: "LoadingLogsPanel"):

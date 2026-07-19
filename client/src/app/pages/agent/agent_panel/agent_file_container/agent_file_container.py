@@ -2,6 +2,7 @@ import customtkinter as ctk
 from ._agent_save_button import AgentSaveButton
 from ._agent_load_button import AgentLoadButton
 from ._agent_delete_button import AgentDeleteButton
+from ._agent_restore_checkpoint_button import AgentRestoreCheckpointButton
 
 
 class AgentFileContainer(ctk.CTkFrame):
@@ -14,6 +15,9 @@ class AgentFileContainer(ctk.CTkFrame):
 
         load_button = AgentLoadButton(self)
         load_button.pack(side="left", padx=0, pady=0)
+
+        restore_button = AgentRestoreCheckpointButton(self)
+        restore_button.pack(side="left", padx=0, pady=0)
 
         delete_button = AgentDeleteButton(self)
         delete_button.pack(side="left", padx=0, pady=0)

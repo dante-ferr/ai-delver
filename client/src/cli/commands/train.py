@@ -7,6 +7,12 @@ from client_requests.training_client import TrainingClient
 from runtime.episode_trajectory import EpisodeTrajectoryFactory
 from .stats import run_stats
 from .nerd_stats_persistence import save_nerd_stats
+from .checkpoint_store import (
+    KIND_INTERVAL,
+    KIND_PRE_LEVEL,
+    resolve_checkpoint,
+    save_checkpoint,
+)
 
 # Global container for signal handler / graceful interrupt
 client_instance = None
@@ -103,33 +109,11 @@ def run_train(args):
         # Load existing agent weights if present
         from agent.agent import Agent
         agent_obj = Agent(args.agent)
-        
+
         # Resolve weights path
         weights_to_load = None
         if args.checkpoint:
-            checkpoint_name = str(args.checkpoint)
-            if not checkpoint_name.endswith(".zip"):
-                # Try both 'cycle_{N}.zip' (if integer) and '{name}.zip'
-                if checkpoint_name.isdigit():
-                    possible_paths = [
-                        agent_obj.weights_path.parent / "checkpoints" / f"cycle_{checkpoint_name}.zip",
-                        agent_obj.weights_path.parent / "checkpoints" / f"{checkpoint_name}.zip",
-                    ]
-                else:
-                    possible_paths = [
-                        agent_obj.weights_path.parent / "checkpoints" / f"{checkpoint_name}.zip",
-                        agent_obj.weights_path.parent / "checkpoints" / checkpoint_name,
-                    ]
-            else:
-                possible_paths = [
-                    agent_obj.weights_path.parent / "checkpoints" / checkpoint_name,
-                ]
-
-            for path in possible_paths:
-                if path.is_file():
-                    weights_to_load = path
-                    break
-
+            weights_to_load = resolve_checkpoint(agent_obj, str(args.checkpoint))
             if not weights_to_load:
                 print_json("error", message=f"Specified checkpoint '{args.checkpoint}' not found.")
                 return
@@ -148,6 +132,30 @@ def run_train(args):
                 print_json("info", message=f"Loaded policy weights from '{weights_to_load.name}' for warm-start.")
             except Exception as e:
                 print_json("info", message=f"Failed to read weights from '{weights_to_load}': {e}")
+
+        # Pre-level safety snapshots so each level has a rollback point
+        if weights_to_load and weights_to_load.is_file():
+            try:
+                with open(weights_to_load, "rb") as f:
+                    pre_bytes = f.read()
+                for level in levels_list:
+                    entry = save_checkpoint(
+                        agent_obj,
+                        pre_bytes,
+                        level=level,
+                        cycle=None,
+                        kind=KIND_PRE_LEVEL,
+                    )
+                    print_json(
+                        "info",
+                        message=(
+                            f"Saved pre-level checkpoint for '{entry['level']}' "
+                            f"({entry['id']})."
+                        ),
+                    )
+            except Exception as e:
+                print_json("error", message=f"Failed to save pre-level checkpoints: {e}")
+                return
 
         # Check if we are facing a new challenge to prevent catastrophic forgetting
         from runtime.episode_trajectory._trajectory_metadata_manager import TrajectoryMetadataManager
@@ -211,6 +219,8 @@ def run_train(args):
 
         start_time = time.time()
         current_cycle = 0
+        levels_trained_count = 0
+        current_level = levels_list[0]
 
         # Callback handlers for websocket stream
         async def on_trajectory(trajectory, level_episode_count):
@@ -221,7 +231,16 @@ def run_train(args):
             print_json("progress", cycle=current_cycle, level_episode_count=level_episode_count, message=f"Completed cycle {current_cycle}")
 
         def on_level_transition(levels_trained):
-            print_json("level_transition", levels_trained=levels_trained, message="Transitioned to next level.")
+            nonlocal levels_trained_count, current_level
+            levels_trained_count = int(levels_trained) if levels_trained is not None else levels_trained_count + 1
+            if 0 <= levels_trained_count < len(levels_list):
+                current_level = levels_list[levels_trained_count]
+            print_json(
+                "level_transition",
+                levels_trained=levels_trained_count,
+                level=current_level,
+                message="Transitioned to next level.",
+            )
 
         def on_completed():
             global completed_normally
@@ -265,14 +284,20 @@ def run_train(args):
                 import base64
                 try:
                     weights_data = base64.b64decode(model_bytes_b64)
-                    agent_obj = Agent(args.agent)
-                    if agent_obj.weights_path:
-                        checkpoint_dir = agent_obj.weights_path.parent / "checkpoints"
-                        checkpoint_dir.mkdir(parents=True, exist_ok=True)
-                        checkpoint_path = checkpoint_dir / f"cycle_{cycle}.zip"
-                        with open(checkpoint_path, "wb") as f:
-                            f.write(weights_data)
-                        print_json("info", message=f"Successfully saved checkpoint for cycle {cycle}.")
+                    entry = save_checkpoint(
+                        args.agent,
+                        weights_data,
+                        level=current_level,
+                        cycle=int(cycle) if cycle is not None else None,
+                        kind=KIND_INTERVAL,
+                    )
+                    print_json(
+                        "info",
+                        message=(
+                            f"Successfully saved checkpoint for cycle {cycle} "
+                            f"on level '{current_level}' ({entry['id']})."
+                        ),
+                    )
                 except Exception as e:
                     print_json("error", message=f"Failed to save checkpoint for cycle {cycle}: {e}")
 

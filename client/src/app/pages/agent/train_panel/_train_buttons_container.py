@@ -95,7 +95,15 @@ class TrainButtonsContainer(ctk.CTkFrame):
         """
         if verify_level_issues():
             return
-            
+
+        checkpoint_interval = int(float(training_state_manager.checkpoint_interval))
+        if checkpoint_interval < 1:
+            MessageOverlay(
+                "Checkpoint every N cycles must be at least 1 so training writes mid-run save states.",
+                subject="Error",
+            )
+            return
+
         thread = threading.Thread(
             target=self._run_subprocess_train, daemon=True
         )
@@ -119,7 +127,8 @@ class TrainButtonsContainer(ctk.CTkFrame):
         levels_str = ",".join(training_state_manager.training_levels)
         cycles = str(int(float(training_state_manager.amount_of_cycles)))
         runs_per_cycle = str(int(float(training_state_manager.runs_per_cycle)))
-        mode = training_state_manager.get_value("level_transitioning_mode")
+        checkpoint_interval = str(int(float(training_state_manager.checkpoint_interval)))
+        mode = "static"
         agent_name = agent_loader.agent.name
         
         client_dir = os.path.abspath(os.path.join(PROJECT_ROOT, ".."))
@@ -130,6 +139,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
             "--levels", levels_str,
             "--cycles", cycles,
             "--runs-per-cycle", runs_per_cycle,
+            "--checkpoint-interval", checkpoint_interval,
             "--mode", mode,
             "--agent", agent_name,
             "--server", gui_training_client.server_url

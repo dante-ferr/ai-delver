@@ -77,7 +77,7 @@ class TrainingClient:
         payload = {
             "levels": level_jsons,
             "level_transitioning_mode": mode,
-            "amount_of_cycles": amount_of_cycles if mode == "static" else None,
+            "amount_of_cycles": amount_of_cycles,
         }
         if runs_per_cycle is not None:
             payload["runs_per_cycle"] = runs_per_cycle

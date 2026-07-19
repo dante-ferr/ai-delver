@@ -12,7 +12,7 @@ Instead of employing a fully automated curriculum on the server, AI Delver imple
 
 1. **Sequential Skill Acquisition**: The player trains the agent on Level 1 to master basic platforming.
 2. **Skill Transfer (Warm-Starts)**: Once platforming is solid, the player selects Level 2 (e.g. traps) and starts training. The client automatically uploads the agent's existing weights (`model_weights.zip`) to the server to warm-start Level 2.
-3. **Save State Rollbacks**: If training on a level goes poorly, the player can use checkpoints (`cycle_<N>.zip`) as save states to roll back and try different coaching parameters.
+3. **Save State Rollbacks**: If training on a level goes poorly, the player can roll the Delver back to a checkpoint from the agent panel’s restore table (columns: level, date, cycle, kind). Before each training session, the client auto-saves a `pre_level` checkpoint of the current weights for every selected level. Mid-run checkpoints are also written every N cycles (configured in the train panel) and tagged with the active level and timestamp.
 
 ---
 

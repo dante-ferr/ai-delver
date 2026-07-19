@@ -2,7 +2,7 @@ import customtkinter as ctk
 from app.components import RangeSliderInput
 from typing import Callable
 from state_managers import training_state_manager
-from src.config import config
+
 
 class EpisodesSettingPanel(ctk.CTkFrame):
     """Training budget controls. Users pick full-length runs; intelligence converts to episode slots."""
@@ -17,21 +17,6 @@ class EpisodesSettingPanel(ctk.CTkFrame):
         super().__init__(master, fg_color="transparent")
 
         self.on_amount_of_runs_change = on_amount_of_runs_change
-
-        self.transition_label = ctk.CTkLabel(
-            self,
-            text="Level Transitioning",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE, weight="bold"),
-        )
-        self.transition_label.pack(anchor="w")
-        self.transition_mode_input = ctk.CTkSegmentedButton(
-            self,
-            values=["static", "dynamic"],
-            command=self._on_transition_mode_update,
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
-        )
-        self.transition_mode_input.set("static")
-        self.transition_mode_input.pack(pady=(0, 16), fill="x")
 
         init_val = 10
         self.training_cycles_input = RangeSliderInput(
@@ -58,23 +43,22 @@ class EpisodesSettingPanel(ctk.CTkFrame):
             on_update=self._set_runs_per_cycle,
             fg_color="transparent",
         )
-        self.runs_per_cycle_input.pack(pady=0, fill="x")
+        self.runs_per_cycle_input.pack(pady=(0, 16), fill="x")
         training_state_manager.runs_per_cycle = init_runs
 
-        training_state_manager.add_callback(
-            "level_transitioning_mode", self._update_visibility
+        init_checkpoint = 5
+        self.checkpoint_interval_input = RangeSliderInput(
+            self,
+            label_text="Checkpoint every N cycles",
+            min_val=1,
+            max_val=100,
+            init_val=init_checkpoint,
+            step=1,
+            on_update=self._set_checkpoint_interval,
+            fg_color="transparent",
         )
-
-    def _on_transition_mode_update(self, value: str):
-        training_state_manager.set_value("level_transitioning_mode", value.lower())
-
-    def _update_visibility(self, value):
-        if value == "dynamic":
-            self.training_cycles_input.pack_forget()
-        else:
-            self.training_cycles_input.pack(
-                pady=(0, 16), fill="x", before=self.runs_per_cycle_input
-            )
+        self.checkpoint_interval_input.pack(pady=0, fill="x")
+        training_state_manager.checkpoint_interval = init_checkpoint
 
     def _set_training_cycles(self, value):
         training_state_manager.amount_of_cycles = value
@@ -83,3 +67,6 @@ class EpisodesSettingPanel(ctk.CTkFrame):
     def _set_runs_per_cycle(self, value):
         training_state_manager.runs_per_cycle = value
         self.on_amount_of_runs_change()
+
+    def _set_checkpoint_interval(self, value):
+        training_state_manager.checkpoint_interval = int(value)

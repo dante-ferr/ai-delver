@@ -13,7 +13,7 @@ class _AgentLoaderOverlay(FileLoaderOverlay):
         import os
         from loaders import agent_loader
         from app_manager import app_manager
-        from config import PROJECT_ROOT
+        from bootstrap import PROJECT_ROOT
         from app.components.overlay.message_overlay import MessageOverlay
 
         agent_path = self._get_file_path()

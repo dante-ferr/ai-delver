@@ -42,7 +42,7 @@ class GuiTrainingClient(TrainingClient):
             payload = self.create_training_payload(
                 levels=training_state_manager.training_levels,
                 runs_per_cycle=training_state_manager.runs_per_cycle,
-                mode=training_state_manager.get_value("level_transitioning_mode"),
+                mode="static",
                 amount_of_cycles=training_state_manager.amount_of_cycles
             )
             

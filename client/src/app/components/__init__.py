@@ -6,6 +6,8 @@ from .mouse_whell_scrollable_frame.mouse_wheel_scrollable_frame import (
 from .overlay import Overlay
 from .overlay.file_loader_overlay import FileLoaderOverlay
 from .overlay.message_overlay import MessageOverlay
+from .overlay.file_deleter_overlay import FileDeleterOverlay
+from .overlay.checkpoint_restore_overlay import CheckpointRestoreOverlay
 from .save_button import SaveButton
 from .load_button import LoadButton
 from .delete_button import DeleteButton
@@ -16,7 +18,6 @@ from .range_slider_input import RangeSliderInput
 from .sortable_list import SortableList
 from .standard_button import StandardButton
 from .add_button import AddButton
-from .overlay.file_deleter_overlay import FileDeleterOverlay
 
 __all__ = [
     "IconButton",
@@ -25,6 +26,7 @@ __all__ = [
     "Overlay",
     "FileLoaderOverlay",
     "FileDeleterOverlay",
+    "CheckpointRestoreOverlay",
     "MessageOverlay",
     "SaveButton",
     "AddButton",

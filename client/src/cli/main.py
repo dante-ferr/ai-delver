@@ -27,11 +27,16 @@ def main():
         default=None,
         help="Legacy collect-window slot budget (used when --runs-per-cycle is omitted)",
     )
-    train_p.add_argument("--mode", choices=["static", "dynamic"], required=True, help="Transitioning mode")
+    train_p.add_argument(
+        "--mode",
+        choices=["static"],
+        default="static",
+        help="Transitioning mode (only static is supported; dynamic curriculum is not implemented)",
+    )
     train_p.add_argument("--agent", required=True, help="Agent name")
     train_p.add_argument("--server", default="localhost:8001", help="Training server URL")
-    train_p.add_argument("--checkpoint-interval", type=int, default=0, help="Cycle interval to save checkpoints (0 to disable)")
-    train_p.add_argument("--checkpoint", default=None, help="Name or cycle number of checkpoint to load for warm-start")
+    train_p.add_argument("--checkpoint-interval", type=int, default=0, help="Cycle interval to save checkpoints (0 to disable; GUI requires >= 1)")
+    train_p.add_argument("--checkpoint", default=None, help="Checkpoint id, cycle number, or filename to load for warm-start")
     train_p.add_argument("--no-learning", action="store_true", help="Execute random actions only without gradient updates for profiling/testing")
 
     # Optional hyperparameter overrides

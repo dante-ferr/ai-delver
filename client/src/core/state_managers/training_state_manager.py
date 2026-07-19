@@ -32,6 +32,7 @@ class TrainingStateManager(StateManager):
         # Set by the UI before training starts.
         self.amount_of_cycles: int = 0
         self.runs_per_cycle: int = 0
+        self.checkpoint_interval: int = 5
 
         # Real-time deep learning metrics accumulated during training
         self.nerd_loss_history: list[float] = []
@@ -51,7 +52,6 @@ class TrainingStateManager(StateManager):
         self.add_variable("env_batch_size", ctk.IntVar, 32)
         self.add_variable("max_training_levels", ctk.IntVar, 1)
         self.add_variable("levels_trained", ctk.IntVar, 0)
-        self.add_variable("level_transitioning_mode", ctk.StringVar, "static")
         self.add_variable("level_episode_count", ctk.IntVar, 0)
         self.add_variable("sending_training_request", ctk.BooleanVar, False)
         self.add_variable("training", ctk.BooleanVar, False)
@@ -91,12 +91,7 @@ class TrainingStateManager(StateManager):
 
     def update_training_process_log(self, current_cycle: int):
         if self.train_logs_panel:
-            if self.get_value("level_transitioning_mode") == "dynamic":
-                self.train_logs_panel.update_training_progress(
-                    self.get_value("levels_trained")
-                )
-            else:
-                self.train_logs_panel.update_training_progress(current_cycle)
+            self.train_logs_panel.update_training_progress(current_cycle)
 
     def _update_ui_state(self):
         """

@@ -4,7 +4,6 @@ from ._train_buttons_container import TrainButtonsContainer
 from src.config import config
 from .level_selector import LevelSelector
 from ._episodes_setting_panel import EpisodesSettingPanel
-from state_managers import training_state_manager
 
 
 class TrainPanel(ctk.CTkFrame):
@@ -55,21 +54,6 @@ class TrainPanel(ctk.CTkFrame):
         train_logs_panel.pack(
             padx=2, pady=(0, config.STYLE.SECTION_SPACING), fill="both", expand=True
         )
-
-        training_state_manager.add_callback(
-            "level_transitioning_mode", self._on_transition_mode_change
-        )
-
-        self._set_amount_of_runs()
-
-    def _on_transition_mode_change(self, value):
-        if value == "dynamic":
-            self.info_frame.pack_forget()
-        else:
-            self.info_frame.pack(
-                anchor="w",
-                before=self.level_selector,
-            )
 
         self._set_amount_of_runs()
 

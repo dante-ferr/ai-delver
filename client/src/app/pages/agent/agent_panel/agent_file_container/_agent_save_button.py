@@ -13,7 +13,7 @@ class AgentSaveButton(SaveButton):
         import sys
         import json
         import os
-        from config import PROJECT_ROOT
+        from bootstrap import PROJECT_ROOT
         from app.components.overlay.message_overlay import MessageOverlay
 
         agent_name = agent_loader.agent.name

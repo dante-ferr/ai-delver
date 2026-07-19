@@ -4,9 +4,9 @@
 # ==============================================================================
 # RL Hyperparameters
 # ==============================================================================
-learning_rate = 0.0003            # Step size for gradient descent updates
+learning_rate = 0.000084            # Optimized step size via Optuna platforming tune (previously 0.0003)
 gamma = 0.995                     # Discount factor for future rewards (balancing short-term vs long-term goals)
-entropy_regularization = 0.01     # Standard PPO entropy bonus; 0.2 prevented convergence
+entropy_regularization = 0.2406     # Optimized entropy bonus via Optuna platforming tune (previously 0.01)
 ppo_num_epochs = 4                # Number of optimization epochs per gradient update step
 clip_epsilon = 0.2                # PPO policy-ratio clipping range
 gae_lambda = 0.95                 # Bias/variance tradeoff for generalized advantage estimation
@@ -21,7 +21,7 @@ device = "auto"                   # auto (CUDA if available), cpu, cuda, cuda:N,
 # Reward & Penalty Weights
 # ==============================================================================
 not_finished_reward = -10.0       # Penalty given if agent fails to reach the goal within limit
-finished_reward = 100.0           # Sparse positive reward awarded only upon successfully solving the level
+finished_reward = 193.17          # Sparse positive reward awarded only upon successfully solving the level (optimized via Optuna platforming tune, previously 100.0)
 turn_reward = 0.0                 # Positive/negative reward applied when changing direction
 
 frame_step_reward = -0.01         # Time penalty per step to encourage faster execution

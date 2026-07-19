@@ -18,8 +18,15 @@ class TrainLogsPanel(LoadingLogsPanel):
             return
         self.showing_training_progress = True
 
+        if training_state_manager.play_session:
+            total_steps = len(training_state_manager.training_levels)
+            label_prefix = "Playing levels"
+        else:
+            total_steps = training_state_manager.total_amount_of_cycles
+            label_prefix = "Training levels"
+
         self.training_progress_log = StaticTrainProcessLog(
-            self, training_state_manager.total_amount_of_cycles
+            self, total_steps, label_prefix=label_prefix
         )
 
         self.training_progress_log.pack(fill="x", expand=True)

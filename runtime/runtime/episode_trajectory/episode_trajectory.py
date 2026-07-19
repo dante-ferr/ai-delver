@@ -18,6 +18,8 @@ class EpisodeTrajectory:
     actions_per_second: int
     victorious: bool = False
     level_hash: str = ""  # Unique hash of the level configuration
+    # "train" contributes to training stats graphs; "play" is evaluation-only.
+    kind: str = "train"
 
     # For the original, action-based replay
     delver_actions: "List[DelverAction]" = field(default_factory=list)
@@ -39,9 +41,13 @@ class EpisodeTrajectory:
         """Converts the episode trajectory to a JSON string."""
         return json.dumps(asdict(self), indent=2)
 
-    async def save(self, agent_name: str):
+    async def save(self, agent_name: str, kind: str | None = None):
         """Saves the current trajectory to the trajectory directory."""
-        await TrajectorySaver(agent_name).save_trajectory_json(self.to_json())
+        if kind is not None:
+            self.kind = kind
+        await TrajectorySaver(agent_name).save_trajectory_json(
+            self.to_json(), kind=self.kind
+        )
 
 
 class EpisodeTrajectoryFactory:
@@ -51,7 +57,10 @@ class EpisodeTrajectoryFactory:
         data = json.loads(json_string)
 
         episode_trajectory = EpisodeTrajectory(
-            data["actions_per_second"], data["victorious"], data["level_hash"]
+            data["actions_per_second"],
+            data["victorious"],
+            data.get("level_hash", ""),
+            data.get("kind", "train"),
         )
 
         if "delver_actions" in data:

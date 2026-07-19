@@ -144,6 +144,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
         thread.start()
 
     def _run_subprocess_play(self):
+        training_state_manager.play_session = True
         training_state_manager.set_value("sending_training_request", True)
 
         levels_str = ",".join(training_state_manager.training_levels)
@@ -214,6 +215,9 @@ class TrainButtonsContainer(ctk.CTkFrame):
                 level_episode_count = data.get("level_episode_count", 0)
                 training_state_manager.set_value("level_episode_count", level_episode_count)
                 training_state_manager.update_training_process_log(cycle)
+                trajectory_stats_state_manager.notify_trajectory_added()
+            elif event == "showcase":
+                trajectory_stats_state_manager.notify_trajectory_added()
             elif event == "level_transition":
                 levels_trained = data.get("levels_trained", 0)
                 training_state_manager.set_value("levels_trained", levels_trained)
@@ -221,10 +225,16 @@ class TrainButtonsContainer(ctk.CTkFrame):
                 duration = time.time() - start_time
                 minutes, seconds = divmod(duration, 60)
                 time_str = f"{int(minutes)}m {int(seconds)}s" if minutes > 0 else f"{seconds:.2f}s"
+                # Fill the play progress bar to completion before tearing it down.
+                training_state_manager.update_training_process_log(
+                    len(training_state_manager.training_levels)
+                )
                 training_state_manager.reset_states()
+                trajectory_stats_state_manager.refresh_stats()
                 MessageOverlay(f"Play session completed in {time_str}.", subject="Success")
             elif event == "interrupted":
                 training_state_manager.reset_states()
+                trajectory_stats_state_manager.refresh_stats()
                 MessageOverlay("Play session interrupted.", subject="Success")
 
         self.train_process.wait()
@@ -240,6 +250,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
 
     def _run_subprocess_train(self):
         # Clear state/set sending
+        training_state_manager.play_session = False
         training_state_manager.set_value("sending_training_request", True)
         training_state_manager.clear_nerd_metrics()
         

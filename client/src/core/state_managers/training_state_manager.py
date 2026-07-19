@@ -33,6 +33,8 @@ class TrainingStateManager(StateManager):
         self.amount_of_cycles: int = 0
         self.runs_per_cycle: int = 0
         self.checkpoint_interval: int = 5
+        # True while a Play Levels session is active (vs Train).
+        self.play_session: bool = False
 
         # Real-time deep learning metrics accumulated during training
         self.nerd_loss_history: list[float] = []
@@ -120,9 +122,12 @@ class TrainingStateManager(StateManager):
 
         if self.train_logs_panel:
             if self.get_value("sending_training_request"):
-                self.train_logs_panel.show_log(
-                    "sending_request", "Sending training request..."
+                request_text = (
+                    "Sending play request..."
+                    if self.play_session
+                    else "Sending training request..."
                 )
+                self.train_logs_panel.show_log("sending_request", request_text)
             else:
                 self.train_logs_panel.remove_log("sending_request")
 
@@ -132,14 +137,18 @@ class TrainingStateManager(StateManager):
                 self.train_logs_panel.remove_training_progress()
 
             if self.get_value("sending_interrupt_training_request"):
-                self.train_logs_panel.show_log(
-                    "interrupting", "Interrupting training..."
+                interrupt_text = (
+                    "Interrupting play..."
+                    if self.play_session
+                    else "Interrupting training..."
                 )
+                self.train_logs_panel.show_log("interrupting", interrupt_text)
             else:
                 self.train_logs_panel.remove_log("interrupting")
 
     def reset_states(self):
         """Resets all state flags to their initial (idle) values and updates the UI."""
+        self.play_session = False
         self.set_value("sending_training_request", False)
         self.set_value("training", False)
         self.set_value("sending_interrupt_training_request", False)

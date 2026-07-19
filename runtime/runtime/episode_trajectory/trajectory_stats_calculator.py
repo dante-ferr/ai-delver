@@ -21,6 +21,9 @@ class TrajectoryStatsCalculator:
         """
         Calculates trajectory statistics, incrementally updating from the last run.
         Stats are read from and saved to the metadata file to avoid re-reading all files.
+
+        Play/evaluation trajectories are kept for replay but excluded from
+        victories / steps training graphs.
         """
         metadata = await self.metadata_manager.read_metadata()
         stats = metadata.get("stats", {
@@ -35,10 +38,16 @@ class TrajectoryStatsCalculator:
         if "steps_history" not in stats:
             stats["steps_history"] = []
 
-        last_processed_count = stats.get("amount", 0)
+        # processed_count is the high-water mark across all trajectory files
+        # (train + play). Legacy metadata used amount for that purpose.
+        last_processed_count = stats.get(
+            "processed_count", stats.get("amount", 0)
+        )
         total_trajectories = metadata.get("trajectory_count", 0)
 
         if last_processed_count >= total_trajectories:
+            # Keep displayed amount as train-only when histories are the source of truth
+            stats["amount"] = len(stats.get("victories_history", []))
             return stats
 
         logging.info(
@@ -60,6 +69,7 @@ class TrajectoryStatsCalculator:
         """
         Calculates trajectory statistics by reading all trajectory files every time.
         This is a "legacy" method for testing and validation purposes.
+        Play trajectories are excluded from victories / steps histories.
         """
         stats = {
             "amount": 0,
@@ -86,8 +96,9 @@ class TrajectoryStatsCalculator:
         if not tasks:
             return stats
 
-        stats["amount"] = len(tasks)
         await self._process_trajectory_tasks(tasks, stats)
+        stats["processed_count"] = len(tasks)
+        stats["amount"] = len(stats["victories_history"])
         return stats
 
     def _get_new_trajectory_tasks(
@@ -107,7 +118,11 @@ class TrajectoryStatsCalculator:
     async def _process_trajectory_tasks(
         tasks: List[asyncio.Task], stats: Dict[str, Any]
     ):
-        """Processes completed trajectory tasks and updates the victory count and histories."""
+        """Processes completed trajectory tasks and updates the victory count and histories.
+
+        Trajectories with kind \"play\" are skipped so evaluation runs do not
+        affect training graphs.
+        """
         results = await asyncio.gather(*tasks)
 
         if "victories_history" not in stats:
@@ -119,8 +134,9 @@ class TrajectoryStatsCalculator:
 
         for trajectory in results:
             if trajectory is None:
-                stats["steps_history"].append(0)
-                stats["victories_history"].append(current_accum_victories)
+                continue
+
+            if getattr(trajectory, "kind", "train") == "play":
                 continue
 
             is_victory = trajectory.victorious
@@ -138,7 +154,8 @@ class TrajectoryStatsCalculator:
         self, stats: Dict[str, Any], total_trajectories: int, metadata: Dict[str, Any]
     ):
         """Updates the stats dictionary and writes it back to the metadata file."""
-        stats["amount"] = total_trajectories
+        stats["processed_count"] = total_trajectories
+        stats["amount"] = len(stats.get("victories_history", []))
         metadata["stats"] = stats
         await self.metadata_manager.write_metadata(metadata)
 

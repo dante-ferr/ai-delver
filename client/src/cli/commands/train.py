@@ -335,10 +335,10 @@ def run_train(args):
         # Callback handlers for websocket stream
         async def on_trajectory(trajectory, level_episode_count):
             nonlocal current_cycle
-            # Play Levels is for evaluation only — do not write into the training
-            # trajectory store (would inflate victories / steps graphs).
-            if trajectory and not is_play_mode:
-                await trajectory.save(args.agent)
+            if trajectory:
+                await trajectory.save(
+                    args.agent, kind="play" if is_play_mode else "train"
+                )
             current_cycle += 1
             print_json("progress", cycle=current_cycle, level_episode_count=level_episode_count, message=f"Completed cycle {current_cycle}")
 
@@ -482,10 +482,11 @@ def run_train(args):
         pass
     finally:
         # Safety net if the run ended without a completed event (e.g. interrupt).
-        # Play Levels must not touch training metrics or trajectory stats graphs.
+        # Play Levels still saves trajectories (kind=play) and refreshes stats so
+        # the viewer updates, but must not persist training (nerd) metrics.
         if not getattr(args, "play", False):
             persist_nerd_stats()
-            try:
-                run_stats(args.agent)
-            except Exception as e:
-                print_json("error", message=f"Failed to calculate final stats: {e}")
+        try:
+            run_stats(args.agent)
+        except Exception as e:
+            print_json("error", message=f"Failed to calculate final stats: {e}")

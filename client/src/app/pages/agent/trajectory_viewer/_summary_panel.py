@@ -47,9 +47,12 @@ class TrajectorySummaryPanel(ctk.CTkFrame):
             else 0.0
         )
 
+        reward = trajectory.total_reward
+        reward_str = f"{reward:.2f}" if reward is not None else "N/A"
         summary_text = (
             f"Outcome:  {outcome_str}\n"
-            f"Duration: {dur_secs:.2f}s ({total_frames} frames)"
+            f"Duration: {dur_secs:.2f}s ({total_frames} frames)\n"
+            f"Reward:   {reward_str}"
         )
         self.status_label.configure(text=summary_text, text_color=outcome_color)
 

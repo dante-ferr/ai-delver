@@ -25,6 +25,7 @@ pub fn run_showcase(
     let mut actions = Vec::new();
     let mut frame_snapshots = Vec::new();
     let mut victorious = false;
+    let mut total_reward = 0.0_f32;
     let max_steps = (config.max_seconds_per_episode * config.actions_per_second).max(1);
 
     // Initial pose so interpolation has a start frame before the first action.
@@ -53,6 +54,7 @@ pub fn run_showcase(
             "jump": jump_idx != 0,
         }));
         let step = env.step(run_idx, jump_idx);
+        total_reward += step.reward;
         frame_snapshots.push(frame_snapshot_from_pose(env.delver_pose()));
         observation = step.observation;
         episode_start = 0.0;
@@ -66,6 +68,7 @@ pub fn run_showcase(
         "actions_per_second": config.actions_per_second,
         "victorious": victorious,
         "level_hash": level_hash,
+        "total_reward": total_reward,
         "delver_actions": actions,
         "frame_snapshots": frame_snapshots,
     });

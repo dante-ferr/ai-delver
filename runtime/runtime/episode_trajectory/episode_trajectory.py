@@ -20,6 +20,8 @@ class EpisodeTrajectory:
     level_hash: str = ""  # Unique hash of the level configuration
     # "train" contributes to training stats graphs; "play" is evaluation-only.
     kind: str = "train"
+    # Sum of per-step rewards for the showcase episode (None on older trajectories).
+    total_reward: float | None = None
 
     # For the original, action-based replay
     delver_actions: "List[DelverAction]" = field(default_factory=list)
@@ -61,6 +63,7 @@ class EpisodeTrajectoryFactory:
             data["victorious"],
             data.get("level_hash", ""),
             data.get("kind", "train"),
+            data.get("total_reward"),
         )
 
         if "delver_actions" in data:

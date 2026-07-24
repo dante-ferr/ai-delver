@@ -132,7 +132,7 @@ class CheckpointRestoreOverlay(Overlay):
         self.minsize(width=640, height=480)
         self.maxsize(width=720, height=560)
         self.resizable(False, False)
-        self.center()
+        self._reveal()
 
     @staticmethod
     def _format_date(value: Any) -> str:

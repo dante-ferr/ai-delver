@@ -95,7 +95,7 @@ class FileLoaderOverlay(Overlay):
         self.minsize(width=360, height=420)
         self.maxsize(width=360, height=420)
         self.resizable(False, False)
-        self.center()
+        self._reveal()
 
     def _create_row(self, name: str) -> ctk.CTkFrame:
         row = ctk.CTkFrame(

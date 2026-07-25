@@ -12,6 +12,7 @@ Use the sidebar sections:
 | [Agentic Fine-Tuning](agentic_fine_tuning/index.md) | Improve the **training engine** (HPs, eval packs, sim) |
 | [Level Authoring](levels/authoring.md) | Geometry, spacing, sketches |
 | [Player Curriculum](player/curriculum.md) | Player coaching / forgetting prevention |
+| [Automatic Reviews](player/automatic_reviews.md) | When review passes arm, mix vs showcases |
 | [Engineering](engineering/index.md) | Errors, performance history, roadmap |
 
 Orchestrating agents that improve the training engine: start at [Agentic Fine-Tuning](agentic_fine_tuning/index.md) (emit the eval pack level list first, then `tune` / smoke trains). Player Delver coaching is separate — [Player Curriculum](player/curriculum.md).

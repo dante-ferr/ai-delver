@@ -95,6 +95,18 @@ class TrainingStateManager(StateManager):
         if self.train_logs_panel:
             self.train_logs_panel.update_training_progress(current_cycle)
 
+    def set_training_process_log_total(self, total_steps: int):
+        if self.train_logs_panel:
+            self.train_logs_panel.set_training_progress_total(total_steps)
+
+    def show_review_process_log(self, total_steps: int):
+        if self.train_logs_panel:
+            self.train_logs_panel.show_review_progress(total_steps)
+
+    def update_review_process_log(self, current_cycle: int):
+        if self.train_logs_panel:
+            self.train_logs_panel.update_review_progress(current_cycle)
+
     def _update_ui_state(self):
         """
         Updates the state of all registered UI elements based on the current

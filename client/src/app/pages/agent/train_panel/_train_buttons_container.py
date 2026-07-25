@@ -83,19 +83,19 @@ class TrainButtonsContainer(ctk.CTkFrame):
         if stacked:
             self.grid_columnconfigure(0, weight=1)
             self.train_button.grid(row=0, column=0, padx=0, pady=(0, 4), sticky="ew")
-            self.play_button.grid(row=1, column=0, padx=0, pady=(0, 4), sticky="ew")
             self.interrupt_training_button.grid(
                 row=2, column=0, padx=(4, 0), pady=(4, 0), sticky="ew"
             )
+            self.play_button.grid(row=1, column=0, padx=0, pady=(0, 4), sticky="ew")
         else:
             self.grid_columnconfigure(0, weight=1)
             self.grid_columnconfigure(1, weight=1)
             self.grid_columnconfigure(2, weight=1)
             self.train_button.grid(row=0, column=0, padx=(0, 2), pady=0, sticky="ew")
-            self.play_button.grid(row=0, column=1, padx=(2, 2), pady=0, sticky="ew")
             self.interrupt_training_button.grid(
                 row=0, column=2, padx=(2, 0), pady=0, sticky="ew"
             )
+            self.play_button.grid(row=0, column=1, padx=(2, 2), pady=0, sticky="ew")
 
     def _start_train_thread(self):
         """
@@ -215,9 +215,12 @@ class TrainButtonsContainer(ctk.CTkFrame):
                 level_episode_count = data.get("level_episode_count", 0)
                 training_state_manager.set_value("level_episode_count", level_episode_count)
                 training_state_manager.update_training_process_log(cycle)
-                trajectory_stats_state_manager.notify_trajectory_added()
+                # Review showcases are not persisted; only refresh the list for saved ones.
+                if data.get("persisted", True) and not data.get("is_review", False):
+                    trajectory_stats_state_manager.notify_trajectory_added()
             elif event == "showcase":
-                trajectory_stats_state_manager.notify_trajectory_added()
+                if data.get("persisted", True) and not data.get("is_review", False):
+                    trajectory_stats_state_manager.notify_trajectory_added()
             elif event == "level_transition":
                 levels_trained = data.get("levels_trained", 0)
                 training_state_manager.set_value("levels_trained", levels_trained)
@@ -253,7 +256,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
         training_state_manager.play_session = False
         training_state_manager.set_value("sending_training_request", True)
         training_state_manager.clear_nerd_metrics()
-        
+
         # Build command args
         levels_str = ",".join(training_state_manager.training_levels)
         cycles = str(int(float(training_state_manager.amount_of_cycles)))
@@ -261,7 +264,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
         checkpoint_interval = str(int(float(training_state_manager.checkpoint_interval)))
         mode = "static"
         agent_name = agent_loader.agent.name
-        
+
         client_dir = os.path.abspath(os.path.join(PROJECT_ROOT, ".."))
 
         cmd = [
@@ -275,7 +278,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
             "--agent", agent_name,
             "--server", gui_training_client.server_url
         ]
-        
+
         try:
             self.train_process = subprocess.Popen(
                 cmd,
@@ -293,7 +296,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
             return
 
         start_time = time.time()
-        
+
         # Read stdout line by line
         for line in iter(self.train_process.stdout.readline, ""):
             line = line.strip()
@@ -305,7 +308,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
                 # If it's not JSON, print it to standard stdout
                 print(f"[CLI Output] {line}")
                 continue
-                
+
             event = data.get("event")
             if event == "info":
                 print(f"[CLI Info] {data.get('message')}")
@@ -325,12 +328,31 @@ class TrainButtonsContainer(ctk.CTkFrame):
                 training_state_manager.set_value("sending_training_request", False)
                 training_state_manager.set_value("training", True)
                 gui_training_client.session_id = data.get("session_id")
+            elif event == "training_phase":
+                phase = data.get("phase")
+                expected = int(data.get("expected_progress_steps") or 0)
+                print(f"[CLI Info] Training phase: {phase}")
+                if expected > 0:
+                    if phase == "review":
+                        training_state_manager.show_review_process_log(expected)
+                    elif phase == "focus":
+                        training_state_manager.set_training_process_log_total(expected)
+            elif event == "review_plan":
+                print(f"[CLI Info] {data.get('message')}")
             elif event == "progress":
                 cycle = data.get("cycle", 0)
                 level_episode_count = data.get("level_episode_count", 0)
                 training_state_manager.set_value("level_episode_count", level_episode_count)
-                training_state_manager.update_training_process_log(cycle)
-                trajectory_stats_state_manager.notify_trajectory_added()
+                phase = data.get("training_phase") or (
+                    "review" if data.get("is_review") else "focus"
+                )
+                if phase == "review":
+                    training_state_manager.update_review_process_log(cycle)
+                else:
+                    training_state_manager.update_training_process_log(cycle)
+                # Review showcases are not persisted; only refresh the list for saved ones.
+                if data.get("persisted", True) and not data.get("is_review", False):
+                    trajectory_stats_state_manager.notify_trajectory_added()
             elif event == "level_transition":
                 levels_trained = data.get("levels_trained", 0)
                 training_state_manager.set_value("levels_trained", levels_trained)
@@ -352,7 +374,6 @@ class TrainButtonsContainer(ctk.CTkFrame):
                 trajectory_stats_state_manager.refresh_stats()
                 MessageOverlay("Training session interrupted.", subject="Success")
 
-                
         # Wait for process to exit
         self.train_process.wait()
         if training_state_manager.train_process is self.train_process:
@@ -389,4 +410,3 @@ class TrainButtonsContainer(ctk.CTkFrame):
             subprocess.run(cmd, cwd=client_dir)
         except Exception as e:
             print(f"Failed to run CLI interrupt: {e}")
-

@@ -1,17 +1,20 @@
-"""Episode-budget review-pass planner for automatic forgetting prevention.
+"""Bounded rehearsal planner for automatic forgetting prevention.
 
-After enough focus episodes, arms a review pass that includes each previous
-level once (chunked by max_training_levels). Curriculum commits only when
-callers apply ``commit_after_model_weights``.
+Arms at most K prior levels after E focus episodes; each review chunk uses a
+fixed R episode budget per level. Curriculum commits only via
+``commit_after_model_weights``.
 """
 
 from __future__ import annotations
 
+import math
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
-DEFAULT_FOCUS_EPISODES_BETWEEN_PASSES = 2000
+DEFAULT_FOCUS_EPISODES_BETWEEN_PASSES = 8000
+DEFAULT_REVIEW_EPISODES_PER_LEVEL = 100
+DEFAULT_REVIEW_LEVELS_PER_ARM = 5
 
 CURRICULUM_KEYS = ("trained_levels", "level_hashes", "review_state")
 
@@ -28,18 +31,33 @@ class ReviewPlan:
     focus_budget_exceeded: bool = False
     focus_episodes_since_pass: int = 0
     focus_episodes_between_passes: int = DEFAULT_FOCUS_EPISODES_BETWEEN_PASSES
+    review_episodes_per_level: int = DEFAULT_REVIEW_EPISODES_PER_LEVEL
+    review_levels_per_arm: int = DEFAULT_REVIEW_LEVELS_PER_ARM
     review_pass_queue_remaining: int = 0
+    target_episodes: int | None = None
     messages: list[str] = field(default_factory=list)
 
 
 def default_review_state(
     focus_episodes_between_passes: int = DEFAULT_FOCUS_EPISODES_BETWEEN_PASSES,
+    review_episodes_per_level: int = DEFAULT_REVIEW_EPISODES_PER_LEVEL,
+    review_levels_per_arm: int = DEFAULT_REVIEW_LEVELS_PER_ARM,
 ) -> dict[str, Any]:
     return {
         "focus_episodes_between_passes": int(focus_episodes_between_passes),
         "focus_episodes_since_pass": 0,
+        "review_episodes_per_level": int(review_episodes_per_level),
+        "review_levels_per_arm": int(review_levels_per_arm),
         "review_pass_queue": [],
+        "review_arm_cursor": 0,
     }
+
+
+def _positive_int(value: Any, default: int) -> int:
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return max(1, int(default))
 
 
 def ensure_review_state(metadata: dict[str, Any]) -> dict[str, Any]:
@@ -56,16 +74,38 @@ def ensure_review_state(metadata: dict[str, Any]) -> dict[str, Any]:
 
     if not isinstance(state.get("review_pass_queue"), list):
         state["review_pass_queue"] = []
-    try:
-        between = int(state.get("focus_episodes_between_passes", DEFAULT_FOCUS_EPISODES_BETWEEN_PASSES))
-    except (TypeError, ValueError):
-        between = DEFAULT_FOCUS_EPISODES_BETWEEN_PASSES
-    state["focus_episodes_between_passes"] = max(1, between)
+
+    # Migrate older agents that still have E=2000 default without R/K keys
+    if "review_episodes_per_level" not in state and "review_levels_per_arm" not in state:
+        try:
+            old_e = int(state.get("focus_episodes_between_passes", 0))
+        except (TypeError, ValueError):
+            old_e = 0
+        if old_e == 2000:
+            state["focus_episodes_between_passes"] = DEFAULT_FOCUS_EPISODES_BETWEEN_PASSES
+
+    state["focus_episodes_between_passes"] = _positive_int(
+        state.get("focus_episodes_between_passes"),
+        DEFAULT_FOCUS_EPISODES_BETWEEN_PASSES,
+    )
     try:
         since = int(state.get("focus_episodes_since_pass", 0))
     except (TypeError, ValueError):
         since = 0
     state["focus_episodes_since_pass"] = max(0, since)
+    state["review_episodes_per_level"] = _positive_int(
+        state.get("review_episodes_per_level"),
+        DEFAULT_REVIEW_EPISODES_PER_LEVEL,
+    )
+    state["review_levels_per_arm"] = _positive_int(
+        state.get("review_levels_per_arm"),
+        DEFAULT_REVIEW_LEVELS_PER_ARM,
+    )
+    try:
+        cursor = int(state.get("review_arm_cursor", 0))
+    except (TypeError, ValueError):
+        cursor = 0
+    state["review_arm_cursor"] = max(0, cursor)
     metadata["review_state"] = state
     return metadata
 
@@ -106,6 +146,70 @@ def estimate_session_episodes(
     return 0
 
 
+def review_session_budget(
+    review_level_count: int,
+    *,
+    review_episodes_per_level: int,
+    episodes_per_cycle: int,
+) -> tuple[int, int]:
+    """Return (cycles, target_episodes) for a review-only chunk."""
+    level_count = max(0, int(review_level_count))
+    r = max(1, int(review_episodes_per_level))
+    ep_cycle = max(1, int(episodes_per_cycle))
+    target = max(1, r * max(1, level_count))
+    cycles = max(1, int(math.ceil(target / ep_cycle)))
+    return cycles, target
+
+
+def _unique_levels(levels: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for lvl in levels:
+        if lvl and lvl not in seen:
+            seen.add(lvl)
+            out.append(lvl)
+    return out
+
+
+def _arm_review_batch(metadata: dict[str, Any]) -> list[str]:
+    """Enqueue up to K priors via round-robin over trained_levels. Returns newly added.
+
+    Uses ``review_arm_cursor`` so successive arms walk the career instead of
+    always re-scheduling the oldest K maps.
+    """
+    ensure_review_state(metadata)
+    state = metadata["review_state"]
+    k = int(state["review_levels_per_arm"])
+    queue = [lvl for lvl in state["review_pass_queue"] if isinstance(lvl, str) and lvl]
+    if len(queue) >= k:
+        return []
+    trained = [lvl for lvl in metadata.get("trained_levels", []) if isinstance(lvl, str) and lvl]
+    if not trained:
+        return []
+
+    queued = set(queue)
+    cursor = int(state.get("review_arm_cursor", 0)) % len(trained)
+    slots = k - len(queue)
+    added: list[str] = []
+    walked = 0
+    for i in range(len(trained)):
+        if len(added) >= slots:
+            break
+        lvl = trained[(cursor + i) % len(trained)]
+        walked = i + 1
+        if lvl in queued:
+            continue
+        queue.append(lvl)
+        queued.add(lvl)
+        added.append(lvl)
+
+    if walked:
+        state["review_arm_cursor"] = (cursor + walked) % len(trained)
+    state["review_pass_queue"] = queue
+    metadata["review_state"] = state
+    return added
+
+
 def plan_session(
     coach_levels: list[str],
     metadata: dict[str, Any],
@@ -116,23 +220,17 @@ def plan_session(
 ) -> ReviewPlan:
     """Build the level mix for this train request without mutating metadata."""
     ensure_review_state(metadata)
-    coach = [lvl for lvl in coach_levels if lvl]
-    # Preserve order, drop duplicates
-    seen: set[str] = set()
-    coach_unique: list[str] = []
-    for lvl in coach:
-        if lvl not in seen:
-            seen.add(lvl)
-            coach_unique.append(lvl)
+    coach_unique = _unique_levels(coach_levels)
 
     state = metadata["review_state"]
     between = int(state["focus_episodes_between_passes"])
     since = int(state["focus_episodes_since_pass"])
+    r = int(state["review_episodes_per_level"])
+    k = int(state["review_levels_per_arm"])
     queue = [lvl for lvl in state["review_pass_queue"] if isinstance(lvl, str) and lvl]
     cap = max(1, int(max_training_levels or 1))
 
     if play or not metadata.get("trained_levels"):
-        # Play mode / blank history: never inject reviews
         return ReviewPlan(
             is_review_pass=False,
             coach_levels=coach_unique,
@@ -142,60 +240,58 @@ def plan_session(
             focus_budget_exceeded=False,
             focus_episodes_since_pass=since,
             focus_episodes_between_passes=between,
+            review_episodes_per_level=r,
+            review_levels_per_arm=k,
             review_pass_queue_remaining=len(queue),
             messages=[],
         )
 
     messages: list[str] = []
-    focus_budget_exceeded = False
 
     if queue:
-        review_take = min(len(queue), cap)
+        # Review-only mix so R is not diluted by coach leftovers
+        review_take = min(len(queue), cap, k)
         review_levels = queue[:review_take]
-        free = max(0, cap - len(review_levels))
-        coach_included = [lvl for lvl in coach_unique if lvl not in review_levels][:free]
-        deferred = [lvl for lvl in coach_unique if lvl not in review_levels and lvl not in coach_included]
-        session_levels = list(review_levels) + list(coach_included)
-        if deferred:
-            messages.append(
-                "Review pass in progress: deferred coach level(s) "
-                f"{', '.join(deferred)} until the review queue has room."
-            )
+        target = r * len(review_levels)
         messages.append(
-            f"Review pass session: including {len(review_levels)} prior level(s) "
-            f"({len(queue) - review_take} remaining after this chunk if committed)."
+            f"Review phase: {len(review_levels)} prior level(s), ~{target} episode slots "
+            f"({r} per level). Coach level(s) deferred until this batch finishes."
         )
+        if coach_unique:
+            messages.append(
+                "Deferred coach level(s): " + ", ".join(coach_unique) + "."
+            )
         return ReviewPlan(
             is_review_pass=True,
-            coach_levels=coach_included,
+            coach_levels=[],
             review_levels=review_levels,
-            session_levels=session_levels,
-            deferred_coach_levels=deferred,
+            session_levels=list(review_levels),
+            deferred_coach_levels=list(coach_unique),
             focus_budget_exceeded=False,
             focus_episodes_since_pass=since,
             focus_episodes_between_passes=between,
+            review_episodes_per_level=r,
+            review_levels_per_arm=k,
             review_pass_queue_remaining=len(queue),
+            target_episodes=target,
             messages=messages,
         )
 
     # Focus session
     session_levels = coach_unique[:cap]
     deferred = coach_unique[cap:]
+    focus_budget_exceeded = False
     if projected_focus_episodes > 0 and (since + projected_focus_episodes) >= between:
-        focus_budget_exceeded = projected_focus_episodes >= between
-        if focus_budget_exceeded:
-            messages.append(
-                f"Focus session budget (~{projected_focus_episodes} episodes) meets or exceeds "
-                f"the review threshold ({between}). A review pass will arm after model weights "
-                "are saved if this session completes."
-            )
-        else:
-            messages.append(
-                f"Focus progress {since}/{between} episodes; this session may arm a review pass."
-            )
+        focus_budget_exceeded = True
+        messages.append(
+            f"Focus budget (~{projected_focus_episodes} episodes) will meet or exceed "
+            f"the review threshold ({between}). A review batch (up to {k} levels) may "
+            "auto-chain after this focus phase."
+        )
     else:
         messages.append(
-            f"Focus session ({since}/{between} focus episodes since last review pass)."
+            f"Focus session ({since}/{between} focus episodes since last review arm; "
+            f"R={r}, K={k})."
         )
 
     return ReviewPlan(
@@ -207,6 +303,8 @@ def plan_session(
         focus_budget_exceeded=focus_budget_exceeded,
         focus_episodes_since_pass=since,
         focus_episodes_between_passes=between,
+        review_episodes_per_level=r,
+        review_levels_per_arm=k,
         review_pass_queue_remaining=0,
         messages=messages,
     )
@@ -256,18 +354,23 @@ def commit_after_model_weights(
         included = set(plan.review_levels)
         queue = [lvl for lvl in state["review_pass_queue"] if lvl not in included]
         state["review_pass_queue"] = queue
-        # Coach leftovers join trained_levels but not the current pass queue
         _append_trained_levels(metadata, plan.coach_levels)
         _append_trained_levels(metadata, plan.deferred_coach_levels)
-        # Review-pass episodes do not advance the focus counter
     else:
         _append_trained_levels(metadata, plan.session_levels)
         _append_trained_levels(metadata, plan.deferred_coach_levels)
         state["focus_episodes_since_pass"] = int(state["focus_episodes_since_pass"]) + episodes
         if state["focus_episodes_since_pass"] >= between and metadata.get("trained_levels"):
-            # Arm next pass from full history (oldest-first trained_levels order)
-            state["review_pass_queue"] = list(metadata["trained_levels"])
             state["focus_episodes_since_pass"] = 0
+            metadata["review_state"] = state
+            _arm_review_batch(metadata)
+            return metadata
 
     metadata["review_state"] = state
     return metadata
+
+
+def queue_needs_review(metadata: dict[str, Any]) -> bool:
+    ensure_review_state(metadata)
+    queue = metadata["review_state"].get("review_pass_queue") or []
+    return bool(queue)

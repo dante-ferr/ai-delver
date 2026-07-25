@@ -30,4 +30,5 @@ if [ "$(id -u)" = "0" ] && [ -n "$1" ]; then
   fi
 fi
 
+cd /app/intelligence
 exec "$@"

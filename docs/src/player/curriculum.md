@@ -29,7 +29,7 @@ To cement multiple skills together, the player should train the agent on combo l
 When transferring an agent to a new level layout, modifying weights too aggressively will erase existing skills. To shield learned weights, the system automatically dials down the learning rate, allowing the agent to adapt to new elements with minimal disruption to old knowledge.
 
 ### C. Automatic Review Passes
-After enough focus training (measured in episodes), the client inserts review-pass sessions that replay every previously trained level. See [§5](#5-automatic-reviews).
+After enough focus training (measured in episodes), the client inserts review-pass sessions that replay previously trained levels. Full explanation (cadence, static mix, showcases vs collect): [Automatic Reviews](automatic_reviews.md).
 
 ---
 
@@ -43,7 +43,7 @@ To make the coaching experience smooth and prevent accidental skill wipes, the c
    * If the agent is warm-starting AND facing a new level (not in the trained history):
      * The system automatically scales the default learning rate down to `0.000075` (1/4 of the default `0.0003` value).
      * If the user has explicitly overridden the learning rate in their arguments, the CLI respects their override and logs the choice.
-4. **History Consolidation**: When new model weights are written from the server (`model_weights` WebSocket event), the session levels are merged into `trained_levels` and review state is updated (see §5). Interrupted sessions that still deliver weights commit the same way.
+4. **History Consolidation**: When new model weights are written from the server (`model_weights` WebSocket event), the session levels are merged into `trained_levels` and review state is updated ([Automatic Reviews](automatic_reviews.md)). Interrupted sessions that still deliver weights commit the same way.
 
 ---
 
@@ -64,41 +64,14 @@ To give the player full agency over the coaching experience, the application off
 
 ## 5. Automatic Reviews
 
-Weight drift tracks **how much new experience** the Delver collects, not how many times the coach clicked Train. The CLI therefore arms a **review pass** from cumulative **focus episodes**.
+See **[Automatic Reviews](automatic_reviews.md)** for the full cadence, static-mix vs showcase clarification, and worked examples.
 
-| Knob | Default | Meaning |
-| --- | --- | --- |
-| Arming unit | Focus episodes | Episodes collected during focus sessions (not review-pass sessions) |
-| `focus_episodes_between_passes` (`E`) | `2000` | After this many focus episodes since the last pass completed, arm a review pass |
-| Exposure per prior level | One **session inclusion** per pass | The level is in the `/train` mix for an entire review-pass session (static mix share ≈ `(cycles × episodes_per_cycle) / L`), not a single run |
-| Session cap | `max_training_levels` (from `/init`, default 10) | Per-session concurrent mix only — lifetime `trained_levels` is unbounded |
+Summary:
 
-### Cadence
-
-1. **Focus sessions** (empty `review_pass_queue`): send coach-selected levels only.
-2. On successful `model_weights` write, add this session’s episode count to `focus_episodes_since_pass`.
-3. When that total reaches `E`, set `review_pass_queue` to all `trained_levels` (oldest first) and reset the counter.
-4. **Review-pass sessions** (non-empty queue): take up to `max_training_levels` levels from the queue; coach picks only fill leftover slots. Review-pass episodes do **not** advance the focus counter.
-5. After `model_weights`, remove included levels from the queue. Large histories chunk across multiple consecutive review sessions.
-6. `--play` never arms or advances the review state.
-
-The CLI emits a `review_plan` JSON event at session start (focus vs review, queue remaining, episode progress). Curriculum mutations happen **only** after model weights are saved — not on interval checkpoints and not on failed streams without weights.
-
-`metadata.json` shape (curriculum fields):
-
-```json
-{
-  "trained_levels": ["L1", "L2"],
-  "level_hashes": { "L1": "<hash>" },
-  "review_state": {
-    "focus_episodes_between_passes": 2000,
-    "focus_episodes_since_pass": 650,
-    "review_pass_queue": []
-  }
-}
-```
-
-Use a normal training budget on review-pass sessions (same cycles / runs as coaching). A token 1-cycle review is a weak inclusion even though the level “counts” as reviewed for the queue.
+* Arms after ~**8000 focus episodes** (`E`), scheduling at most **`K=5`** priors with ~**`R=100`** episode slots each (review-only mix; budgeted cycles).
+* One Train click can **auto-chain** focus → review when `E` is crossed (dual GUI progress bars).
+* Curriculum updates only after `model_weights` are written.
+* Review-level showcase trajectories are **not persisted** on the client; coach/focus showcases still save as usual.
 
 ---
 

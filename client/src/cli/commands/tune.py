@@ -20,10 +20,24 @@ def run_tune(args):
     def objective(trial):
         # 1. Suggest hyperparameters
         learning_rate = trial.suggest_float("learning_rate", 5e-5, 8e-4, log=True)
-        entropy_reg = trial.suggest_float("entropy_reg", 0.05, 0.30)
-        finished_reward = trial.suggest_float("finished_reward", 50.0, 200.0)
+        entropy_reg = trial.suggest_float("entropy_reg", 0.01, 0.20)
+        finished_reward = trial.suggest_float("finished_reward", 80.0, 250.0)
+        jump_reward = trial.suggest_float("jump_reward", -3.0, -0.05)
+        goal_distance_reward_scale = trial.suggest_float("goal_distance_reward_scale", 0.001, 0.03)
+        turn_reward = trial.suggest_float("turn_reward", -0.5, 0.0)
 
-        print_json("info", message=f"Starting Trial {trial.number}: learning_rate={learning_rate:.6f}, entropy_reg={entropy_reg:.4f}, finished_reward={finished_reward:.2f}")
+        print_json(
+            "info",
+            message=(
+                f"Starting Trial {trial.number}: "
+                f"learning_rate={learning_rate:.6f}, "
+                f"entropy_reg={entropy_reg:.4f}, "
+                f"finished_reward={finished_reward:.2f}, "
+                f"jump_reward={jump_reward:.2f}, "
+                f"goal_distance_scale={goal_distance_reward_scale:.4f}, "
+                f"turn_reward={turn_reward:.2f}"
+            ),
+        )
 
         # 2. Build training command
         cmd = [
@@ -36,7 +50,10 @@ def run_tune(args):
             "--server", args.server,
             "--learning-rate", f"{learning_rate:.6f}",
             "--entropy-regularization", f"{entropy_reg:.4f}",
-            "--finished-reward", f"{finished_reward:.2f}"
+            "--finished-reward", f"{finished_reward:.2f}",
+            "--jump-reward", f"{jump_reward:.2f}",
+            "--goal-distance-reward-scale", f"{goal_distance_reward_scale:.4f}",
+            "--turn-reward", f"{turn_reward:.2f}"
         ]
 
         # 3. Spawn training subprocess

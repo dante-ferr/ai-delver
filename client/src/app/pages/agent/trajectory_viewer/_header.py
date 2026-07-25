@@ -19,6 +19,7 @@ class TrajectoryHeader(ctk.CTkFrame):
     def __init__(self, master):
         super().__init__(master, fg_color="transparent")
         self.current_index = None
+        self.live_var = ctk.BooleanVar(value=True)
 
         # Row 0: controls
         self.label = ctk.CTkLabel(
@@ -47,11 +48,23 @@ class TrajectoryHeader(ctk.CTkFrame):
         )
         self.total_label.grid(row=0, column=2, padx=4, pady=(0, 4), sticky="w")
 
+        # Live: auto-follow the latest persisted trajectory during training
+        self.live_checkbox = ctk.CTkCheckBox(
+            self,
+            text="Live",
+            variable=self.live_var,
+            command=self._on_live_toggled,
+            checkbox_width=20,
+            checkbox_height=20,
+            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+        )
+        self.live_checkbox.grid(row=0, column=3, padx=(12, 4), pady=(0, 4), sticky="w")
+
         # Replay button
         self.replay_button = StandardButton(
             self, text="Replay", command=self._replay, width=80
         )
-        self.replay_button.grid(row=0, column=3, padx=(12, 4), pady=(0, 4), sticky="w")
+        self.replay_button.grid(row=0, column=4, padx=(8, 4), pady=(0, 4), sticky="w")
 
         # Row 1: scrubber aligned to summary/timeline width (synced by TrajectoryViewer)
         self.slider = ctk.CTkSlider(
@@ -62,7 +75,7 @@ class TrajectoryHeader(ctk.CTkFrame):
             width=280,
             command=self._on_slider_drag,
         )
-        self.slider.grid(row=1, column=0, columnspan=4, padx=0, pady=(4, 8), sticky="w")
+        self.slider.grid(row=1, column=0, columnspan=5, padx=0, pady=(4, 8), sticky="w")
 
         # Bind slider release and mouse scroll wheel
         self.slider.bind("<ButtonRelease-1>", lambda e: self._on_slider_release())
@@ -113,15 +126,18 @@ class TrajectoryHeader(ctk.CTkFrame):
             else:
                 self.slider.configure(state="disabled", from_=1, to=1.001, number_of_steps=1)
 
-            # Default to the latest trajectory if none is selected
-            if self.current_index is None:
-                self.load_trajectory_by_index(total - 1)
-            else:
-                # Clamp current_index in case the count shrank (unexpected)
-                if self.current_index >= total:
-                    self.load_trajectory_by_index(total - 1)
+            # Live mode (or no selection yet) always follows the latest trajectory
+            if self.live_var.get() or self.current_index is None:
+                latest = total - 1
+                if self.current_index != latest:
+                    self.load_trajectory_by_index(latest)
                 else:
                     self._update_ui_state()
+            elif self.current_index >= total:
+                # Clamp current_index in case the count shrank (unexpected)
+                self.load_trajectory_by_index(total - 1)
+            else:
+                self._update_ui_state()
         else:
             self.current_index = None
             self.slider.configure(state="disabled", from_=0, to=1, number_of_steps=1)
@@ -130,6 +146,19 @@ class TrajectoryHeader(ctk.CTkFrame):
             self.index_entry.insert(0, "0")
             self.replay_button.configure(state="disabled")
 
+    def _on_live_toggled(self):
+        """When Live is enabled, jump to the latest trajectory immediately."""
+        if not self.live_var.get():
+            return
+        total = self.total_trajectories
+        if total > 0:
+            self.load_trajectory_by_index(total - 1)
+
+    def _disable_live(self):
+        """Turns off Live follow after the user picks a specific run."""
+        if self.live_var.get():
+            self.live_var.set(False)
+
     def _on_slider_drag(self, value):
         """Updates the text entry in real-time while dragging the slider."""
         self.index_entry.delete(0, "end")
@@ -137,6 +166,7 @@ class TrajectoryHeader(ctk.CTkFrame):
 
     def _on_slider_release(self):
         """Loads the trajectory only when the slider drag is released."""
+        self._disable_live()
         val = int(self.slider.get())
         self.load_trajectory_by_index(val - 1)
 
@@ -158,9 +188,14 @@ class TrajectoryHeader(ctk.CTkFrame):
         elif new_val > total:
             new_val = total
 
+        target_index = int(new_val) - 1
+        if target_index == self.current_index:
+            return
+
+        self._disable_live()
         self.slider.set(new_val)
         self._on_slider_drag(new_val)
-        self.load_trajectory_by_index(int(new_val) - 1)
+        self.load_trajectory_by_index(target_index)
 
     def _on_entry_submit(self):
         """Triggers loading when user presses Enter or focus leaves the Entry field."""
@@ -181,6 +216,11 @@ class TrajectoryHeader(ctk.CTkFrame):
             # Revert to the current valid selection if invalid
             val = (self.current_index + 1) if self.current_index is not None else 1
 
+        # Selecting a specific run pins the view and leaves Live mode.
+        # If Live is on and the entry still matches the current run (e.g. FocusOut
+        # with no edit), keep following.
+        if not (self.live_var.get() and self.current_index is not None and val - 1 == self.current_index):
+            self._disable_live()
         self.load_trajectory_by_index(val - 1)
 
     def load_trajectory_by_index(self, index: int) -> bool:

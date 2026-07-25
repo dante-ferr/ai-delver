@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import math
 import time
 import signal
 from client_requests.training_client import TrainingClient
@@ -19,6 +20,8 @@ from .review_planner import (
     ensure_review_state,
     estimate_session_episodes,
     plan_session,
+    queue_needs_review,
+    review_session_budget,
 )
 
 # Global container for signal handler / graceful interrupt
@@ -75,19 +78,17 @@ def _level_hashes_for(levels: list[str]) -> dict[str, str]:
 
 
 def run_train(args):
-    """Executes a training session, streaming trajectories, and calculating final stats on exit."""
+    """Executes training, optionally auto-chaining a budgeted review phase after focus."""
     global client_instance, session_id, interrupted, completed_normally
     interrupted = False
     completed_normally = False
 
-    # Accumulated nerd stats (reset each run)
     nerd_step_history: list = []
     nerd_loss_history: list = []
     nerd_return_history: list = []
     nerd_stats_persisted = False
 
     def persist_nerd_stats() -> None:
-        """Saves session metrics once so completed/interrupted refreshes see latest_session."""
         nonlocal nerd_stats_persisted
         if nerd_stats_persisted or not nerd_loss_history:
             return
@@ -97,12 +98,11 @@ def run_train(args):
         except Exception as e:
             print_json("error", message=f"Failed to save nerd stats: {e}")
 
-    # Register system signals for graceful shutdown
     signal.signal(signal.SIGINT, raise_keyboard_interrupt)
     signal.signal(signal.SIGTERM, raise_keyboard_interrupt)
 
     async def train_async():
-        global client_instance, session_id, completed_normally
+        global client_instance, session_id, completed_normally, interrupted
         client_instance = TrainingClient(server_url=args.server)
 
         coach_levels = [l.strip() for l in args.levels.split(",") if l.strip()]
@@ -120,45 +120,50 @@ def run_train(args):
             return
 
         is_play_mode = getattr(args, "play", False)
-        runs_per_cycle = getattr(args, "runs_per_cycle", None)
-        episodes_per_cycle_effective = None
+        base_runs_per_cycle = getattr(args, "runs_per_cycle", None)
+        base_episodes_per_cycle = getattr(args, "episodes_per_cycle", None)
+        base_cycles = int(args.cycles)
+
         if is_play_mode:
             print_json("info", message=f"Play mode enabled: putting Delver to play {len(coach_levels)} selected level(s).")
-            args.cycles = 1
-        elif runs_per_cycle is not None and runs_per_cycle > 0:
-            episodes_per_cycle_effective = runs_per_cycle * episodes_per_run
+            base_cycles = 1
+            base_runs_per_cycle = None
+            base_episodes_per_cycle = None
+        elif base_runs_per_cycle is not None and base_runs_per_cycle > 0:
             print_json(
                 "info",
                 message=(
-                    f"Using runs_per_cycle={runs_per_cycle}; server will convert to "
-                    f"~{episodes_per_cycle_effective} episode slots "
+                    f"Using runs_per_cycle={base_runs_per_cycle}; server will convert to "
+                    f"~{base_runs_per_cycle * episodes_per_run} episode slots "
                     f"({episodes_per_run} slots per run)."
                 ),
             )
         else:
-            if args.episodes_per_cycle is None or args.episodes_per_cycle <= 0:
+            if base_episodes_per_cycle is None or base_episodes_per_cycle <= 0:
                 print_json("error", message="train requires --runs-per-cycle or a positive --episodes-per-cycle")
                 return
-            remainder = args.episodes_per_cycle % env_batch_size
+            remainder = base_episodes_per_cycle % env_batch_size
             if remainder != 0:
-                adjusted = max(env_batch_size, round(args.episodes_per_cycle / env_batch_size) * env_batch_size)
-                print_json("info", message=f"Adjusted episodes-per-cycle from {args.episodes_per_cycle} to {adjusted} to align with env_batch_size ({env_batch_size}) constraints.")
+                adjusted = max(env_batch_size, round(base_episodes_per_cycle / env_batch_size) * env_batch_size)
+                print_json("info", message=f"Adjusted episodes-per-cycle from {base_episodes_per_cycle} to {adjusted} to align with env_batch_size ({env_batch_size}) constraints.")
+                base_episodes_per_cycle = adjusted
                 args.episodes_per_cycle = adjusted
-            runs_per_cycle = None
-            episodes_per_cycle_effective = args.episodes_per_cycle
+            base_runs_per_cycle = None
 
-        # Load existing agent weights if present
+        def episodes_per_cycle_for(runs, episodes_per_cycle):
+            if runs is not None and runs > 0:
+                return int(runs) * int(episodes_per_run)
+            return int(episodes_per_cycle or 0)
+
         from agent.agent import Agent
         agent_obj = Agent(args.agent)
 
-        # Resolve weights path
         weights_to_load = None
         if args.checkpoint:
             weights_to_load = resolve_checkpoint(agent_obj, str(args.checkpoint))
             if not weights_to_load:
                 print_json("error", message=f"Specified checkpoint '{args.checkpoint}' not found.")
                 return
-            # Align curriculum with the restored policy when possible
             snap = load_checkpoint_curriculum(agent_obj, str(args.checkpoint))
             if snap is not None:
                 from runtime.episode_trajectory._trajectory_metadata_manager import TrajectoryMetadataManager
@@ -172,11 +177,9 @@ def run_train(args):
                 await warm_meta_mgr.write_metadata(warm_meta)
                 print_json("info", message=f"Restored curriculum snapshot from checkpoint '{args.checkpoint}'.")
         else:
-            # Default to latest weights
             if agent_obj.weights_path and agent_obj.weights_path.is_file():
                 weights_to_load = agent_obj.weights_path
 
-        # Load weights bytes
         model_bytes_b64 = None
         if weights_to_load and weights_to_load.is_file():
             try:
@@ -188,100 +191,6 @@ def run_train(args):
 
         from runtime.episode_trajectory._trajectory_metadata_manager import TrajectoryMetadataManager
         metadata_manager = TrajectoryMetadataManager(args.agent)
-        try:
-            metadata = await metadata_manager.read_metadata()
-        except Exception:
-            metadata = {"trajectory_count": 0, "stats": {"amount": 0, "victories": 0}}
-        ensure_review_state(metadata)
-
-        projected_episodes = 0
-        if not is_play_mode:
-            projected_episodes = estimate_session_episodes(
-                cycles=args.cycles,
-                runs_per_cycle=runs_per_cycle,
-                episodes_per_run=episodes_per_run,
-                episodes_per_cycle=episodes_per_cycle_effective,
-            )
-
-        review_plan = plan_session(
-            coach_levels,
-            metadata,
-            max_training_levels,
-            play=is_play_mode,
-            projected_focus_episodes=projected_episodes,
-        )
-        levels_list = review_plan.session_levels
-        if not levels_list:
-            print_json("error", message="No levels left to train after review planning.")
-            return
-
-        for msg in review_plan.messages:
-            print_json("info", message=msg)
-        print_json(
-            "review_plan",
-            is_review_pass=review_plan.is_review_pass,
-            review_levels=review_plan.review_levels,
-            coach_levels=review_plan.coach_levels,
-            session_levels=levels_list,
-            deferred_coach_levels=review_plan.deferred_coach_levels,
-            focus_episodes_since_pass=review_plan.focus_episodes_since_pass,
-            focus_episodes_between_passes=review_plan.focus_episodes_between_passes,
-            review_pass_queue_remaining=review_plan.review_pass_queue_remaining,
-            message=(
-                "Review pass session."
-                if review_plan.is_review_pass
-                else "Focus training session."
-            ),
-        )
-
-        # Committed curriculum snapshot for interval/pre_level bundles (pre-session)
-        session_start_curriculum = curriculum_snapshot(metadata)
-
-        print_json("init_started", message="Preparing levels and verifying configuration...")
-        try:
-            client_instance.ensure_levels_saved(levels_list, args.agent)
-        except Exception as e:
-            print_json("error", message=f"Failed to prepare levels: {e}")
-            return
-
-        level_hashes = _level_hashes_for(levels_list)
-
-        # Pre-level safety snapshots so each level has a rollback point
-        if weights_to_load and weights_to_load.is_file():
-            try:
-                with open(weights_to_load, "rb") as f:
-                    pre_bytes = f.read()
-                for level in levels_list:
-                    entry = save_checkpoint(
-                        agent_obj,
-                        pre_bytes,
-                        level=level,
-                        cycle=None,
-                        kind=KIND_PRE_LEVEL,
-                        curriculum=session_start_curriculum,
-                    )
-                    print_json(
-                        "info",
-                        message=(
-                            f"Saved pre-level checkpoint for '{entry['level']}' "
-                            f"({entry['id']})."
-                        ),
-                    )
-            except Exception as e:
-                print_json("error", message=f"Failed to save pre-level checkpoints: {e}")
-                return
-
-        previously_trained = metadata.get("trained_levels", [])
-        new_levels = [lvl for lvl in coach_levels if lvl not in previously_trained]
-
-        # If warm-starting and facing a new challenge (coach focus)
-        if weights_to_load and new_levels and not review_plan.is_review_pass:
-            if args.learning_rate is None:
-                # Default is 0.0003; reduce to 0.000075 (1/4)
-                args.learning_rate = 0.000075
-                print_json("info", message=f"New challenge detected (levels: {', '.join(new_levels)}). Automatically reduced learning rate to 0.000075 to prevent catastrophic forgetting.")
-            else:
-                print_json("info", message=f"New challenge detected (levels: {', '.join(new_levels)}). Respecting user-specified learning rate override of {args.learning_rate}.")
 
         standard_keys = {
             "levels",
@@ -300,190 +209,517 @@ def run_train(args):
             if key not in standard_keys and val is not None
         }
 
-        payload = client_instance.create_training_payload(
-            levels_list,
-            args.mode,
-            args.cycles,
-            runs_per_cycle=runs_per_cycle,
-            episodes_per_cycle=None if (runs_per_cycle or is_play_mode) else args.episodes_per_cycle,
-            config_overrides=config_overrides if config_overrides else None,
-            model_bytes_b64=model_bytes_b64,
-            play=is_play_mode,
-        )
+        chain_start_time = time.time()
+        overall_completed = False
+        pre_level_saved = False
+        lr_scaled_for_challenge = False
 
-        print_json("request_sent", message=f"Sending training request to http://{args.server}/train...")
-        try:
-            response = await client_instance.submit_training(payload)
-        except Exception as e:
-            print_json("error", message=f"Failed to connect to training server: {e}")
-            return
-
-        session_id = response.get("session_id")
-        if not session_id:
-            print_json("error", message="No session_id received from server.")
-            return
-
-        print_json("session_created", session_id=session_id, message="Training session started successfully.")
-
-        start_time = time.time()
-        current_cycle = 0
-        levels_trained_count = 0
-        current_level = levels_list[0]
-        session_episodes_accumulated = 0
-        curriculum_committed = False
-
-        # Callback handlers for websocket stream
-        async def on_trajectory(trajectory, level_episode_count):
-            nonlocal current_cycle
-            if trajectory:
-                await trajectory.save(
-                    args.agent, kind="play" if is_play_mode else "train"
-                )
-            current_cycle += 1
-            print_json("progress", cycle=current_cycle, level_episode_count=level_episode_count, message=f"Completed cycle {current_cycle}")
-
-        def on_level_transition(levels_trained):
-            nonlocal levels_trained_count, current_level
-            levels_trained_count = int(levels_trained) if levels_trained is not None else levels_trained_count + 1
-            if 0 <= levels_trained_count < len(levels_list):
-                current_level = levels_list[levels_trained_count]
-            print_json(
-                "level_transition",
-                levels_trained=levels_trained_count,
-                level=current_level,
-                is_review=current_level in review_plan.review_levels,
-                message="Transitioned to next level.",
-            )
-
-        def on_completed():
-            global completed_normally
-            if not is_play_mode:
-                persist_nerd_stats()
-            duration = time.time() - start_time
-            print_json("completed", duration=f"{duration:.2f}s", message="Training completed successfully.")
-            completed_normally = True
-
-        def on_error(err):
-            print_json("error", message=err)
-
-        def on_metrics(step, loss, average_return, episodes):
-            nonlocal session_episodes_accumulated
-            if episodes is not None:
-                try:
-                    session_episodes_accumulated += int(episodes)
-                except (TypeError, ValueError):
-                    pass
-            if step is not None:
-                nerd_step_history.append(step)
-                nerd_loss_history.append(round(loss, 6) if loss is not None else 0.0)
-                nerd_return_history.append(round(average_return, 4) if average_return is not None else 0.0)
-            print_json(
-                "metrics",
-                step=step,
-                loss=round(loss, 6) if loss is not None else None,
-                average_return=round(average_return, 4) if average_return is not None else None,
-                episodes=episodes,
-            )
-
-        async def commit_curriculum() -> None:
-            nonlocal curriculum_committed
-            if curriculum_committed or is_play_mode:
-                return
-            curriculum_committed = True
+        async def reload_metadata():
             try:
-                latest = await metadata_manager.read_metadata()
-                ensure_review_state(latest)
-                episodes_for_commit = session_episodes_accumulated
-                if episodes_for_commit <= 0:
-                    # Fallback when metrics never reported episodes
-                    if completed_normally and projected_episodes > 0:
-                        episodes_for_commit = projected_episodes
-                    elif current_cycle > 0 and episodes_per_cycle_effective:
-                        episodes_for_commit = current_cycle * int(episodes_per_cycle_effective)
+                return await metadata_manager.read_metadata()
+            except Exception:
+                return {"trajectory_count": 0, "stats": {"amount": 0, "victories": 0}}
 
-                commit_after_model_weights(
-                    latest,
-                    review_plan,
-                    session_episodes=episodes_for_commit,
-                    level_hashes=level_hashes,
+        async def execute_phase(
+            *,
+            force_review: bool,
+            cycles: int,
+            runs_per_cycle,
+            episodes_per_cycle,
+            projected_episodes: int,
+        ) -> bool:
+            """Run one focus or review /train. Returns True if completed with weights path OK."""
+            global session_id, completed_normally, interrupted
+
+            metadata = ensure_review_state(await reload_metadata())
+            # Prefer draining an existing queue before more focus
+            prefer_review = force_review or (not is_play_mode and queue_needs_review(metadata))
+            review_plan = plan_session(
+                coach_levels,
+                metadata,
+                max_training_levels,
+                play=is_play_mode,
+                projected_focus_episodes=0 if prefer_review else projected_episodes,
+            )
+            if prefer_review and not review_plan.is_review_pass and queue_needs_review(metadata):
+                # queue present but plan_session should have selected it — re-plan after ensure
+                review_plan = plan_session(
+                    coach_levels,
+                    metadata,
+                    max_training_levels,
+                    play=False,
+                    projected_focus_episodes=0,
                 )
-                await metadata_manager.write_metadata(latest)
-                state = latest.get("review_state", {})
+
+            phase_cycles = cycles
+            phase_runs = runs_per_cycle
+            phase_episodes_per_cycle = episodes_per_cycle
+            phase_projected = projected_episodes
+
+            if review_plan.is_review_pass and not is_play_mode:
+                ep_cycle = episodes_per_cycle_for(phase_runs, phase_episodes_per_cycle)
+                if ep_cycle <= 0:
+                    ep_cycle = max(1, int(episodes_per_run))
+                    phase_runs = 1
+                    phase_episodes_per_cycle = None
+                phase_cycles, target_eps = review_session_budget(
+                    len(review_plan.review_levels),
+                    review_episodes_per_level=review_plan.review_episodes_per_level,
+                    episodes_per_cycle=ep_cycle,
+                )
+                review_plan.target_episodes = target_eps
+                phase_projected = target_eps
                 print_json(
                     "info",
                     message=(
-                        "Updated curriculum after model weights "
-                        f"(focus episodes since pass: {state.get('focus_episodes_since_pass', 0)}/"
-                        f"{state.get('focus_episodes_between_passes', 0)}; "
-                        f"review queue: {len(state.get('review_pass_queue') or [])})."
+                        f"Review budget override: {phase_cycles} cycle(s) for "
+                        f"~{target_eps} episode slots "
+                        f"({review_plan.review_episodes_per_level} per level × "
+                        f"{len(review_plan.review_levels)} levels)."
                     ),
                 )
+
+            levels_list = review_plan.session_levels
+            if not levels_list:
+                print_json("error", message="No levels left to train after review planning.")
+                return False
+
+            phase_name = "review" if review_plan.is_review_pass else "focus"
+            # Showcase count ≈ cycles × levels in mix (one showcase per level per cycle)
+            expected_progress_steps = max(1, phase_cycles * len(levels_list))
+
+            for msg in review_plan.messages:
+                print_json("info", message=msg)
+
+            print_json(
+                "training_phase",
+                phase=phase_name,
+                expected_progress_steps=expected_progress_steps,
+                cycles=phase_cycles,
+                levels=levels_list,
+                message=f"Starting {phase_name} phase.",
+            )
+            print_json(
+                "review_plan",
+                is_review_pass=review_plan.is_review_pass,
+                review_levels=review_plan.review_levels,
+                coach_levels=review_plan.coach_levels,
+                session_levels=levels_list,
+                deferred_coach_levels=review_plan.deferred_coach_levels,
+                focus_episodes_since_pass=review_plan.focus_episodes_since_pass,
+                focus_episodes_between_passes=review_plan.focus_episodes_between_passes,
+                review_episodes_per_level=review_plan.review_episodes_per_level,
+                review_levels_per_arm=review_plan.review_levels_per_arm,
+                review_pass_queue_remaining=review_plan.review_pass_queue_remaining,
+                target_episodes=review_plan.target_episodes,
+                cycles=phase_cycles,
+                message=(
+                    "Review pass session."
+                    if review_plan.is_review_pass
+                    else "Focus training session."
+                ),
+            )
+
+            session_start_curriculum = curriculum_snapshot(metadata)
+
+            print_json("init_started", message="Preparing levels and verifying configuration...")
+            try:
+                client_instance.ensure_levels_saved(levels_list, args.agent)
             except Exception as e:
-                curriculum_committed = False
-                print_json("error", message=f"Failed to update curriculum after model weights: {e}")
+                print_json("error", message=f"Failed to prepare levels: {e}")
+                return False
 
-        async def on_model_weights(model_bytes_b64):
-            if model_bytes_b64:
+            level_hashes = _level_hashes_for(levels_list)
+            review_hashes = {
+                level_hashes[name]
+                for name in review_plan.review_levels
+                if name in level_hashes and level_hashes[name]
+            }
+
+            nonlocal pre_level_saved, lr_scaled_for_challenge, model_bytes_b64
+            if weights_to_load and weights_to_load.is_file() and not pre_level_saved:
                 try:
-                    weights_data = base64.b64decode(model_bytes_b64)
-                    # Re-instantiate agent_obj to ensure save paths exist
-                    weights_agent = Agent(args.agent)
-                    if weights_agent.weights_path:
-                        weights_agent.weights_path.parent.mkdir(parents=True, exist_ok=True)
-                        with open(weights_agent.weights_path, "wb") as f:
-                            f.write(weights_data)
-                        print_json("info", message="Successfully saved downloaded model weights from server.")
-                        await commit_curriculum()
+                    with open(weights_to_load, "rb") as f:
+                        pre_bytes = f.read()
+                    for level in levels_list:
+                        entry = save_checkpoint(
+                            agent_obj,
+                            pre_bytes,
+                            level=level,
+                            cycle=None,
+                            kind=KIND_PRE_LEVEL,
+                            curriculum=session_start_curriculum,
+                        )
+                        print_json(
+                            "info",
+                            message=(
+                                f"Saved pre-level checkpoint for '{entry['level']}' "
+                                f"({entry['id']})."
+                            ),
+                        )
+                    pre_level_saved = True
                 except Exception as e:
-                    print_json("error", message=f"Failed to save downloaded model weights: {e}")
+                    print_json("error", message=f"Failed to save pre-level checkpoints: {e}")
+                    return False
 
-        async def on_checkpoint(cycle, model_bytes_b64):
-            if model_bytes_b64:
-                try:
-                    weights_data = base64.b64decode(model_bytes_b64)
-                    entry = save_checkpoint(
-                        args.agent,
-                        weights_data,
-                        level=current_level,
-                        cycle=int(cycle) if cycle is not None else None,
-                        kind=KIND_INTERVAL,
-                        curriculum=session_start_curriculum,
-                    )
+            previously_trained = metadata.get("trained_levels", [])
+            new_levels = [lvl for lvl in coach_levels if lvl not in previously_trained]
+            if (
+                weights_to_load
+                and new_levels
+                and not review_plan.is_review_pass
+                and not lr_scaled_for_challenge
+            ):
+                if args.learning_rate is None:
+                    args.learning_rate = 0.000075
+                    config_overrides["learning_rate"] = 0.000075
                     print_json(
                         "info",
                         message=(
-                            f"Successfully saved checkpoint for cycle {cycle} "
-                            f"on level '{current_level}' ({entry['id']})."
+                            f"New challenge detected (levels: {', '.join(new_levels)}). "
+                            "Automatically reduced learning rate to 0.000075 to prevent "
+                            "catastrophic forgetting."
+                        ),
+                    )
+                else:
+                    print_json(
+                        "info",
+                        message=(
+                            f"New challenge detected (levels: {', '.join(new_levels)}). "
+                            f"Respecting user-specified learning rate override of {args.learning_rate}."
+                        ),
+                    )
+                lr_scaled_for_challenge = True
+
+            # Refresh warm-start bytes from disk (previous phase may have written new weights)
+            phase_agent = Agent(args.agent)
+            if phase_agent.weights_path and phase_agent.weights_path.is_file():
+                try:
+                    with open(phase_agent.weights_path, "rb") as f:
+                        model_bytes_b64 = base64.b64encode(f.read()).decode("utf-8")
+                except Exception:
+                    pass
+
+            payload = client_instance.create_training_payload(
+                levels_list,
+                args.mode,
+                phase_cycles,
+                runs_per_cycle=phase_runs,
+                episodes_per_cycle=None if (phase_runs or is_play_mode) else phase_episodes_per_cycle,
+                config_overrides=config_overrides if config_overrides else None,
+                model_bytes_b64=model_bytes_b64,
+                play=is_play_mode,
+            )
+
+            print_json("request_sent", message=f"Sending training request to http://{args.server}/train...")
+            try:
+                response = await client_instance.submit_training(payload)
+            except Exception as e:
+                print_json("error", message=f"Failed to connect to training server: {e}")
+                return False
+
+            session_id = response.get("session_id")
+            if not session_id:
+                print_json("error", message="No session_id received from server.")
+                return False
+
+            print_json("session_created", session_id=session_id, message="Training session started successfully.")
+
+            completed_normally = False
+            interrupted = False
+            current_cycle = 0
+            levels_trained_count = 0
+            current_level = levels_list[0]
+            session_episodes_accumulated = 0
+            curriculum_committed = False
+            ep_cycle_eff = episodes_per_cycle_for(phase_runs, phase_episodes_per_cycle)
+
+            async def on_trajectory(trajectory, level_episode_count):
+                nonlocal current_cycle
+                is_review_showcase = False
+                persisted = False
+                if trajectory is not None:
+                    traj_hash = getattr(trajectory, "level_hash", "") or ""
+                    is_review_showcase = bool(traj_hash) and traj_hash in review_hashes
+                    if not is_review_showcase:
+                        await trajectory.save(
+                            args.agent, kind="play" if is_play_mode else "train"
+                        )
+                        persisted = True
+                current_cycle += 1
+                print_json(
+                    "progress",
+                    cycle=current_cycle,
+                    level_episode_count=level_episode_count,
+                    is_review=is_review_showcase or review_plan.is_review_pass,
+                    persisted=persisted,
+                    training_phase=phase_name,
+                    message=f"Completed cycle {current_cycle}",
+                )
+
+            def on_level_transition(levels_trained):
+                nonlocal levels_trained_count, current_level
+                levels_trained_count = int(levels_trained) if levels_trained is not None else levels_trained_count + 1
+                if 0 <= levels_trained_count < len(levels_list):
+                    current_level = levels_list[levels_trained_count]
+                print_json(
+                    "level_transition",
+                    levels_trained=levels_trained_count,
+                    level=current_level,
+                    is_review=current_level in review_plan.review_levels,
+                    training_phase=phase_name,
+                    message="Transitioned to next level.",
+                )
+
+            def on_completed():
+                global completed_normally
+                if not is_play_mode:
+                    persist_nerd_stats()
+                print_json(
+                    "info",
+                    message=f"{phase_name.capitalize()} phase completed.",
+                )
+                completed_normally = True
+
+            def on_error(err):
+                print_json("error", message=err)
+
+            def on_metrics(step, loss, average_return, episodes):
+                nonlocal session_episodes_accumulated
+                if episodes is not None:
+                    try:
+                        session_episodes_accumulated += int(episodes)
+                    except (TypeError, ValueError):
+                        pass
+                if step is not None:
+                    nerd_step_history.append(step)
+                    nerd_loss_history.append(round(loss, 6) if loss is not None else 0.0)
+                    nerd_return_history.append(round(average_return, 4) if average_return is not None else 0.0)
+                print_json(
+                    "metrics",
+                    step=step,
+                    loss=round(loss, 6) if loss is not None else None,
+                    average_return=round(average_return, 4) if average_return is not None else None,
+                    episodes=episodes,
+                    training_phase=phase_name,
+                )
+
+            async def commit_curriculum() -> None:
+                nonlocal curriculum_committed
+                if curriculum_committed or is_play_mode:
+                    return
+                curriculum_committed = True
+                try:
+                    latest = await metadata_manager.read_metadata()
+                    ensure_review_state(latest)
+                    episodes_for_commit = session_episodes_accumulated
+                    if episodes_for_commit <= 0:
+                        if completed_normally and phase_projected > 0:
+                            episodes_for_commit = phase_projected
+                        elif current_cycle > 0 and ep_cycle_eff:
+                            # current_cycle counts showcases; approximate episodes from server cycles
+                            server_cycles = max(1, math.ceil(current_cycle / max(1, len(levels_list))))
+                            episodes_for_commit = server_cycles * int(ep_cycle_eff)
+
+                    commit_after_model_weights(
+                        latest,
+                        review_plan,
+                        session_episodes=episodes_for_commit,
+                        level_hashes=level_hashes,
+                    )
+                    await metadata_manager.write_metadata(latest)
+                    state = latest.get("review_state", {})
+                    print_json(
+                        "info",
+                        message=(
+                            "Updated curriculum after model weights "
+                            f"(focus episodes since pass: {state.get('focus_episodes_since_pass', 0)}/"
+                            f"{state.get('focus_episodes_between_passes', 0)}; "
+                            f"review queue: {len(state.get('review_pass_queue') or [])})."
                         ),
                     )
                 except Exception as e:
-                    print_json("error", message=f"Failed to save checkpoint for cycle {cycle}: {e}")
+                    curriculum_committed = False
+                    print_json("error", message=f"Failed to update curriculum after model weights: {e}")
 
-        try:
-            await client_instance.listen_to_trajectory(
-                session_id=session_id,
-                on_trajectory=on_trajectory,
-                on_level_transition=on_level_transition,
-                on_completed=on_completed,
-                on_error=on_error,
-                on_metrics=on_metrics,
-                on_model_weights=on_model_weights,
-                on_checkpoint=on_checkpoint,
+            async def on_model_weights(model_bytes_b64_in):
+                nonlocal model_bytes_b64
+                if model_bytes_b64_in:
+                    try:
+                        weights_data = base64.b64decode(model_bytes_b64_in)
+                        weights_agent = Agent(args.agent)
+                        if weights_agent.weights_path:
+                            weights_agent.weights_path.parent.mkdir(parents=True, exist_ok=True)
+                            with open(weights_agent.weights_path, "wb") as f:
+                                f.write(weights_data)
+                            model_bytes_b64 = model_bytes_b64_in
+                            print_json("info", message="Successfully saved downloaded model weights from server.")
+                            await commit_curriculum()
+                    except Exception as e:
+                        print_json("error", message=f"Failed to save downloaded model weights: {e}")
+
+            async def on_checkpoint(cycle, model_bytes_b64_in):
+                if model_bytes_b64_in:
+                    try:
+                        weights_data = base64.b64decode(model_bytes_b64_in)
+                        entry = save_checkpoint(
+                            args.agent,
+                            weights_data,
+                            level=current_level,
+                            cycle=int(cycle) if cycle is not None else None,
+                            kind=KIND_INTERVAL,
+                            curriculum=session_start_curriculum,
+                        )
+                        print_json(
+                            "info",
+                            message=(
+                                f"Successfully saved checkpoint for cycle {cycle} "
+                                f"on level '{current_level}' ({entry['id']})."
+                            ),
+                        )
+                    except Exception as e:
+                        print_json("error", message=f"Failed to save checkpoint for cycle {cycle}: {e}")
+
+            try:
+                await client_instance.listen_to_trajectory(
+                    session_id=session_id,
+                    on_trajectory=on_trajectory,
+                    on_level_transition=on_level_transition,
+                    on_completed=on_completed,
+                    on_error=on_error,
+                    on_metrics=on_metrics,
+                    on_model_weights=on_model_weights,
+                    on_checkpoint=on_checkpoint,
+                )
+            except Exception as e:
+                print_json("error", message=f"WebSocket stream error: {e}")
+            finally:
+                if not completed_normally:
+                    await interrupt_training(args.server)
+
+            return completed_normally
+
+        # --- Phase chain -------------------------------------------------
+        if is_play_mode:
+            ok = await execute_phase(
+                force_review=False,
+                cycles=1,
+                runs_per_cycle=None,
+                episodes_per_cycle=None,
+                projected_episodes=0,
             )
-        except Exception as e:
-            print_json("error", message=f"WebSocket stream error: {e}")
-        finally:
-            if not completed_normally:
-                await interrupt_training(args.server)
+            overall_completed = ok
+        else:
+            metadata = ensure_review_state(await reload_metadata())
+            ep_cycle = episodes_per_cycle_for(base_runs_per_cycle, base_episodes_per_cycle)
+            full_projected = estimate_session_episodes(
+                cycles=base_cycles,
+                runs_per_cycle=base_runs_per_cycle,
+                episodes_per_run=episodes_per_run,
+                episodes_per_cycle=base_episodes_per_cycle,
+            )
+
+            # If a review queue is already pending, drain one review batch first
+            if queue_needs_review(metadata):
+                ok = await execute_phase(
+                    force_review=True,
+                    cycles=base_cycles,
+                    runs_per_cycle=base_runs_per_cycle,
+                    episodes_per_cycle=base_episodes_per_cycle,
+                    projected_episodes=full_projected,
+                )
+                if not ok:
+                    return
+                metadata = ensure_review_state(await reload_metadata())
+
+            since = int(metadata["review_state"]["focus_episodes_since_pass"])
+            between = int(metadata["review_state"]["focus_episodes_between_passes"])
+            remaining = max(0, between - since)
+
+            focus_cycles = base_cycles
+            leftover_cycles = 0
+            if remaining > 0 and full_projected > remaining and ep_cycle > 0:
+                focus_cycles = max(1, int(math.ceil(remaining / ep_cycle)))
+                focus_cycles = min(focus_cycles, base_cycles)
+                leftover_cycles = max(0, base_cycles - focus_cycles)
+                if leftover_cycles:
+                    print_json(
+                        "info",
+                        message=(
+                            f"Splitting focus: {focus_cycles} cycle(s) until review threshold "
+                            f"({remaining} episodes remaining to E={between}), then review, "
+                            f"then {leftover_cycles} leftover focus cycle(s)."
+                        ),
+                    )
+
+            focus_projected = estimate_session_episodes(
+                cycles=focus_cycles,
+                runs_per_cycle=base_runs_per_cycle,
+                episodes_per_run=episodes_per_run,
+                episodes_per_cycle=base_episodes_per_cycle,
+            )
+            ok = await execute_phase(
+                force_review=False,
+                cycles=focus_cycles,
+                runs_per_cycle=base_runs_per_cycle,
+                episodes_per_cycle=base_episodes_per_cycle,
+                projected_episodes=focus_projected,
+            )
+            if not ok:
+                return
+
+            # Auto-chain review if focus armed a batch
+            metadata = ensure_review_state(await reload_metadata())
+            if queue_needs_review(metadata):
+                ok = await execute_phase(
+                    force_review=True,
+                    cycles=base_cycles,
+                    runs_per_cycle=base_runs_per_cycle,
+                    episodes_per_cycle=base_episodes_per_cycle,
+                    projected_episodes=full_projected,
+                )
+                if not ok:
+                    return
+
+            if leftover_cycles > 0:
+                leftover_projected = estimate_session_episodes(
+                    cycles=leftover_cycles,
+                    runs_per_cycle=base_runs_per_cycle,
+                    episodes_per_run=episodes_per_run,
+                    episodes_per_cycle=base_episodes_per_cycle,
+                )
+                ok = await execute_phase(
+                    force_review=False,
+                    cycles=leftover_cycles,
+                    runs_per_cycle=base_runs_per_cycle,
+                    episodes_per_cycle=base_episodes_per_cycle,
+                    projected_episodes=leftover_projected,
+                )
+                if not ok:
+                    return
+                # If leftover focus armed again, chain another review
+                metadata = ensure_review_state(await reload_metadata())
+                if queue_needs_review(metadata):
+                    await execute_phase(
+                        force_review=True,
+                        cycles=base_cycles,
+                        runs_per_cycle=base_runs_per_cycle,
+                        episodes_per_cycle=base_episodes_per_cycle,
+                        projected_episodes=full_projected,
+                    )
+
+            overall_completed = True
+
+        if overall_completed:
+            duration = time.time() - chain_start_time
+            print_json("completed", duration=f"{duration:.2f}s", message="Training completed successfully.")
+            completed_normally = True
 
     try:
         asyncio.run(train_async())
     except KeyboardInterrupt:
         pass
     finally:
-        # Safety net if the run ended without a completed event (e.g. interrupt).
-        # Play Levels still saves trajectories (kind=play) and refreshes stats so
-        # the viewer updates, but must not persist training (nerd) metrics.
         if not getattr(args, "play", False):
             persist_nerd_stats()
         try:

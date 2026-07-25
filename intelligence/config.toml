@@ -4,9 +4,9 @@
 # ==============================================================================
 # RL Hyperparameters
 # ==============================================================================
-learning_rate = 0.000084            # Optimized step size via Optuna platforming tune (previously 0.0003)
+learning_rate = 0.000164            # Optimized step size via sharp Optuna platforming-1..10 tune
 gamma = 0.995                     # Discount factor for future rewards (balancing short-term vs long-term goals)
-entropy_regularization = 0.2406     # Optimized entropy bonus via Optuna platforming tune (previously 0.01)
+entropy_regularization = 0.1193    # Optimized entropy bonus via sharp Optuna platforming-1..10 tune (high exploratory drive)
 ppo_num_epochs = 4                # Number of optimization epochs per gradient update step
 clip_epsilon = 0.2                # PPO policy-ratio clipping range
 gae_lambda = 0.95                 # Bias/variance tradeoff for generalized advantage estimation
@@ -21,15 +21,15 @@ device = "auto"                   # auto (CUDA if available), cpu, cuda, cuda:N,
 # Reward & Penalty Weights
 # ==============================================================================
 not_finished_reward = -10.0       # Penalty given if agent fails to reach the goal within limit
-finished_reward = 193.17          # Sparse positive reward awarded only upon successfully solving the level (optimized via Optuna platforming tune, previously 100.0)
-turn_reward = 0.0                 # Positive/negative reward applied when changing direction
+finished_reward = 83.98           # Sparse positive reward awarded upon successfully solving level (optimized via sharp Optuna tune)
+turn_reward = -0.39               # Penalty for reversing direction (optimized via sharp Optuna tune to eliminate pacing oscillation before pits)
 
 frame_step_reward = -0.01         # Time penalty per step to encourage faster execution
 tile_exploration_reward = 0.04    # Small positive reward given for exploring new coordinates
-jump_reward = -0.15               # Small penalty to discourage unnecessary jumping
+jump_reward = -2.30               # Optimized jump penalty via sharp Optuna tune
 wall_hugging_reward = -0.2        # Penalty to discourage sticking/scraping against walls
 
-goal_distance_reward_scale = 0.005 # Scaling factor for reward based on distance to goal
+goal_distance_reward_scale = 0.0104 # Continuous step-by-step guidance reward scale (optimized via sharp Optuna tune to guide Delver across broad gaps)
 
 # ==============================================================================
 # Training Environment

@@ -81,8 +81,14 @@ impl LevelEnvironment {
             self.frame >= self.config.max_seconds_per_episode * self.config.actions_per_second;
         let done = delver.is_victory || delver.is_dead || timed_out;
         let (x, y) = (delver.x, delver.y);
+        let player_height = runtime_core::DelverConfig::default().player_height;
+        let half_h = player_height / 2.0;
         let (tx, ty) = self.grid_position(x, y);
-        let newly_explored = self.exploration.step_on(tx, ty, 1);
+        let feet_ty = self.grid_position(x, y - half_h).1;
+        let head_ty = self.grid_position(x, y + half_h).1;
+        let newly_explored = self
+            .exploration
+            .step_on_vertical_span(tx, feet_ty, head_ty, 1);
         let distance = self.rewards.dijkstra.distance(tx, ty);
         let reward = self.rewards.calculate(
             RewardInput {

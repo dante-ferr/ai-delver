@@ -199,10 +199,11 @@ for line in iter(self.train_process.stdout.readline, ""):
 |:---|:---|:---|
 | `info` | `train` | Informational messages (e.g. batch-size adjustment, review cadence) |
 | `init_started` | `train` | Levels are being prepared |
-| `review_plan` | `train` | Focus vs review-pass plan (session levels, queue remaining, episode progress) |
+| `review_plan` | `train` | Focus vs review plan (session levels, queue remaining, E/R/K, target episodes) |
+| `training_phase` | `train` | Start of a chained focus or review `/train` (`expected_progress_steps` for GUI bars) |
 | `request_sent` | `train` | Training request sent to server |
 | `session_created` | `train` | Server accepted and registered the session |
-| `progress` | `train` | A cycle completed (includes cycle number and episode count) |
+| `progress` | `train` | A showcase completed (`training_phase`, `is_review` / `persisted` for review filtering) |
 | `level_transition` | `train` | Agent graduated to a new level (`is_review` when applicable) |
 | `metrics` | `train` | Deep learning metrics snapshot (loss, average return, step, episodes) |
 | `checkpoint` | `train` | Intermediate model weights checkpoint received from server |

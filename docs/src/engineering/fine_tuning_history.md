@@ -11,7 +11,8 @@ flowchart TD
     P1[Phase 1: Exploration Jump Farming] -->|3-Tile Vertical Brush| P2[Phase 2: Pit Fear Oscillation]
     P2 -->|Turn Penalty & Goal Dominance| P3[Phase 3: Broad Pit & Sparse Reward]
     P3 -->|Wall Grace Period & Policy Confidence| P4[Phase 4: Policy Consolidation & Argmax Alignment]
-    P4 --> Promoted[Current Promoted Engine Defaults]
+    P4 -->|Expanded Search Space & Fresh Container| P5[Phase 5: Pure Organic Exploration & Reward Discovery]
+    P5 --> Promoted[Current Promoted Engine Defaults]
 ```
 
 ---
@@ -87,17 +88,33 @@ The Delver struggled on 5–6 tile broad gaps (`platforming-4`) and suffered fro
 
 ---
 
-## 5. Promoted Baseline Engine Configuration
+## 5. Phase 5: Pure Organic Exploration & Reward Discovery
 
-Current promoted defaults in `intelligence/config.toml`:
+### Symptom & Protocol Goal
+To avoid manual guessing or static parameter hardcoding, `client/src/cli/commands/tune.py` was expanded to give Optuna full organic control over `tile_exploration_reward` (`[0.05, 0.30]`) and `wall_hugging_reward` (`[-0.05, 0.0]`).
+
+### Protocol Execution & Empirical Discovery
+Executed a 15-cycle Optuna study across `platforming-1` to `platforming-10` on a freshly compiled container image:
+- **Win Rate Result**: Multi-level win rate reached **`9.44%`** across the entire 10-level pack (a **5x improvement** over prior baseline).
+- **Organic Discoveries**:
+  - `tile_exploration_reward = 0.1495`: Optuna organically discovered that $+0.1495$ per tile provides strong exploration drive without inducing flat-ground jump farming (where hops lose $-0.73$ net).
+  - `wall_hugging_reward = -0.0163`: Optuna set the wall penalty near zero to prevent wall-contact noise on high-edge levels (`platforming-9`).
+  - `goal_distance_reward_scale = 0.0144`: Discovered a moderate distance scale that guides gap clearing without impeding turns or backtracking.
+
+---
+
+## 6. Promoted Baseline Engine Configuration
+
+Current promoted defaults in `intelligence/config.toml` resulting from the organic Phase 5 tuning protocol:
 
 | Parameter | Promoted Value | Purpose |
 | :--- | :--- | :--- |
-| **`goal_distance_reward_scale`** | **`0.0104`** | Continuous step guidance across broad gaps (`platforming-4`) |
-| **`turn_reward`** | **`-0.39`** | Anti-hesitation penalty eliminating pit-edge pacing loops |
-| **`wall_hugging_reward`** | **`-0.02`** | Wall-stuck penalty with 10-frame grace period |
-| **`entropy_regularization`** | **`0.1193`** | High exploratory drive to discover gap jumps |
-| **`learning_rate`** | **`0.000164`** | PPO step size for multi-level curriculum rollouts |
-| **`jump_reward`** | **`-2.30`** | Flat-ground hop suppression |
-| **`finished_reward`** | **`83.98`** | Goal completion dominance |
+| **`tile_exploration_reward`** | **`0.1495`** | Organically tuned exploration drive (walking = +0.45; flat hop = -0.73 net loss) |
+| **`wall_hugging_reward`** | **`-0.0163`** | Organically tuned wall penalty with 10-frame grace period |
+| **`goal_distance_reward_scale`** | **`0.0144`** | Organically tuned continuous step progress guidance |
+| **`turn_reward`** | **`-0.28`** | Anti-hesitation penalty eliminating pit-edge pacing loops |
+| **`jump_reward`** | **`-0.88`** | Mild jump penalty enabling gap clearance |
+| **`finished_reward`** | **`112.44`** | Goal completion dominance |
+| **`entropy_regularization`** | **`0.1496`** | High exploratory drive to discover gap jumps |
+| **`learning_rate`** | **`0.000295`** | Optimal PPO step size for multi-level curriculum rollouts |
 | **Exploration Engine** | **3-Tile Vertical Span** | Feet-to-head height profile tile tracking |

@@ -23,8 +23,10 @@ def run_tune(args):
         entropy_reg = trial.suggest_float("entropy_reg", 0.01, 0.20)
         finished_reward = trial.suggest_float("finished_reward", 80.0, 250.0)
         jump_reward = trial.suggest_float("jump_reward", -3.0, -0.05)
-        goal_distance_reward_scale = trial.suggest_float("goal_distance_reward_scale", 0.001, 0.03)
+        goal_distance_reward_scale = trial.suggest_float("goal_distance_reward_scale", 0.005, 0.05)
         turn_reward = trial.suggest_float("turn_reward", -0.5, 0.0)
+        tile_exploration_reward = trial.suggest_float("tile_exploration_reward", 0.05, 0.30)
+        wall_hugging_reward = trial.suggest_float("wall_hugging_reward", -0.05, 0.0)
 
         print_json(
             "info",
@@ -35,7 +37,9 @@ def run_tune(args):
                 f"finished_reward={finished_reward:.2f}, "
                 f"jump_reward={jump_reward:.2f}, "
                 f"goal_distance_scale={goal_distance_reward_scale:.4f}, "
-                f"turn_reward={turn_reward:.2f}"
+                f"turn_reward={turn_reward:.2f}, "
+                f"tile_exploration={tile_exploration_reward:.4f}, "
+                f"wall_hugging={wall_hugging_reward:.4f}"
             ),
         )
 
@@ -53,7 +57,9 @@ def run_tune(args):
             "--finished-reward", f"{finished_reward:.2f}",
             "--jump-reward", f"{jump_reward:.2f}",
             "--goal-distance-reward-scale", f"{goal_distance_reward_scale:.4f}",
-            "--turn-reward", f"{turn_reward:.2f}"
+            "--turn-reward", f"{turn_reward:.2f}",
+            "--tile-exploration-reward", f"{tile_exploration_reward:.4f}",
+            "--wall-hugging-reward", f"{wall_hugging_reward:.4f}"
         ]
 
         # 3. Spawn training subprocess

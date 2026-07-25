@@ -38,14 +38,19 @@ class TrainLogsPanel(LoadingLogsPanel):
         if self.training_progress_log:
             self.training_progress_log.update_progress(current_value)
 
-    def set_training_progress_total(self, total_steps: int):
-        """Resize/reset the focus bar when a chained focus phase starts."""
+    def set_training_progress_total(self, total_steps: int, progress_base: int = 0):
+        """Resize the focus bar when a chained focus phase starts.
+
+        ``progress_base`` keeps cumulative progress across sequential per-level
+        focus sessions (n cycles each) instead of resetting to 0 every level.
+        """
         total_steps = max(1, int(total_steps))
+        progress_base = max(0, int(progress_base or 0))
         if self.training_progress_log is None:
             self.show_training_progress()
         if self.training_progress_log is not None:
             self.training_progress_log.total_steps = total_steps
-            self.training_progress_log.update_progress(0)
+            self.training_progress_log.update_progress(progress_base)
 
     def show_review_progress(self, total_steps: int):
         total_steps = max(1, int(total_steps))

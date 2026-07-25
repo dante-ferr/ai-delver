@@ -39,10 +39,12 @@ Per arm, review cost is about `R × K` = **500** episode slots vs **8000** focus
 
 | Kind | When | Level mix sent to `/train` | Session budget |
 | --- | --- | --- | --- |
-| **Focus** | `review_pass_queue` is empty | Coach-selected levels only | Coach cycles / runs |
+| **Focus** | `review_pass_queue` is empty | **One coach level at a time** (list order; n cycles each) | Coach cycles / runs per level |
 | **Review** | `review_pass_queue` is non-empty | **Review-only** priors from the queue (up to `min(K, max_training_levels, queue)`) | Overridden: `ceil(R × L / episodes_per_cycle)` cycles |
 
 The server does not know “focus” vs “review.” It only static-mixes whatever level list the CLI sends. Planning and bookkeeping live in the client (`review_planner` + `metadata.json`).
+
+Focus is **sequential coaching**: with levels `[A, B]` and `--cycles N`, the CLI runs `/train` on `A` for N cycles, then `/train` on `B` for N cycles (reviews may insert between). That matches the GUI “N cycles per level” label and the “First to train… / …last to train” order. Reviews remain a **static multi-level mix** so rehearsal is not diluted by the current focus map.
 
 `--play` never arms or advances review state.
 
@@ -68,9 +70,9 @@ Curriculum fields change **only** after model weights are saved — not on inter
 One GUI/CLI Train click can auto-chain multiple server sessions:
 
 1. If a review queue is already pending → drain one review batch first.
-2. Run focus (optionally **split** if the requested session alone would cross `E`: focus until the threshold, then review, then leftover focus).
-3. If focus armed a queue → immediately run a budgeted review phase (no second button press).
-4. Emit `training_phase` = `focus` | `review` so the GUI can drive two progress bars.
+2. For each coach level **in order**: run focus for N cycles on that level alone (optionally **split** mid-level if that block alone would cross `E`: focus until the threshold, then review, then leftover cycles on the same level).
+3. After each focus chunk that arms a queue → immediately run a budgeted review phase before the next level (no second button press).
+4. Emit `training_phase` = `focus` | `review` so the GUI can drive two progress bars. Focus events carry `progress_base` so the training bar spans all sequential levels (`N × L` showcases).
 
 True mid-cycle mix swaps are not supported (the server fixes the level list for one `/train`). Chaining separate sessions is the client workaround.
 
@@ -119,9 +121,11 @@ See also [Run Types](../engineering/run_types.md).
 Across sessions, reviews remain a minority of experience: they only arm after ~`E` focus episodes, and each arm costs about `R × K` slots.
 
 ```text
-Focus (coach) … until focus_episodes ≥ E
+Focus level A (N cycles) … may hit E mid-level
         → Review (up to K priors, ~R episodes each, review-only mix)
-        → Focus again …
+        → Finish leftover cycles on A (if split)
+        → Focus level B (N cycles) …
+        → Review if armed …
 ```
 
 ---

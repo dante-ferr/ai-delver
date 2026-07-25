@@ -211,8 +211,11 @@ def run_train(args):
 
         chain_start_time = time.time()
         overall_completed = False
-        pre_level_saved = False
+        pre_level_saved_levels: set[str] = set()
         lr_scaled_for_challenge = False
+        # Cumulative focus showcase count across sequential per-level sessions (GUI bar).
+        focus_progress_base = 0
+        total_focus_progress_steps = max(1, base_cycles * len(coach_levels)) if not is_play_mode else len(coach_levels)
 
         async def reload_metadata():
             try:
@@ -227,15 +230,44 @@ def run_train(args):
             runs_per_cycle,
             episodes_per_cycle,
             projected_episodes: int,
+            focus_levels: list[str] | None = None,
+            progress_base: int | None = None,
+            progress_total: int | None = None,
         ) -> bool:
-            """Run one focus or review /train. Returns True if completed with weights path OK."""
+            """Run one focus or review /train. Returns True if completed with weights path OK.
+
+            Focus sessions pass a single level via ``focus_levels`` so coach levels run
+            sequentially (n cycles each). Review sessions keep the full coach list for
+            deferred messaging and still static-mix the review queue.
+            """
             global session_id, completed_normally, interrupted
+
+            levels_for_plan = focus_levels if focus_levels is not None else coach_levels
 
             metadata = ensure_review_state(await reload_metadata())
             # Prefer draining an existing queue before more focus
             prefer_review = force_review or (not is_play_mode and queue_needs_review(metadata))
+            if force_review and not queue_needs_review(metadata):
+                # Caller asked to drain review but nothing is queued — do not fall
+                # through into a multi-level focus mix.
+                return True
+            if (
+                not force_review
+                and not is_play_mode
+                and queue_needs_review(metadata)
+            ):
+                # Sequential focus must not be hijacked into a review session (would
+                # corrupt per-level progress accounting). Phase chain drains first.
+                print_json(
+                    "error",
+                    message=(
+                        "Focus phase requested while a review queue is pending; "
+                        "drain the review batch before continuing sequential focus."
+                    ),
+                )
+                return False
             review_plan = plan_session(
-                coach_levels,
+                levels_for_plan,
                 metadata,
                 max_training_levels,
                 play=is_play_mode,
@@ -244,12 +276,18 @@ def run_train(args):
             if prefer_review and not review_plan.is_review_pass and queue_needs_review(metadata):
                 # queue present but plan_session should have selected it — re-plan after ensure
                 review_plan = plan_session(
-                    coach_levels,
+                    levels_for_plan,
                     metadata,
                     max_training_levels,
                     play=False,
                     projected_focus_episodes=0,
                 )
+            if prefer_review and not review_plan.is_review_pass:
+                print_json(
+                    "error",
+                    message="Review was requested but planner returned a focus session; aborting phase.",
+                )
+                return False
 
             phase_cycles = cycles
             phase_runs = runs_per_cycle
@@ -285,16 +323,32 @@ def run_train(args):
                 return False
 
             phase_name = "review" if review_plan.is_review_pass else "focus"
-            # Showcase count ≈ cycles × levels in mix (one showcase per level per cycle)
-            expected_progress_steps = max(1, phase_cycles * len(levels_list))
+            # Showcase count ≈ cycles × levels in mix (one showcase per level per cycle).
+            # Focus uses an overall N×L total so the GUI bar spans sequential per-level sessions.
+            phase_showcase_steps = max(1, phase_cycles * len(levels_list))
+            if phase_name == "focus" and progress_total is not None:
+                expected_progress_steps = max(1, int(progress_total))
+            else:
+                expected_progress_steps = phase_showcase_steps
+            phase_progress_base = int(progress_base or 0) if phase_name == "focus" else 0
 
             for msg in review_plan.messages:
                 print_json("info", message=msg)
+
+            if phase_name == "focus" and focus_levels is not None:
+                print_json(
+                    "info",
+                    message=(
+                        f"Focus level '{levels_list[0]}' "
+                        f"({phase_cycles} cycle(s); sequential coaching)."
+                    ),
+                )
 
             print_json(
                 "training_phase",
                 phase=phase_name,
                 expected_progress_steps=expected_progress_steps,
+                progress_base=phase_progress_base,
                 cycles=phase_cycles,
                 levels=levels_list,
                 message=f"Starting {phase_name} phase.",
@@ -336,33 +390,40 @@ def run_train(args):
                 if name in level_hashes and level_hashes[name]
             }
 
-            nonlocal pre_level_saved, lr_scaled_for_challenge, model_bytes_b64
-            if weights_to_load and weights_to_load.is_file() and not pre_level_saved:
-                try:
-                    with open(weights_to_load, "rb") as f:
-                        pre_bytes = f.read()
-                    for level in levels_list:
-                        entry = save_checkpoint(
-                            agent_obj,
-                            pre_bytes,
-                            level=level,
-                            cycle=None,
-                            kind=KIND_PRE_LEVEL,
-                            curriculum=session_start_curriculum,
-                        )
-                        print_json(
-                            "info",
-                            message=(
-                                f"Saved pre-level checkpoint for '{entry['level']}' "
-                                f"({entry['id']})."
-                            ),
-                        )
-                    pre_level_saved = True
-                except Exception as e:
-                    print_json("error", message=f"Failed to save pre-level checkpoints: {e}")
-                    return False
+            nonlocal lr_scaled_for_challenge, model_bytes_b64
+            if (
+                weights_to_load
+                and weights_to_load.is_file()
+                and not review_plan.is_review_pass
+            ):
+                pending_pre = [lvl for lvl in levels_list if lvl not in pre_level_saved_levels]
+                if pending_pre:
+                    try:
+                        with open(weights_to_load, "rb") as f:
+                            pre_bytes = f.read()
+                        for level in pending_pre:
+                            entry = save_checkpoint(
+                                agent_obj,
+                                pre_bytes,
+                                level=level,
+                                cycle=None,
+                                kind=KIND_PRE_LEVEL,
+                                curriculum=session_start_curriculum,
+                            )
+                            pre_level_saved_levels.add(level)
+                            print_json(
+                                "info",
+                                message=(
+                                    f"Saved pre-level checkpoint for '{entry['level']}' "
+                                    f"({entry['id']})."
+                                ),
+                            )
+                    except Exception as e:
+                        print_json("error", message=f"Failed to save pre-level checkpoints: {e}")
+                        return False
 
             previously_trained = metadata.get("trained_levels", [])
+            # Detect new challenges against the full coach list for this Train click
             new_levels = [lvl for lvl in coach_levels if lvl not in previously_trained]
             if (
                 weights_to_load
@@ -447,14 +508,21 @@ def run_train(args):
                         )
                         persisted = True
                 current_cycle += 1
+                # Focus progress is absolute across sequential levels for the GUI bar
+                progress_cycle = (
+                    phase_progress_base + current_cycle
+                    if phase_name == "focus"
+                    else current_cycle
+                )
                 print_json(
                     "progress",
-                    cycle=current_cycle,
+                    cycle=progress_cycle,
+                    phase_cycle=current_cycle,
                     level_episode_count=level_episode_count,
                     is_review=is_review_showcase or review_plan.is_review_pass,
                     persisted=persisted,
                     training_phase=phase_name,
-                    message=f"Completed cycle {current_cycle}",
+                    message=f"Completed cycle {progress_cycle}",
                 )
 
             def on_level_transition(levels_trained):
@@ -600,6 +668,9 @@ def run_train(args):
             return completed_normally
 
         # --- Phase chain -------------------------------------------------
+        # Focus: n cycles per coach level in list order (sequential), not a
+        # static multi-level mix. Reviews stay review-only static mixes and
+        # can auto-chain between (or mid) focus levels when E is crossed.
         if is_play_mode:
             ok = await execute_phase(
                 force_review=False,
@@ -612,101 +683,104 @@ def run_train(args):
         else:
             metadata = ensure_review_state(await reload_metadata())
             ep_cycle = episodes_per_cycle_for(base_runs_per_cycle, base_episodes_per_cycle)
-            full_projected = estimate_session_episodes(
-                cycles=base_cycles,
-                runs_per_cycle=base_runs_per_cycle,
-                episodes_per_run=episodes_per_run,
-                episodes_per_cycle=base_episodes_per_cycle,
-            )
+
+            async def drain_review_if_needed() -> bool:
+                meta = ensure_review_state(await reload_metadata())
+                if not queue_needs_review(meta):
+                    return True
+                # Pass full coach list so deferred messaging stays informative
+                return await execute_phase(
+                    force_review=True,
+                    cycles=base_cycles,
+                    runs_per_cycle=base_runs_per_cycle,
+                    episodes_per_cycle=base_episodes_per_cycle,
+                    projected_episodes=estimate_session_episodes(
+                        cycles=base_cycles,
+                        runs_per_cycle=base_runs_per_cycle,
+                        episodes_per_run=episodes_per_run,
+                        episodes_per_cycle=base_episodes_per_cycle,
+                    ),
+                    focus_levels=coach_levels,
+                )
 
             # If a review queue is already pending, drain one review batch first
-            if queue_needs_review(metadata):
-                ok = await execute_phase(
-                    force_review=True,
-                    cycles=base_cycles,
-                    runs_per_cycle=base_runs_per_cycle,
-                    episodes_per_cycle=base_episodes_per_cycle,
-                    projected_episodes=full_projected,
-                )
-                if not ok:
-                    return
-                metadata = ensure_review_state(await reload_metadata())
-
-            since = int(metadata["review_state"]["focus_episodes_since_pass"])
-            between = int(metadata["review_state"]["focus_episodes_between_passes"])
-            remaining = max(0, between - since)
-
-            focus_cycles = base_cycles
-            leftover_cycles = 0
-            if remaining > 0 and full_projected > remaining and ep_cycle > 0:
-                focus_cycles = max(1, int(math.ceil(remaining / ep_cycle)))
-                focus_cycles = min(focus_cycles, base_cycles)
-                leftover_cycles = max(0, base_cycles - focus_cycles)
-                if leftover_cycles:
-                    print_json(
-                        "info",
-                        message=(
-                            f"Splitting focus: {focus_cycles} cycle(s) until review threshold "
-                            f"({remaining} episodes remaining to E={between}), then review, "
-                            f"then {leftover_cycles} leftover focus cycle(s)."
-                        ),
-                    )
-
-            focus_projected = estimate_session_episodes(
-                cycles=focus_cycles,
-                runs_per_cycle=base_runs_per_cycle,
-                episodes_per_run=episodes_per_run,
-                episodes_per_cycle=base_episodes_per_cycle,
-            )
-            ok = await execute_phase(
-                force_review=False,
-                cycles=focus_cycles,
-                runs_per_cycle=base_runs_per_cycle,
-                episodes_per_cycle=base_episodes_per_cycle,
-                projected_episodes=focus_projected,
-            )
-            if not ok:
+            if not await drain_review_if_needed():
                 return
 
-            # Auto-chain review if focus armed a batch
-            metadata = ensure_review_state(await reload_metadata())
-            if queue_needs_review(metadata):
-                ok = await execute_phase(
-                    force_review=True,
-                    cycles=base_cycles,
-                    runs_per_cycle=base_runs_per_cycle,
-                    episodes_per_cycle=base_episodes_per_cycle,
-                    projected_episodes=full_projected,
-                )
-                if not ok:
-                    return
+            for level_index, level in enumerate(coach_levels):
+                metadata = ensure_review_state(await reload_metadata())
+                since = int(metadata["review_state"]["focus_episodes_since_pass"])
+                between = int(metadata["review_state"]["focus_episodes_between_passes"])
+                remaining = max(0, between - since)
 
-            if leftover_cycles > 0:
-                leftover_projected = estimate_session_episodes(
-                    cycles=leftover_cycles,
+                level_projected_full = estimate_session_episodes(
+                    cycles=base_cycles,
                     runs_per_cycle=base_runs_per_cycle,
                     episodes_per_run=episodes_per_run,
                     episodes_per_cycle=base_episodes_per_cycle,
                 )
-                ok = await execute_phase(
-                    force_review=False,
-                    cycles=leftover_cycles,
-                    runs_per_cycle=base_runs_per_cycle,
-                    episodes_per_cycle=base_episodes_per_cycle,
-                    projected_episodes=leftover_projected,
-                )
-                if not ok:
-                    return
-                # If leftover focus armed again, chain another review
-                metadata = ensure_review_state(await reload_metadata())
-                if queue_needs_review(metadata):
-                    await execute_phase(
-                        force_review=True,
-                        cycles=base_cycles,
+
+                focus_cycles = base_cycles
+                leftover_cycles = 0
+                if remaining > 0 and level_projected_full > remaining and ep_cycle > 0:
+                    focus_cycles = max(1, int(math.ceil(remaining / ep_cycle)))
+                    focus_cycles = min(focus_cycles, base_cycles)
+                    leftover_cycles = max(0, base_cycles - focus_cycles)
+                    if leftover_cycles:
+                        print_json(
+                            "info",
+                            message=(
+                                f"Splitting focus on '{level}': {focus_cycles} cycle(s) until "
+                                f"review threshold ({remaining} episodes remaining to "
+                                f"E={between}), then review, then {leftover_cycles} leftover "
+                                f"cycle(s) on this level."
+                            ),
+                        )
+
+                async def run_focus_chunk(cycles: int, focus_level: str) -> bool:
+                    nonlocal focus_progress_base
+                    if cycles <= 0:
+                        return True
+                    projected = estimate_session_episodes(
+                        cycles=cycles,
+                        runs_per_cycle=base_runs_per_cycle,
+                        episodes_per_run=episodes_per_run,
+                        episodes_per_cycle=base_episodes_per_cycle,
+                    )
+                    ok_inner = await execute_phase(
+                        force_review=False,
+                        cycles=cycles,
                         runs_per_cycle=base_runs_per_cycle,
                         episodes_per_cycle=base_episodes_per_cycle,
-                        projected_episodes=full_projected,
+                        projected_episodes=projected,
+                        focus_levels=[focus_level],
+                        progress_base=focus_progress_base,
+                        progress_total=total_focus_progress_steps,
                     )
+                    if ok_inner:
+                        # One showcase per cycle for a single-level focus session
+                        focus_progress_base += cycles
+                    return ok_inner
+
+                print_json(
+                    "info",
+                    message=(
+                        f"Sequential focus {level_index + 1}/{len(coach_levels)}: "
+                        f"'{level}' for {base_cycles} cycle(s)."
+                    ),
+                )
+
+                if not await run_focus_chunk(focus_cycles, level):
+                    return
+
+                if not await drain_review_if_needed():
+                    return
+
+                if leftover_cycles > 0:
+                    if not await run_focus_chunk(leftover_cycles, level):
+                        return
+                    if not await drain_review_if_needed():
+                        return
 
             overall_completed = True
 

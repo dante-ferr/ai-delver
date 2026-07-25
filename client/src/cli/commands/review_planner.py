@@ -3,6 +3,9 @@
 Arms at most K prior levels after E focus episodes; each review chunk uses a
 fixed R episode budget per level. Curriculum commits only via
 ``commit_after_model_weights``.
+
+Focus coaching is sequential (one level per ``/train``); this module still
+builds review-only static mixes when a pass is armed.
 """
 
 from __future__ import annotations
@@ -354,11 +357,11 @@ def commit_after_model_weights(
         included = set(plan.review_levels)
         queue = [lvl for lvl in state["review_pass_queue"] if lvl not in included]
         state["review_pass_queue"] = queue
-        _append_trained_levels(metadata, plan.coach_levels)
-        _append_trained_levels(metadata, plan.deferred_coach_levels)
+        # Review does not mark coach levels as trained — only the focus phase that
+        # actually ran them does. Deferred coach levels are informational only.
     else:
+        # Only levels that were in this focus mix (sequential: one level per session)
         _append_trained_levels(metadata, plan.session_levels)
-        _append_trained_levels(metadata, plan.deferred_coach_levels)
         state["focus_episodes_since_pass"] = int(state["focus_episodes_since_pass"]) + episodes
         if state["focus_episodes_since_pass"] >= between and metadata.get("trained_levels"):
             state["focus_episodes_since_pass"] = 0

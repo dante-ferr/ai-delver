@@ -95,9 +95,11 @@ class TrainingStateManager(StateManager):
         if self.train_logs_panel:
             self.train_logs_panel.update_training_progress(current_cycle)
 
-    def set_training_process_log_total(self, total_steps: int):
+    def set_training_process_log_total(self, total_steps: int, progress_base: int = 0):
         if self.train_logs_panel:
-            self.train_logs_panel.set_training_progress_total(total_steps)
+            self.train_logs_panel.set_training_progress_total(
+                total_steps, progress_base=progress_base
+            )
 
     def show_review_process_log(self, total_steps: int):
         if self.train_logs_panel:

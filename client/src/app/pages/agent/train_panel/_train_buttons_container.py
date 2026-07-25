@@ -331,12 +331,15 @@ class TrainButtonsContainer(ctk.CTkFrame):
             elif event == "training_phase":
                 phase = data.get("phase")
                 expected = int(data.get("expected_progress_steps") or 0)
+                progress_base = int(data.get("progress_base") or 0)
                 print(f"[CLI Info] Training phase: {phase}")
                 if expected > 0:
                     if phase == "review":
                         training_state_manager.show_review_process_log(expected)
                     elif phase == "focus":
-                        training_state_manager.set_training_process_log_total(expected)
+                        training_state_manager.set_training_process_log_total(
+                            expected, progress_base=progress_base
+                        )
             elif event == "review_plan":
                 print(f"[CLI Info] {data.get('message')}")
             elif event == "progress":

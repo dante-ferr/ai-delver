@@ -23,6 +23,8 @@ poetry run python src/cli/main.py train \
 
 > Prefer `--runs-per-cycle` (full-length run equivalents). The intelligence server converts runs into collect-window episode slots using `max_seconds_per_episode / collect_seconds_per_env` (default 60/5 = 12). Legacy `--episodes-per-cycle` remains for low-level / Optuna use.
 
+With multiple `--levels`, focus training is **sequential**: N cycles on the first level, then N on the second, and so on (GUI order). Automatic review batches may insert between levels; reviews themselves still static-mix up to K priors. See [Automatic Reviews](../player/automatic_reviews.md).
+
 #### Optional Parameters and Hyperparameter Overrides
 You can optionally configure checkpoints or override individual training and reward parameters from `config.toml` for the duration of the training session:
 * `--runs-per-cycle <int>`: Full-length run equivalents of experience per cycle (preferred).
@@ -200,7 +202,7 @@ for line in iter(self.train_process.stdout.readline, ""):
 | `info` | `train` | Informational messages (e.g. batch-size adjustment, review cadence) |
 | `init_started` | `train` | Levels are being prepared |
 | `review_plan` | `train` | Focus vs review plan (session levels, queue remaining, E/R/K, target episodes) |
-| `training_phase` | `train` | Start of a chained focus or review `/train` (`expected_progress_steps` for GUI bars) |
+| `training_phase` | `train` | Start of a chained focus or review `/train` (`expected_progress_steps`, optional `progress_base` for sequential focus bars) |
 | `request_sent` | `train` | Training request sent to server |
 | `session_created` | `train` | Server accepted and registered the session |
 | `progress` | `train` | A showcase completed (`training_phase`, `is_review` / `persisted` for review filtering) |

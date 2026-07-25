@@ -14,7 +14,10 @@ services:
     working_dir: /app/intelligence
     # Entrypoint starts as root to chown named volumes, then drops to HOST_UID.
     user: "0:0"
-    shm_size: ${AI_SHM_SIZE:-2g}
+    shm_size: ${AI_SHM_SIZE:-4g}
+    # Hard cgroup limits (Compose non-swarm). deploy.resources alone is easy to miss.
+    mem_limit: ${AI_MEMORY_LIMIT:-13G}
+    memswap_limit: ${AI_SWAP_LIMIT:-16G}
     volumes:
       - ./intelligence:/app/intelligence
       - ./level:/app/level
@@ -29,7 +32,7 @@ services:
       - LD_LIBRARY_PATH=/opt/torch-lib
       - HOST_UID=${UID:-1000}
       - HOST_GID=${GID:-1000}
-      - AI_BATCH_SIZE=${AI_BATCH_SIZE:-38}
+      - AI_BATCH_SIZE=${AI_BATCH_SIZE:-24}
       - TRAIN_ARGS
     ports:
       - "8001:8001"
@@ -44,7 +47,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: ${AI_MEMORY_LIMIT:-12G}
+          memory: ${AI_MEMORY_LIMIT:-13G}
 
 volumes:
   cargo-registry:

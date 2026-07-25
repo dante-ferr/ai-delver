@@ -2,14 +2,15 @@
 set -e
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )
 
-# Defaults
+# Defaults (tuned for ~16GB host laptops: avoid attach-pipe SIGKILL + cgroup thrash)
 BUILD_FLAG=""
-BATCH_SIZE="38"
-MEMORY_LIMIT="12G"
-SHM_SIZE="2g"
-SWAP_LIMIT="14G"
+DETACH_FLAG="-d"
+BATCH_SIZE="24"
+MEMORY_LIMIT="13G"
+SHM_SIZE="4g"
+SWAP_LIMIT="16G"
 # Default: long-lived training server. Override for one-shot jobs, e.g.
-# --train-args='train --levels "Ai Test #1" --cycles 1 --episodes-per-cycle 38 --agent ppo_delver'
+# --train-args='train --levels "Ai Test #1" --cycles 1 --episodes-per-cycle 24 --agent ppo_delver'
 TRAIN_ARGS='serve --host 0.0.0.0 --port 8001'
 
 # Argument Parsing
@@ -17,6 +18,15 @@ for arg in "$@"; do
   case $arg in
     --build)
       BUILD_FLAG="--build"
+      shift
+      ;;
+    --detach|--detached)
+      DETACH_FLAG="-d"
+      shift
+      ;;
+    --attach)
+      # Foreground attach (debug only). Prefer detached so agent/CI pipes cannot SIGKILL the server.
+      DETACH_FLAG=""
       shift
       ;;
     --batch-size=*)
@@ -98,4 +108,33 @@ fi
 
 echo "🧹 Cleaning up old containers..."
 docker compose --project-directory ${SCRIPT_DIR} ${COMPOSE_FILES} down
-docker compose --project-directory ${SCRIPT_DIR} ${COMPOSE_FILES} up ${BUILD_FLAG} --remove-orphans
+echo "🚀 docker compose up ${DETACH_FLAG:-(attached)} ${BUILD_FLAG}"
+docker compose --project-directory ${SCRIPT_DIR} ${COMPOSE_FILES} up ${DETACH_FLAG} ${BUILD_FLAG} --remove-orphans
+if [ -n "${DETACH_FLAG}" ]; then
+  echo "🩺 Waiting for training server on :8001 ..."
+  for i in $(seq 1 90); do
+    if curl -sf "http://localhost:8001/init" >/dev/null 2>&1; then
+      echo "✅ Intelligence server healthy (GET /init)."
+      docker compose --project-directory ${SCRIPT_DIR} ${COMPOSE_FILES} ps
+      exit 0
+    fi
+    # Fail fast if the container died (e.g. OOM / compile error).
+    status="$(docker inspect -f '{{.State.Status}}:{{.State.ExitCode}}:{{.State.OOMKilled}}' ai-delver-intelligence 2>/dev/null || echo missing)"
+    case "$status" in
+      running:* ) ;;
+      missing)
+        echo "❌ Container missing while waiting for /init." >&2
+        exit 1
+        ;;
+      *)
+        echo "❌ Container left running state: ${status}" >&2
+        docker compose --project-directory ${SCRIPT_DIR} ${COMPOSE_FILES} logs --tail 80 >&2 || true
+        exit 1
+        ;;
+    esac
+    sleep 2
+  done
+  echo "❌ Timed out waiting for GET /init." >&2
+  docker compose --project-directory ${SCRIPT_DIR} ${COMPOSE_FILES} logs --tail 80 >&2 || true
+  exit 1
+fi

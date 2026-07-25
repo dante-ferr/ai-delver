@@ -27,7 +27,7 @@ turn_reward = -0.39               # Penalty for reversing direction (optimized v
 frame_step_reward = -0.01         # Time penalty per step to encourage faster execution
 tile_exploration_reward = 0.04    # Small positive reward given for exploring new coordinates
 jump_reward = -2.30               # Optimized jump penalty via sharp Optuna tune
-wall_hugging_reward = -0.2        # Penalty to discourage sticking/scraping against walls
+wall_hugging_reward = -0.02       # Penalty to discourage sticking/scraping against walls (with 10-frame grace period)
 
 goal_distance_reward_scale = 0.0104 # Continuous step-by-step guidance reward scale (optimized via sharp Optuna tune to guide Delver across broad gaps)
 

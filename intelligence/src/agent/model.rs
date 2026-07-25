@@ -157,4 +157,34 @@ impl ActorCritic {
         let jump = hidden.apply(&self.jump_head).argmax(-1, false);
         (run, jump)
     }
+
+    /// Deterministic greedy actions along with action confidence for showcase metrics.
+    pub fn greedy_action_with_confidence(
+        &self,
+        local: &Tensor,
+        global: &Tensor,
+        episode_starts: &Tensor,
+        state: &mut nn::LSTMState,
+    ) -> (Tensor, Tensor, f32) {
+        let batch = local.size()[0];
+        let local_features = local.apply(&self.local).relu();
+        let global_features = global.apply(&self.global_norm).apply(&self.global).relu();
+        let features = Tensor::cat(&[local_features, global_features], -1).apply(&self.input);
+        let keep = (Tensor::ones([batch], (Kind::Float, self.device)) - episode_starts)
+            .view([1, batch, 1]);
+        *state = nn::LSTMState((state.h() * &keep, state.c() * keep));
+        let (hidden, next_state) = self.lstm.seq_init(&features.unsqueeze(1), state);
+        *state = nn::LSTMState((next_state.h().detach(), next_state.c().detach()));
+        let hidden = hidden.squeeze_dim(1).apply(&self.output).relu();
+        let run_logits = hidden.apply(&self.run_head);
+        let jump_logits = hidden.apply(&self.jump_head);
+        let run_probs = run_logits.softmax(-1, Kind::Float);
+        let jump_probs = jump_logits.softmax(-1, Kind::Float);
+        let run = run_probs.argmax(-1, false);
+        let jump = jump_probs.argmax(-1, false);
+        let max_run_p = Vec::<f32>::try_from(&run_probs.max_dim(-1, false).0.to_device(Device::Cpu)).expect("run max")[0];
+        let max_jump_p = Vec::<f32>::try_from(&jump_probs.max_dim(-1, false).0.to_device(Device::Cpu)).expect("jump max")[0];
+        let confidence = (max_run_p + max_jump_p) / 2.0;
+        (run, jump, confidence)
+    }
 }

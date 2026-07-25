@@ -10,7 +10,8 @@ A chronological record of empirical discoveries, root-cause analyses, reward-sha
 flowchart TD
     P1[Phase 1: Exploration Jump Farming] -->|3-Tile Vertical Brush| P2[Phase 2: Pit Fear Oscillation]
     P2 -->|Turn Penalty & Goal Dominance| P3[Phase 3: Broad Pit & Sparse Reward]
-    P3 -->|Distance Guidance & 15-Cycle Tune| Promoted[Current Promoted Engine Defaults]
+    P3 -->|Wall Grace Period & Policy Confidence| P4[Phase 4: Policy Consolidation & Argmax Alignment]
+    P4 --> Promoted[Current Promoted Engine Defaults]
 ```
 
 ---
@@ -69,14 +70,32 @@ The Delver struggled on 5–6 tile broad gaps (`platforming-4`) and suffered fro
 
 ---
 
-## 4. Promoted Baseline Engine Configuration
+## 4. Phase 4: Wall Grace Period & Policy Confidence Consolidation
 
-Current promoted defaults in `intelligence/config.toml` resulting from the sharp 15-cycle tuning protocol:
+### Symptom
+1. On `platforming-10` (high spawn ledge drop), the Delver collapsed into standing still at spawn.
+2. Validation showcase runs showed the Delver "unlearning" how to jump 2 cycles after successfully clearing a level during training rollouts.
+
+### Root Cause Discovery
+1. **Wall Hugging Tax Haven**: Pushing against a wall for 2–3 seconds triggered `wall_hugging_reward` ($-0.2$/step), accumulating $-6.0$ to $-20.0$ penalty. Standing still at spawn (`run == 0`) bypassed wall penalties completely ($0.0$). Standing still was mathematically 3x less painful than exploring and hitting walls!
+2. **Argmax Threshold Gap**: Action selection during training uses stochastic `multinomial` sampling (e.g. $P(\text{Jump}) = 45\%$), clearing gaps in 45% of environments. Validation showcase runs use deterministic `argmax` greedy selection. Since $P(\text{No Jump}) = 55\%$ is higher, `argmax` deterministically chooses `No Jump` 100% of the time during validation!
+
+### Engineering & Protocol Resolution
+1. **Wall Grace Period (10 frames / 1.0s)**: Added `wall_stuck_frames` in `reward.rs` so brief wall contact during running, landing, or falling carries $0.0$ penalty. Reduced `wall_hugging_reward` to `-0.02`. Standing still remains 100% unpenalized to preserve future elevator and physics timing mechanics.
+2. **Policy Confidence Metric**: Added `greedy_action_with_confidence` in `model.rs` and attached `policy_confidence` to showcase metadata in `showcase.rs`.
+3. **Best-Trajectory Replay Lock & Confidence Consolidation**: Retains winning trajectory buffers across rollout minibatches and enforces gated consolidation cycles until policy confidence reaches $\ge 70\%$, locking the greedy `argmax` peak in place.
+
+---
+
+## 5. Promoted Baseline Engine Configuration
+
+Current promoted defaults in `intelligence/config.toml`:
 
 | Parameter | Promoted Value | Purpose |
 | :--- | :--- | :--- |
 | **`goal_distance_reward_scale`** | **`0.0104`** | Continuous step guidance across broad gaps (`platforming-4`) |
 | **`turn_reward`** | **`-0.39`** | Anti-hesitation penalty eliminating pit-edge pacing loops |
+| **`wall_hugging_reward`** | **`-0.02`** | Wall-stuck penalty with 10-frame grace period |
 | **`entropy_regularization`** | **`0.1193`** | High exploratory drive to discover gap jumps |
 | **`learning_rate`** | **`0.000164`** | PPO step size for multi-level curriculum rollouts |
 | **`jump_reward`** | **`-2.30`** | Flat-ground hop suppression |

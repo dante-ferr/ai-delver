@@ -31,6 +31,9 @@ pub fn run_showcase(
     // Initial pose so interpolation has a start frame before the first action.
     frame_snapshots.push(frame_snapshot_from_pose(env.delver_pose()));
 
+    let mut total_confidence = 0.0_f32;
+    let mut step_count = 0_usize;
+
     for _ in 0..max_steps {
         let local = Tensor::from_slice(&observation.local_view)
             .view([1, 225])
@@ -39,10 +42,12 @@ pub fn run_showcase(
             .view([1, 7])
             .to_device(device);
         let starts = Tensor::from_slice(&[episode_start]).to_device(device);
-        let (run, jump) = no_grad(|| {
+        let (run, jump, conf) = no_grad(|| {
             ppo.model
-                .greedy_action(&local, &global, &starts, &mut recurrent)
+                .greedy_action_with_confidence(&local, &global, &starts, &mut recurrent)
         });
+        total_confidence += conf;
+        step_count += 1;
         let run_idx = Vec::<i64>::try_from(&run.to_device(Device::Cpu).to_kind(Kind::Int64))
             .expect("run action")[0];
         let jump_idx = Vec::<i64>::try_from(&jump.to_device(Device::Cpu).to_kind(Kind::Int64))
@@ -64,11 +69,18 @@ pub fn run_showcase(
         }
     }
 
+    let avg_confidence = if step_count > 0 {
+        total_confidence / step_count as f32
+    } else {
+        0.0
+    };
+
     let trajectory = json!({
         "actions_per_second": config.actions_per_second,
         "victorious": victorious,
         "level_hash": level_hash,
         "total_reward": total_reward,
+        "policy_confidence": avg_confidence,
         "delver_actions": actions,
         "frame_snapshots": frame_snapshots,
     });

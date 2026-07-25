@@ -60,6 +60,7 @@ pub struct RewardState {
     pub dijkstra: DijkstraGrid,
     pub last_distance: f32,
     pub last_x: f32,
+    pub wall_stuck_frames: usize,
 }
 
 pub struct RewardInput {
@@ -83,6 +84,7 @@ impl RewardState {
             dijkstra,
             last_distance: distance,
             last_x: x,
+            wall_stuck_frames: 0,
         }
     }
 
@@ -114,7 +116,12 @@ impl RewardState {
             self.last_distance = input.distance;
         }
         if input.run != 0 && (input.x - self.last_x).abs() < 0.001 && input.grounded {
-            reward += config.wall_hugging_reward;
+            self.wall_stuck_frames += 1;
+            if self.wall_stuck_frames > 10 {
+                reward += config.wall_hugging_reward;
+            }
+        } else {
+            self.wall_stuck_frames = 0;
         }
         self.last_x = input.x;
         reward / config.reward_scale()

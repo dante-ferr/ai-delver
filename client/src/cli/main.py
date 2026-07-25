@@ -58,6 +58,24 @@ def main():
     train_p.add_argument("--local-feature-dim", type=int, default=None, help="Local-view encoder feature width")
     train_p.add_argument("--lstm-hidden-size", type=int, default=None, help="LSTM hidden size")
     train_p.add_argument("--mlp-hidden-dim", type=int, default=None, help="Fused MLP hidden width before LSTM")
+    train_p.add_argument(
+        "--focus-episodes-between-passes",
+        type=int,
+        default=None,
+        help="Review arm interval E (focus episodes between review passes)",
+    )
+    train_p.add_argument(
+        "--review-episodes-per-level",
+        type=int,
+        default=None,
+        help="Review budget R (episode slots per reviewed level)",
+    )
+    train_p.add_argument(
+        "--review-levels-per-arm",
+        type=int,
+        default=None,
+        help="Review breadth K (max prior levels per review arm)",
+    )
 
     # Subcommand: stats
     stats_p = subparsers.add_parser("stats", help="Calculates and prints agent stats")
@@ -110,6 +128,38 @@ def main():
         "--tune-architecture",
         action="store_true",
         help="Second-pass only: also search network widths / PPO epochs / minibatch / value coeff",
+    )
+    tune_p.add_argument(
+        "--focus-episodes-between-passes",
+        type=int,
+        default=1500,
+        help="Review arm interval E for each trial (default 1500 so reviews fire mid-curriculum)",
+    )
+    tune_p.add_argument(
+        "--review-episodes-per-level",
+        type=int,
+        default=100,
+        help="Review budget R (episode slots per reviewed level)",
+    )
+    tune_p.add_argument(
+        "--review-levels-per-arm",
+        type=int,
+        default=5,
+        help="Review breadth K (max prior levels per review arm)",
+    )
+    tune_p.add_argument(
+        "--consolidate-levels",
+        default="platforming-6,platforming-7",
+        help=(
+            "After sequential curriculum, re-focus these levels (comma-separated) before "
+            "play eval; filtered to levels present in --levels. Empty string disables."
+        ),
+    )
+    tune_p.add_argument(
+        "--consolidation-cycles",
+        type=int,
+        default=None,
+        help="Focus cycles per consolidation level (default: max(10, cycles // 2))",
     )
 
     # Subcommand: import-level-sketch

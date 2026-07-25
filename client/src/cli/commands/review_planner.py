@@ -63,6 +63,34 @@ def _positive_int(value: Any, default: int) -> int:
         return max(1, int(default))
 
 
+def apply_review_knobs(
+    metadata: dict[str, Any],
+    *,
+    focus_episodes_between_passes: int | None = None,
+    review_episodes_per_level: int | None = None,
+    review_levels_per_arm: int | None = None,
+) -> dict[str, Any]:
+    """Overwrite review E/R/K on metadata when CLI overrides are provided."""
+    ensure_review_state(metadata)
+    state = metadata["review_state"]
+    if focus_episodes_between_passes is not None:
+        state["focus_episodes_between_passes"] = _positive_int(
+            focus_episodes_between_passes,
+            DEFAULT_FOCUS_EPISODES_BETWEEN_PASSES,
+        )
+    if review_episodes_per_level is not None:
+        state["review_episodes_per_level"] = _positive_int(
+            review_episodes_per_level,
+            DEFAULT_REVIEW_EPISODES_PER_LEVEL,
+        )
+    if review_levels_per_arm is not None:
+        state["review_levels_per_arm"] = _positive_int(
+            review_levels_per_arm,
+            DEFAULT_REVIEW_LEVELS_PER_ARM,
+        )
+    return metadata
+
+
 def ensure_review_state(metadata: dict[str, Any]) -> dict[str, Any]:
     """Normalize curriculum fields on a metadata dict (mutates and returns it)."""
     if not isinstance(metadata.get("trained_levels"), list):

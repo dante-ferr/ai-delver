@@ -28,6 +28,7 @@ def _run_train_subprocess(
     server: str,
     play: bool,
     overrides: dict,
+    review_knobs: dict | None = None,
     on_event=None,
 ) -> tuple[int, dict[str, dict]]:
     """Spawn train; return (exit_code, level_mastery_by_name)."""
@@ -57,6 +58,13 @@ def _run_train_subprocess(
         flag = f"--{key.replace('_', '-')}"
         _append_override(cmd, flag, value)
 
+    if review_knobs and not play:
+        for key, value in review_knobs.items():
+            if value is None:
+                continue
+            flag = f"--{key.replace('_', '-')}"
+            _append_override(cmd, flag, value)
+
     process = subprocess.Popen(
         cmd,
         cwd=client_dir,
@@ -81,6 +89,19 @@ def _run_train_subprocess(
                 on_event(event_data)
 
             event_type = event_data.get("event")
+            # Surface curriculum/review lifecycle from child train into the tune log.
+            if event_type in {"training_phase", "review_plan"} or (
+                event_type == "info"
+                and isinstance(event_data.get("message"), str)
+                and (
+                    "Applied review knobs" in event_data["message"]
+                    or "Updated curriculum after model weights" in event_data["message"]
+                    or "Review phase" in event_data["message"]
+                    or "review" in event_data["message"].lower()
+                )
+            ):
+                print(json.dumps(event_data), flush=True)
+
             if event_type == "metrics" and not play:
                 loss = event_data.get("loss")
                 if loss is not None and abs(loss) > 20.0:
@@ -130,11 +151,13 @@ def _mastery_score(
     mastery: dict[str, dict],
     threshold: float,
     tail_k: int = 3,
-) -> tuple[float, float, float, dict]:
-    """Return (optuna_score, min_wr, mean_wr, detail).
+) -> tuple[float, float, float, float, dict]:
+    """Return (optuna_score, tail_mean, min_wr, mean_wr, detail).
 
-    Optuna maximizes the mean of the ``tail_k`` lowest per-level win rates so a
-    single noisy showcase does not dominate, while promotion still keys off min.
+    Optuna maximizes a lexicographic scalar:
+    ``tail_k_mean + 1e-3 * min_wr + 1e-6 * mean_wr`` so washouts with identical
+    zero tails do not beat trials that cleared more of the pack. Promotion still
+    keys off min ≥ threshold only.
     Missing levels count as 0.0.
     """
     rates = []
@@ -150,13 +173,22 @@ def _mastery_score(
             "meets_threshold": wr >= threshold,
         }
     if not rates:
-        return 0.0, 0.0, 0.0, detail
+        return 0.0, 0.0, 0.0, 0.0, detail
     min_wr = min(rates)
     mean_wr = sum(rates) / len(rates)
     k = max(1, min(int(tail_k), len(rates)))
     worst = sorted(rates)[:k]
-    optuna_score = sum(worst) / len(worst)
-    return optuna_score, min_wr, mean_wr, detail
+    tail_mean = sum(worst) / len(worst)
+    # Lexicographic preference without changing the promotion gate.
+    optuna_score = tail_mean + 1e-3 * min_wr + 1e-6 * mean_wr
+    return optuna_score, tail_mean, min_wr, mean_wr, detail
+
+
+def _consolidation_levels(level_names: list[str], consolidate_csv: str) -> list[str]:
+    """Filter consolidation targets to levels present in the curriculum."""
+    requested = [level.strip() for level in consolidate_csv.split(",") if level.strip()]
+    present = set(level_names)
+    return [name for name in requested if name in present]
 
 
 def run_tune(args):
@@ -167,7 +199,10 @@ def run_tune(args):
             f"Starting Optuna sequential-mastery study with {args.trials} trials "
             f"(eval_runs={args.eval_runs}, mastery_threshold={args.mastery_threshold}, "
             f"tail_k={getattr(args, 'tail_k', 3)}, "
-            f"tune_architecture={bool(getattr(args, 'tune_architecture', False))})."
+            f"tune_architecture={bool(getattr(args, 'tune_architecture', False))}, "
+            f"review_E={getattr(args, 'focus_episodes_between_passes', None)}, "
+            f"review_R={getattr(args, 'review_episodes_per_level', None)}, "
+            f"review_K={getattr(args, 'review_levels_per_arm', None)})."
         ),
     )
 
@@ -181,6 +216,33 @@ def run_tune(args):
     mastery_threshold = float(getattr(args, "mastery_threshold", 0.8))
     eval_runs = max(1, int(getattr(args, "eval_runs", 15)))
     tail_k = max(1, int(getattr(args, "tail_k", 3)))
+    consolidate_csv = str(getattr(args, "consolidate_levels", "platforming-6,platforming-7") or "")
+    consolidate_names = _consolidation_levels(level_names, consolidate_csv)
+    consolidation_cycles_arg = getattr(args, "consolidation_cycles", None)
+    if consolidation_cycles_arg is None:
+        consolidation_cycles = max(10, int(args.cycles) // 2)
+    else:
+        consolidation_cycles = max(1, int(consolidation_cycles_arg))
+
+    review_knobs = {
+        "focus_episodes_between_passes": getattr(
+            args, "focus_episodes_between_passes", 1500
+        ),
+        "review_episodes_per_level": getattr(args, "review_episodes_per_level", 100),
+        "review_levels_per_arm": getattr(args, "review_levels_per_arm", 5),
+    }
+
+    if consolidate_names:
+        print_json(
+            "info",
+            message=(
+                f"Rise consolidation enabled after curriculum: levels={consolidate_names}, "
+                f"cycles={consolidation_cycles}."
+            ),
+        )
+    else:
+        print_json("info", message="Rise consolidation disabled (no matching levels).")
+
     if tune_architecture:
         print_json(
             "info",
@@ -256,6 +318,7 @@ def run_tune(args):
             server=args.server,
             play=False,
             overrides=overrides,
+            review_knobs=review_knobs,
         )
         if train_code != 0:
             print_json(
@@ -266,7 +329,37 @@ def run_tune(args):
             )
             return 0.0
 
-        # 2) Final curriculum mastery eval (argmax play across all levels).
+        # 2) Rise consolidation: re-focus mid-pack rises before play eval.
+        if consolidate_names:
+            print_json(
+                "info",
+                message=(
+                    f"Trial {trial.number}: consolidating rises "
+                    f"{consolidate_names} for {consolidation_cycles} cycle(s)."
+                ),
+            )
+            consol_code, _ = _run_train_subprocess(
+                client_dir=client_dir,
+                levels=",".join(consolidate_names),
+                cycles=consolidation_cycles,
+                episodes_per_cycle=args.episodes_per_cycle,
+                agent=trial_agent,
+                server=args.server,
+                play=False,
+                overrides=overrides,
+                review_knobs=review_knobs,
+            )
+            if consol_code != 0:
+                print_json(
+                    "info",
+                    message=(
+                        f"Trial {trial.number} consolidation exited with code "
+                        f"{consol_code}; scoring 0."
+                    ),
+                )
+                return 0.0
+
+        # 3) Final curriculum mastery eval (argmax play across all levels).
         print_json(
             "info",
             message=(
@@ -299,7 +392,7 @@ def run_tune(args):
             name: data for name, data in mastery.items() if data.get("play")
         }
         score_source = play_mastery if play_mastery else mastery
-        optuna_score, min_wr, mean_wr, detail = _mastery_score(
+        optuna_score, tail_mean, min_wr, mean_wr, detail = _mastery_score(
             level_names, score_source, mastery_threshold, tail_k=tail_k
         )
         meets = all(row["meets_threshold"] for row in detail.values()) and bool(detail)
@@ -307,7 +400,9 @@ def run_tune(args):
         print_json(
             "info",
             message=(
-                f"Finished Trial {trial.number}: optuna_score(tail_k={tail_k})={optuna_score:.4f}, "
+                f"Finished Trial {trial.number}: "
+                f"optuna_score={optuna_score:.6f} "
+                f"(tail_k={tail_k} mean={tail_mean:.4f} + lex), "
                 f"min_win_rate={min_wr:.4f}, mean_win_rate={mean_wr:.4f}, "
                 f"mastery_met={meets}, per_level={detail}"
             ),
@@ -316,6 +411,7 @@ def run_tune(args):
         trial.set_user_attr("mastery_met", meets)
         trial.set_user_attr("min_win_rate", min_wr)
         trial.set_user_attr("mean_win_rate", mean_wr)
+        trial.set_user_attr("tail_mean", tail_mean)
         trial.set_user_attr("trial_agent", trial_agent)
         return optuna_score
 
@@ -326,19 +422,24 @@ def run_tune(args):
     best_met = bool(study.best_trial.user_attrs.get("mastery_met", False))
     best_min = float(study.best_trial.user_attrs.get("min_win_rate", 0.0) or 0.0)
     best_mean = float(study.best_trial.user_attrs.get("mean_win_rate", 0.0) or 0.0)
+    best_tail = float(study.best_trial.user_attrs.get("tail_mean", 0.0) or 0.0)
     print_json(
         "completed",
         best_params=study.best_params,
         best_value=study.best_value,
+        best_tail_mean=best_tail,
         best_min_win_rate=best_min,
         best_mean_win_rate=best_mean,
         mastery_threshold=mastery_threshold,
         mastery_met=best_met,
         tail_k=tail_k,
+        consolidate_levels=consolidate_names,
+        consolidation_cycles=consolidation_cycles if consolidate_names else 0,
+        review_knobs=review_knobs,
         per_level_mastery=best_detail,
         message=(
             "Hyperparameter tuning study completed "
-            f"(best tail-{tail_k} mean={study.best_value:.4f}, "
+            f"(best score={study.best_value:.6f}, tail-{tail_k}={best_tail:.4f}, "
             f"min={best_min:.4f}, mean={best_mean:.4f}; "
             f"{'meets' if best_met else 'below'} mastery threshold {mastery_threshold})."
         ),

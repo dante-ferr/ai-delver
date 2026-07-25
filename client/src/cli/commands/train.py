@@ -17,6 +17,7 @@ from .checkpoint_store import (
 from .review_planner import (
     commit_after_model_weights,
     curriculum_snapshot,
+    apply_review_knobs,
     ensure_review_state,
     estimate_session_episodes,
     plan_session,
@@ -208,11 +209,50 @@ def run_train(args):
             "command",
             "checkpoint",
             "play",
+            "checkpoint_interval",
+            "no_learning",
+            # Review knobs are client curriculum state, not server HPs.
+            "focus_episodes_between_passes",
+            "review_episodes_per_level",
+            "review_levels_per_arm",
         }
         config_overrides = {
             key: val for key, val in vars(args).items()
             if key not in standard_keys and val is not None
         }
+
+        async def reload_metadata():
+            try:
+                return await metadata_manager.read_metadata()
+            except Exception:
+                return {"trajectory_count": 0, "stats": {"amount": 0, "victories": 0}}
+
+        # Apply CLI review E/R/K before any focus/review planning.
+        review_override_e = getattr(args, "focus_episodes_between_passes", None)
+        review_override_r = getattr(args, "review_episodes_per_level", None)
+        review_override_k = getattr(args, "review_levels_per_arm", None)
+        if (
+            review_override_e is not None
+            or review_override_r is not None
+            or review_override_k is not None
+        ):
+            bootstrap_meta = ensure_review_state(await reload_metadata())
+            apply_review_knobs(
+                bootstrap_meta,
+                focus_episodes_between_passes=review_override_e,
+                review_episodes_per_level=review_override_r,
+                review_levels_per_arm=review_override_k,
+            )
+            await metadata_manager.write_metadata(bootstrap_meta)
+            print_json(
+                "info",
+                message=(
+                    "Applied review knobs: "
+                    f"E={bootstrap_meta['review_state']['focus_episodes_between_passes']}, "
+                    f"R={bootstrap_meta['review_state']['review_episodes_per_level']}, "
+                    f"K={bootstrap_meta['review_state']['review_levels_per_arm']}."
+                ),
+            )
 
         chain_start_time = time.time()
         overall_completed = False
@@ -221,12 +261,6 @@ def run_train(args):
         # Cumulative focus showcase count across sequential per-level sessions (GUI bar).
         focus_progress_base = 0
         total_focus_progress_steps = max(1, base_cycles * len(coach_levels))
-
-        async def reload_metadata():
-            try:
-                return await metadata_manager.read_metadata()
-            except Exception:
-                return {"trajectory_count": 0, "stats": {"amount": 0, "victories": 0}}
 
         async def execute_phase(
             *,
@@ -592,7 +626,12 @@ def run_train(args):
                     latest = await metadata_manager.read_metadata()
                     ensure_review_state(latest)
                     episodes_for_commit = session_episodes_accumulated
-                    if episodes_for_commit <= 0:
+                    # Metrics "episodes" count completed trajectories, which under-counts
+                    # parallel env slots. Prefer the planned focus budget so review E arms
+                    # on actual training volume (cycles × episodes_per_cycle).
+                    if phase_projected > 0:
+                        episodes_for_commit = max(episodes_for_commit, int(phase_projected))
+                    elif episodes_for_commit <= 0:
                         if completed_normally and phase_projected > 0:
                             episodes_for_commit = phase_projected
                         elif current_cycle > 0 and ep_cycle_eff:

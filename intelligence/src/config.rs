@@ -16,6 +16,12 @@ pub struct Config {
     pub minibatch_size: usize,
     pub env_batch_size: usize,
     pub device: String,
+    /// Local-view encoder width (projects `LOCAL_VIEW_CELLS` → this dim).
+    pub local_feature_dim: usize,
+    /// LSTM input/hidden size after the fused MLP tower.
+    pub lstm_hidden_size: usize,
+    /// Hidden width of the fused MLP before the LSTM.
+    pub mlp_hidden_dim: usize,
     pub not_finished_reward: f32,
     pub finished_reward: f32,
     pub turn_reward: f32,
@@ -48,6 +54,9 @@ impl Default for Config {
             minibatch_size: 256,
             env_batch_size: 38,
             device: "auto".into(),
+            local_feature_dim: 256,
+            lstm_hidden_size: 128,
+            mlp_hidden_dim: 256,
             not_finished_reward: -10.0,
             finished_reward: 100.0,
             turn_reward: 0.0,

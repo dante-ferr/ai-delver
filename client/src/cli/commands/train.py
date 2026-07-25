@@ -125,8 +125,13 @@ def run_train(args):
         base_cycles = int(args.cycles)
 
         if is_play_mode:
-            print_json("info", message=f"Play mode enabled: putting Delver to play {len(coach_levels)} selected level(s).")
-            base_cycles = 1
+            print_json(
+                "info",
+                message=(
+                    f"Play mode enabled: putting Delver to play {len(coach_levels)} selected "
+                    f"level(s) for {base_cycles} showcase run(s) each."
+                ),
+            )
             base_runs_per_cycle = None
             base_episodes_per_cycle = None
         elif base_runs_per_cycle is not None and base_runs_per_cycle > 0:
@@ -215,7 +220,7 @@ def run_train(args):
         lr_scaled_for_challenge = False
         # Cumulative focus showcase count across sequential per-level sessions (GUI bar).
         focus_progress_base = 0
-        total_focus_progress_steps = max(1, base_cycles * len(coach_levels)) if not is_play_mode else len(coach_levels)
+        total_focus_progress_steps = max(1, base_cycles * len(coach_levels))
 
         async def reload_metadata():
             try:
@@ -494,9 +499,11 @@ def run_train(args):
             session_episodes_accumulated = 0
             curriculum_committed = False
             ep_cycle_eff = episodes_per_cycle_for(phase_runs, phase_episodes_per_cycle)
+            phase_showcase_victories = 0
+            phase_showcase_amount = 0
 
             async def on_trajectory(trajectory, level_episode_count):
-                nonlocal current_cycle
+                nonlocal current_cycle, phase_showcase_victories, phase_showcase_amount
                 is_review_showcase = False
                 persisted = False
                 if trajectory is not None:
@@ -507,6 +514,9 @@ def run_train(args):
                             args.agent, kind="play" if is_play_mode else "train"
                         )
                         persisted = True
+                        phase_showcase_amount += 1
+                        if getattr(trajectory, "victorious", False):
+                            phase_showcase_victories += 1
                 current_cycle += 1
                 # Focus progress is absolute across sequential levels for the GUI bar
                 progress_cycle = (
@@ -522,6 +532,7 @@ def run_train(args):
                     is_review=is_review_showcase or review_plan.is_review_pass,
                     persisted=persisted,
                     training_phase=phase_name,
+                    victorious=bool(getattr(trajectory, "victorious", False)) if trajectory is not None else False,
                     message=f"Completed cycle {progress_cycle}",
                 )
 
@@ -665,21 +676,63 @@ def run_train(args):
                 if not completed_normally:
                     await interrupt_training(args.server)
 
+            # Per-level mastery for single-level focus / play sessions (used by tune).
+            if (
+                completed_normally
+                and phase_name == "focus"
+                and focus_levels is not None
+                and len(levels_list) == 1
+                and phase_showcase_amount > 0
+            ):
+                win_rate = phase_showcase_victories / phase_showcase_amount
+                print_json(
+                    "level_mastery",
+                    level=levels_list[0],
+                    victories=phase_showcase_victories,
+                    amount=phase_showcase_amount,
+                    win_rate=round(win_rate, 6),
+                    training_phase=phase_name,
+                    play=bool(is_play_mode),
+                    message=(
+                        f"Level mastery '{levels_list[0]}': "
+                        f"{phase_showcase_victories}/{phase_showcase_amount} "
+                        f"({win_rate:.1%})"
+                    ),
+                )
+
             return completed_normally
 
         # --- Phase chain -------------------------------------------------
         # Focus: n cycles per coach level in list order (sequential), not a
         # static multi-level mix. Reviews stay review-only static mixes and
         # can auto-chain between (or mid) focus levels when E is crossed.
+        # Play mode uses the same sequential per-level showcase loop (cycles
+        # honor --cycles) so tune can score final curriculum mastery.
         if is_play_mode:
-            ok = await execute_phase(
-                force_review=False,
-                cycles=1,
-                runs_per_cycle=None,
-                episodes_per_cycle=None,
-                projected_episodes=0,
-            )
-            overall_completed = ok
+            overall_completed = True
+            for level_index, level in enumerate(coach_levels):
+                print_json(
+                    "info",
+                    message=(
+                        f"Play eval {level_index + 1}/{len(coach_levels)}: "
+                        f"'{level}' for {base_cycles} showcase run(s)."
+                    ),
+                )
+                ok = await execute_phase(
+                    force_review=False,
+                    cycles=base_cycles,
+                    runs_per_cycle=None,
+                    episodes_per_cycle=None,
+                    projected_episodes=0,
+                    focus_levels=[level],
+                    progress_base=focus_progress_base,
+                    progress_total=total_focus_progress_steps,
+                )
+                if ok:
+                    focus_progress_base += base_cycles
+                else:
+                    overall_completed = False
+                    break
         else:
             metadata = ensure_review_state(await reload_metadata())
             ep_cycle = episodes_per_cycle_for(base_runs_per_cycle, base_episodes_per_cycle)

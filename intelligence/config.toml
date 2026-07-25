@@ -16,6 +16,14 @@ minibatch_size = 256              # Target number of time steps per recurrent se
 env_batch_size = 38               # Number of native environments stepped in parallel
 device = "auto"                   # auto (CUDA if available), cpu, cuda, cuda:N, or mps
 
+# ==============================================================================
+# Network Architecture
+# ==============================================================================
+# Local view is a fixed 25×25 (radius 12) occupancy grid = 625 inputs — sized so
+# 8-tile pits on platforming-9/10 are visible before the jump commitment.
+local_feature_dim = 256           # Local-view encoder width (625 → this)
+lstm_hidden_size = 128            # LSTM hidden / recurrent state size
+mlp_hidden_dim = 256              # Fused MLP hidden width before the LSTM
 
 # ==============================================================================
 # Reward & Penalty Weights

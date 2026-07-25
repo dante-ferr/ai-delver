@@ -1,5 +1,6 @@
 use super::{
     exploration::ExplorationGrid,
+    observation::{GLOBAL_STATE_SIZE, LOCAL_VIEW_CELLS, LOCAL_VIEW_RADIUS},
     reward::{RewardInput, RewardState},
 };
 use crate::config::Config;
@@ -9,8 +10,8 @@ use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct Observation {
-    pub local_view: [f32; 225],
-    pub global_state: [f32; 7],
+    pub local_view: [f32; LOCAL_VIEW_CELLS],
+    pub global_state: [f32; GLOBAL_STATE_SIZE],
 }
 
 pub struct Step {
@@ -122,15 +123,15 @@ impl LevelEnvironment {
         let (gx, gy) = self.physics.goal_position();
         let (max_vx, max_vy) = self.physics.max_velocity();
         let goal_distance_norm = MAX_GRID_SIZE as f32 * DEFAULT_TILE_SIZE;
-        let local_view: [f32; 225] = self
+        let local_view: [f32; LOCAL_VIEW_CELLS] = self
             .physics
-            .local_view("delver", 7)
+            .local_view("delver", LOCAL_VIEW_RADIUS)
             .expect("physics engine always contains the delver")
             .into_iter()
             .map(|cell| cell as f32)
             .collect::<Vec<_>>()
             .try_into()
-            .expect("radius 7 always produces a 15x15 view");
+            .expect("LOCAL_VIEW_RADIUS always produces LOCAL_VIEW_CELLS cells");
         Observation {
             local_view,
             global_state: [

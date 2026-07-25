@@ -14,6 +14,7 @@
   - [Automatic Reviews](player/automatic_reviews.md)
 - [Engineering](engineering/index.md)
   - [Fine-Tuning History](engineering/fine_tuning_history.md)
+  - [Fine-Tuning Handoff](engineering/fine_tuning_handoff.md)
   - [Run Types & Policy Modes](engineering/run_types.md)
   - [Error Handling](engineering/error_handling.md)
   - [Physics Performance](engineering/physics_performance.md)

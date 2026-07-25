@@ -1,7 +1,9 @@
 use crate::{
     agent::ppo::{Ppo, Rollout, UpdateMetrics},
     config::Config,
-    environments::level_env::LevelEnvironment,
+    environments::{
+        level_env::LevelEnvironment, GLOBAL_STATE_SIZE, LOCAL_VIEW_CELLS,
+    },
     trainer::showcase,
 };
 use ai_delver_level::Level;
@@ -76,8 +78,10 @@ pub fn train(
             let mut starts = vec![1.0_f32; envs.len()];
             let mut recurrent = ppo.model.initial_state(envs.len() as i64);
             let collect_began = Instant::now();
-            let mut local_data: Vec<f32> = Vec::with_capacity(rollout_steps * envs.len() * 225);
-            let mut global_data: Vec<f32> = Vec::with_capacity(rollout_steps * envs.len() * 7);
+            let mut local_data: Vec<f32> =
+                Vec::with_capacity(rollout_steps * envs.len() * LOCAL_VIEW_CELLS);
+            let mut global_data: Vec<f32> =
+                Vec::with_capacity(rollout_steps * envs.len() * GLOBAL_STATE_SIZE);
             let mut start_data: Vec<f32> = Vec::with_capacity(rollout_steps * envs.len());
             let mut runs_data: Vec<i64> = Vec::with_capacity(rollout_steps * envs.len());
             let mut jumps_data: Vec<i64> = Vec::with_capacity(rollout_steps * envs.len());
@@ -99,10 +103,10 @@ pub fn train(
                 global_data.extend_from_slice(&step_global);
                 start_data.extend_from_slice(&starts);
                 let local = Tensor::from_slice(&step_local)
-                    .view([envs.len() as i64, 225])
+                    .view([envs.len() as i64, LOCAL_VIEW_CELLS as i64])
                     .to_device(device);
                 let global = Tensor::from_slice(&step_global)
-                    .view([envs.len() as i64, 7])
+                    .view([envs.len() as i64, GLOBAL_STATE_SIZE as i64])
                     .to_device(device);
                 let start_tensor = Tensor::from_slice(&starts).to_device(device);
                 let (runs, jumps, log_probs, values) = if config.no_learning {
@@ -161,10 +165,10 @@ pub fn train(
                 let (_, _, _, values) = no_grad(|| {
                     ppo.model.action_and_value(
                         &Tensor::from_slice(&local)
-                            .view([envs.len() as i64, 225])
+                            .view([envs.len() as i64, LOCAL_VIEW_CELLS as i64])
                             .to_device(device),
                         &Tensor::from_slice(&global)
-                            .view([envs.len() as i64, 7])
+                            .view([envs.len() as i64, GLOBAL_STATE_SIZE as i64])
                             .to_device(device),
                         &Tensor::from_slice(&starts).to_device(device),
                         &mut recurrent,
@@ -177,10 +181,10 @@ pub fn train(
             let shape = [rollout_steps as i64, envs.len() as i64];
             let rollout = Rollout {
                 local: Tensor::from_slice(&local_data)
-                    .view([shape[0], shape[1], 225])
+                    .view([shape[0], shape[1], LOCAL_VIEW_CELLS as i64])
                     .to_device(device),
                 global: Tensor::from_slice(&global_data)
-                    .view([shape[0], shape[1], 7])
+                    .view([shape[0], shape[1], GLOBAL_STATE_SIZE as i64])
                     .to_device(device),
                 episode_starts: Tensor::from_slice(&start_data)
                     .view(shape)

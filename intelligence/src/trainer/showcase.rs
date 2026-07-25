@@ -1,7 +1,10 @@
 use crate::{
     agent::ppo::Ppo,
     config::Config,
-    environments::level_env::{DelverPose, LevelEnvironment},
+    environments::{
+        level_env::{DelverPose, LevelEnvironment},
+        GLOBAL_STATE_SIZE, LOCAL_VIEW_CELLS,
+    },
 };
 use ai_delver_level::Level;
 use anyhow::Result;
@@ -36,10 +39,10 @@ pub fn run_showcase(
 
     for _ in 0..max_steps {
         let local = Tensor::from_slice(&observation.local_view)
-            .view([1, 225])
+            .view([1, LOCAL_VIEW_CELLS as i64])
             .to_device(device);
         let global = Tensor::from_slice(&observation.global_state)
-            .view([1, 7])
+            .view([1, GLOBAL_STATE_SIZE as i64])
             .to_device(device);
         let starts = Tensor::from_slice(&[episode_start]).to_device(device);
         let (run, jump, conf) = no_grad(|| {

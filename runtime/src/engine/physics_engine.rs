@@ -446,6 +446,8 @@ mod tests {
         engine.set_delver_action(1.0, false).unwrap();
         assert_eq!(engine.goal_position(), (56.0, 24.0));
         assert_eq!(engine.local_view("delver", 7).unwrap().len(), 225);
+        assert_eq!(engine.local_view("delver", 12).unwrap().len(), 625);
+        assert_eq!(engine.local_view("delver", 14).unwrap().len(), 841);
         assert_eq!(engine.max_velocity(), (500.0, 1000.0));
     }
 

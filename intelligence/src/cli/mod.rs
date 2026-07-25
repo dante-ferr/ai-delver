@@ -75,6 +75,18 @@ pub struct TrainArgs {
     #[arg(long)]
     pub goal_distance_reward_scale: Option<f32>,
     #[arg(long)]
+    pub ppo_num_epochs: Option<usize>,
+    #[arg(long)]
+    pub value_coefficient: Option<f64>,
+    #[arg(long)]
+    pub minibatch_size: Option<usize>,
+    #[arg(long)]
+    pub local_feature_dim: Option<usize>,
+    #[arg(long)]
+    pub lstm_hidden_size: Option<usize>,
+    #[arg(long)]
+    pub mlp_hidden_dim: Option<usize>,
+    #[arg(long)]
     pub env_batch_size: Option<usize>,
     #[arg(long)]
     pub device: Option<String>,

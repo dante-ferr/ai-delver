@@ -42,6 +42,12 @@ You can optionally configure checkpoints or override individual training and rew
 * `--jump-reward <float>`: Penalty given per jump.
 * `--wall-hugging-reward <float>`: Penalty given for touching walls.
 * `--goal-distance-reward-scale <float>`: Scaling multiplier for the goal-distance reward.
+* `--ppo-num-epochs <int>`: PPO optimization epochs per update.
+* `--value-coefficient <float>`: Value loss weight.
+* `--minibatch-size <int>`: Recurrent PPO minibatch size (timesteps).
+* `--local-feature-dim <int>`: Local-view encoder width.
+* `--lstm-hidden-size <int>`: LSTM hidden size.
+* `--mlp-hidden-dim <int>`: Fused MLP hidden width before the LSTM.
 
 #### Dynamic Parameter Mapping Mechanism
 The CLI and the intelligence server employ a dynamic mapping pattern to transfer parameters without maintaining duplicate lists of variable names across different architectural layers (CLI arguments $\rightarrow$ Client payload $\rightarrow$ Server request $\rightarrow$ Core config):
@@ -161,16 +167,27 @@ Key fields: `recommended_max_gap_tiles`, `recommended_max_rise_tiles` (surface-t
 ---
 
 ### `tune`
-Runs a developer-only automated hyperparameter tuning session using Optuna. It suggests parameters (learning rate, entropy regularization, finished reward) across multiple trials, runs `train` as a subprocess, prunes bad trials early if `abs(loss) > 20`, maximizes win rate from the child `stats` event, and emits `completed` with `best_params` / `best_value`.
+Runs a developer-only Optuna study for **engine** hyperparameters. Each trial:
+
+1. Creates a fresh blank agent (`{agent}_trial_{n}`).
+2. Runs sequential `train` on `--levels` (weight inheritance within the trial).
+3. Runs `--play` mastery eval (`--eval-runs`, default **15** showcases per level).
+4. Maximizes the **mean of the `tail_k` lowest per-level win rates** (default `tail_k=3`) from `level_mastery` events — smoother than raw min, still bottleneck-aware. Logs min / mean / per-level table. Promotion still requires **`min` ≥ `--mastery-threshold`**.
+5. Prunes early if train `abs(loss) > 20`.
 
 ```bash
 poetry run python src/cli/main.py tune \
-    --levels "Ai Test #1" \
-    --cycles 5 \
+    --levels "platforming-1,platforming-2,platforming-3,platforming-4,platforming-5,platforming-6,platforming-7,platforming-8,platforming-9,platforming-10" \
+    --cycles 15 \
     --episodes-per-cycle 38 \
-    --agent ppo_delver \
-    --trials 10
+    --agent engine_eval_agent \
+    --trials 10 \
+    --eval-runs 15 \
+    --tail-k 3 \
+    --mastery-threshold 0.8
 ```
+
+Optional flags: `--eval-runs`, `--tail-k`, `--mastery-threshold`, `--tune-architecture` (**second pass only** — searches PPO epochs / minibatch / value coeff and `local_feature_dim` / `lstm_hidden_size` / `mlp_hidden_dim` after rewards stabilize).
 
 **GUI Trigger**: Developer CLI command only.
 
@@ -206,6 +223,7 @@ for line in iter(self.train_process.stdout.readline, ""):
 | `request_sent` | `train` | Training request sent to server |
 | `session_created` | `train` | Server accepted and registered the session |
 | `progress` | `train` | A showcase completed (`training_phase`, `is_review` / `persisted` for review filtering) |
+| `level_mastery` | `train` | Per-level showcase win rate after a single-level focus/play phase (`victories`, `amount`, `win_rate`) |
 | `level_transition` | `train` | Agent graduated to a new level (`is_review` when applicable) |
 | `metrics` | `train` | Deep learning metrics snapshot (loss, average return, step, episodes) |
 | `checkpoint` | `train` | Intermediate model weights checkpoint received from server |

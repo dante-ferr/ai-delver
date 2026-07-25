@@ -43,9 +43,11 @@ For platforming bootstrap, the agent may paste the [platforming instance table](
 3. `--mode static` only.
 4. Parse JSON lines (`event` field) on stdout.
 5. Prefer `--runs-per-cycle` for smoke trains; `tune` may use `--episodes-per-cycle` (= `env_batch_size`).
-6. Success = better defaults / learnability on the eval pack — not “ship a master Delver.”
+6. Success = **sequential mastery** on the curriculum (see §4 `tune`), not a diluted multi-level average.
 7. No complex agent-authored layouts; humans build from the emitted list.
 8. Extend the CLI rather than one-off HTTP scripts for lifecycle actions.
+9. **Pure vision RL**: the Delver must learn from `local_view` (25×25 occupancy, radius 12 → 625 cells) plus `global_state` proprioception / relative goal. No artificial conditional rules or heuristic action overrides. Standing still and backtracking stay unpenalized (elevators, mazes, timing).
+10. Fine-tuning runs **once per skill family**; long Optuna budgets are allowed. Search rewards / LR / entropy **first**; enable `--tune-architecture` only as a **second pass** after those stabilize.
 
 ---
 
@@ -54,13 +56,17 @@ For platforming bootstrap, the agent may paste the [platforming instance table](
 | Lever            | Where                                            |
 | ---------------- | ------------------------------------------------ |
 | LR, entropy, PPO | `intelligence/config.toml` / CLI                 |
+| Network sizes    | `config.toml` / CLI (`local_feature_dim`, LSTM, MLP) |
 | Rewards          | `config.toml` / CLI                              |
 | Collect timing   | `config.toml`                                    |
-| HP search        | CLI `tune`                                       |
+| Local view       | Fixed radius 12 (25×25) in the intelligence env  |
+| HP search        | CLI `tune` (sequential mastery objective)        |
 | Sim objects      | `intelligence` + `runtime` / level load          |
 | Physics feel     | `delver.toml` / `world.toml` (+ re-check levels) |
 
 Comment non-obvious default changes in `config.toml`.
+
+**Vision note:** binary solid/empty occupancy with radius 12 is sized so 8-tile pits (`platforming-9` / `10`) are visible before the jump, without the full noise of radius 14. Goals are **not** painted into `local_view`; relative goal position lives in `global_state`. A tiny 2D conv over the grid (instead of a dense bag-of-tiles encoder) is a later experiment if geometry learning stalls.
 
 ---
 
@@ -76,20 +82,40 @@ Follow [Skill Ladder §3](skill_ladder.md#3-formula-for-each-new-major-skill-s):
 
 When P is empty, Pass A on ISO+COM is the whole story; skip Pass B warm-start.
 
+For **platforming bootstrap mastery**, `tune` may also run sequential curriculum on `platforming-1` → `platforming-10` (weight inheritance within each trial) and score **final** argmax clear rates after the full curriculum.
+
 ### `tune`
 
 ```bash
 cd client
 poetry run python src/cli/main.py tune \
-    --levels "<comma-separated eval names for this pass>" \
-    --cycles 5 \
+    --levels "platforming-1,platforming-2,platforming-3,platforming-4,platforming-5,platforming-6,platforming-7,platforming-8,platforming-9,platforming-10" \
+    --cycles 15 \
     --episodes-per-cycle 38 \
     --agent engine_eval_agent \
     --trials 10 \
+    --eval-runs 15 \
+    --tail-k 3 \
+    --mastery-threshold 0.8 \
     --server localhost:8001
 ```
 
-Optuna maximizes win rate; prunes if `abs(loss) > 20`. Apply `best_params` to a longer eval `train`, then promote to `config.toml` with comments when justified.
+Each trial:
+
+1. Uses a **fresh blank agent** (`{agent}_trial_{n}`) — no cross-trial weight leak.
+2. Runs sequential `train` on the level list (Pass-B-style inheritance inside the trial).
+3. Runs `--play` mastery eval (`--eval-runs`, default **15** showcases per level for stable WRs).
+4. Optuna maximizes the **mean of the `tail_k` lowest per-level win rates** (default `tail_k=3`) so one noisy showcase does not dominate. Always log **min**, **mean**, and the full per-level table.
+5. A set is “ideal” / promotable only when **`min` per-level WR ≥ `--mastery-threshold`** (default 0.8). Diluted pack averages (e.g. 9%) are **not** success.
+
+Optuna prunes if `abs(loss) > 20` during train.
+
+**Two-pass search (required practice):**
+
+1. **Pass 1 — rewards / LR / entropy only** (no `--tune-architecture`).
+2. **Pass 2 — architecture** (`--tune-architecture`: PPO epochs / minibatch / value coeff and `local_feature_dim` / `lstm_hidden_size` / `mlp_hidden_dim`) once Pass 1 is clearing mid-pack levels.
+
+Apply `best_params` to a longer eval `train`, then promote to `config.toml` with comments when justified.
 
 ### Eval `train` (smoke only)
 
@@ -106,8 +132,8 @@ poetry run python src/cli/main.py train \
 ### Promote when
 
 1. No `error`.
-2. Clear rise in victories / return on the target pass levels.
-3. Pass C retention holds.
+2. Sequential mastery: **`min`** per-level play win rate ≥ 0.8 on the target curriculum (not a diluted pack average). Also inspect mean and the per-level table — do not promote on Optuna’s tail-mean alone if min is below threshold.
+3. Pass C retention holds (when P is non-empty).
 4. Defaults are commented and reproducible.
 
 ---

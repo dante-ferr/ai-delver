@@ -52,6 +52,12 @@ def main():
     train_p.add_argument("--jump-reward", type=float, default=None, help="Penalty for jumping")
     train_p.add_argument("--wall-hugging-reward", type=float, default=None, help="Penalty for wall hugging")
     train_p.add_argument("--goal-distance-reward-scale", type=float, default=None, help="Scale factor for goal distance reward")
+    train_p.add_argument("--ppo-num-epochs", type=int, default=None, help="PPO optimization epochs per update")
+    train_p.add_argument("--value-coefficient", type=float, default=None, help="Value loss coefficient")
+    train_p.add_argument("--minibatch-size", type=int, default=None, help="Recurrent PPO minibatch size (timesteps)")
+    train_p.add_argument("--local-feature-dim", type=int, default=None, help="Local-view encoder feature width")
+    train_p.add_argument("--lstm-hidden-size", type=int, default=None, help="LSTM hidden size")
+    train_p.add_argument("--mlp-hidden-dim", type=int, default=None, help="Fused MLP hidden width before LSTM")
 
     # Subcommand: stats
     stats_p = subparsers.add_parser("stats", help="Calculates and prints agent stats")
@@ -76,12 +82,35 @@ def main():
 
     # Subcommand: tune
     tune_p = subparsers.add_parser("tune", help="Runs automated hyperparameter tuning using Optuna")
-    tune_p.add_argument("--levels", required=True, help="Comma-separated level names")
-    tune_p.add_argument("--cycles", type=int, default=5, help="Cycles per trial")
+    tune_p.add_argument("--levels", required=True, help="Comma-separated level names (sequential curriculum order)")
+    tune_p.add_argument("--cycles", type=int, default=5, help="Focus cycles per level per trial")
     tune_p.add_argument("--episodes-per-cycle", type=int, default=32, help="Episodes per cycle")
-    tune_p.add_argument("--agent", required=True, help="Agent name")
+    tune_p.add_argument("--agent", required=True, help="Base agent name (each trial uses {agent}_trial_{n})")
     tune_p.add_argument("--trials", type=int, default=10, help="Number of Optuna trials")
     tune_p.add_argument("--server", default="localhost:8001", help="Training server URL")
+    tune_p.add_argument(
+        "--eval-runs",
+        type=int,
+        default=15,
+        help="Play showcases per level after curriculum for mastery scoring (prefer ≥15)",
+    )
+    tune_p.add_argument(
+        "--mastery-threshold",
+        type=float,
+        default=0.8,
+        help="Min per-level win rate required to declare pack mastery (promotion gate)",
+    )
+    tune_p.add_argument(
+        "--tail-k",
+        type=int,
+        default=3,
+        help="Optuna maximizes mean of the K lowest per-level win rates (smoother than raw min)",
+    )
+    tune_p.add_argument(
+        "--tune-architecture",
+        action="store_true",
+        help="Second-pass only: also search network widths / PPO epochs / minibatch / value coeff",
+    )
 
     # Subcommand: import-level-sketch
     sketch_p = subparsers.add_parser(

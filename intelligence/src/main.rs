@@ -204,6 +204,12 @@ fn apply_overrides(config: &mut Config, args: &TrainArgs) {
     override_value!(jump_reward);
     override_value!(wall_hugging_reward);
     override_value!(goal_distance_reward_scale);
+    override_value!(ppo_num_epochs);
+    override_value!(value_coefficient);
+    override_value!(minibatch_size);
+    override_value!(local_feature_dim);
+    override_value!(lstm_hidden_size);
+    override_value!(mlp_hidden_dim);
     override_value!(env_batch_size);
     override_value!(seed);
     if let Some(value) = &args.device {

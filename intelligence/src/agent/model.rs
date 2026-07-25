@@ -1,3 +1,4 @@
+use crate::environments::{GLOBAL_STATE_SIZE, LOCAL_VIEW_CELLS};
 use tch::{
     nn::{self, RNN},
     Device, Kind, Tensor,
@@ -20,20 +21,59 @@ pub struct ActorCritic {
     jump_head: nn::Linear,
     value_head: nn::Linear,
     device: Device,
+    local_feature_dim: i64,
+    lstm_hidden_size: i64,
 }
 
 impl ActorCritic {
-    pub fn new(vs: &nn::Path, device: Device) -> Self {
-        let local = nn::linear(vs / "local", 225, 128, Default::default());
-        let global_norm = nn::layer_norm(vs / "global_norm", vec![7], Default::default());
-        let global = nn::linear(vs / "global", 7, 64, Default::default());
+    pub fn new(
+        vs: &nn::Path,
+        device: Device,
+        local_feature_dim: i64,
+        lstm_hidden_size: i64,
+        mlp_hidden_dim: i64,
+    ) -> Self {
+        let global_feature_dim = 64_i64;
+        let fused_dim = local_feature_dim + global_feature_dim;
+        let local = nn::linear(
+            vs / "local",
+            LOCAL_VIEW_CELLS as i64,
+            local_feature_dim,
+            Default::default(),
+        );
+        let global_norm = nn::layer_norm(
+            vs / "global_norm",
+            vec![GLOBAL_STATE_SIZE as i64],
+            Default::default(),
+        );
+        let global = nn::linear(
+            vs / "global",
+            GLOBAL_STATE_SIZE as i64,
+            global_feature_dim,
+            Default::default(),
+        );
         let input = nn::seq()
-            .add(nn::linear(vs / "input_1", 192, 256, Default::default()))
+            .add(nn::linear(
+                vs / "input_1",
+                fused_dim,
+                mlp_hidden_dim,
+                Default::default(),
+            ))
             .add_fn(Tensor::relu)
-            .add(nn::linear(vs / "input_2", 256, 128, Default::default()))
+            .add(nn::linear(
+                vs / "input_2",
+                mlp_hidden_dim,
+                lstm_hidden_size,
+                Default::default(),
+            ))
             .add_fn(Tensor::relu);
-        let lstm = nn::lstm(vs / "lstm", 128, 128, Default::default());
-        let output = nn::linear(vs / "output", 128, 64, Default::default());
+        let lstm = nn::lstm(
+            vs / "lstm",
+            lstm_hidden_size,
+            lstm_hidden_size,
+            Default::default(),
+        );
+        let output = nn::linear(vs / "output", lstm_hidden_size, 64, Default::default());
         let run_head = nn::linear(vs / "run", 64, 3, Default::default());
         let jump_head = nn::linear(vs / "jump", 64, 2, Default::default());
         let value_head = nn::linear(vs / "value", 64, 1, Default::default());
@@ -48,6 +88,8 @@ impl ActorCritic {
             jump_head,
             value_head,
             device,
+            local_feature_dim,
+            lstm_hidden_size,
         }
     }
 
@@ -60,12 +102,12 @@ impl ActorCritic {
         let sizes = local.size();
         let (batch, steps) = (sizes[0], sizes[1]);
         let local_features = local
-            .view([-1, 225])
+            .view([-1, LOCAL_VIEW_CELLS as i64])
             .apply(&self.local)
             .relu()
-            .view([batch, steps, 128]);
+            .view([batch, steps, self.local_feature_dim]);
         let global_features = global
-            .view([-1, 7])
+            .view([-1, GLOBAL_STATE_SIZE as i64])
             .apply(&self.global_norm)
             .apply(&self.global)
             .relu()
@@ -85,7 +127,7 @@ impl ActorCritic {
             outputs.push(output.squeeze_dim(1));
         }
         let hidden = Tensor::stack(&outputs, 1)
-            .view([-1, 128])
+            .view([-1, self.lstm_hidden_size])
             .apply(&self.output)
             .relu();
         NetworkOutput {
@@ -159,8 +201,12 @@ impl ActorCritic {
         let jump_probs = jump_logits.softmax(-1, Kind::Float);
         let run = run_probs.argmax(-1, false);
         let jump = jump_probs.argmax(-1, false);
-        let max_run_p = Vec::<f32>::try_from(&run_probs.max_dim(-1, false).0.to_device(Device::Cpu)).expect("run max")[0];
-        let max_jump_p = Vec::<f32>::try_from(&jump_probs.max_dim(-1, false).0.to_device(Device::Cpu)).expect("jump max")[0];
+        let max_run_p =
+            Vec::<f32>::try_from(&run_probs.max_dim(-1, false).0.to_device(Device::Cpu))
+                .expect("run max")[0];
+        let max_jump_p =
+            Vec::<f32>::try_from(&jump_probs.max_dim(-1, false).0.to_device(Device::Cpu))
+                .expect("jump max")[0];
         let confidence = (max_run_p + max_jump_p) / 2.0;
         (run, jump, confidence)
     }

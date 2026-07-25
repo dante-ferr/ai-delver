@@ -470,6 +470,36 @@ fn apply_config_overrides(config: &mut Config, overrides: Option<&Value>) {
                     config.goal_distance_reward_scale = v as f32;
                 }
             }
+            "ppo_num_epochs" => {
+                if let Some(v) = value.as_u64() {
+                    config.ppo_num_epochs = v as usize;
+                }
+            }
+            "value_coefficient" => {
+                if let Some(v) = value.as_f64() {
+                    config.value_coefficient = v;
+                }
+            }
+            "minibatch_size" => {
+                if let Some(v) = value.as_u64() {
+                    config.minibatch_size = v as usize;
+                }
+            }
+            "local_feature_dim" => {
+                if let Some(v) = value.as_u64() {
+                    config.local_feature_dim = v as usize;
+                }
+            }
+            "lstm_hidden_size" => {
+                if let Some(v) = value.as_u64() {
+                    config.lstm_hidden_size = v as usize;
+                }
+            }
+            "mlp_hidden_dim" => {
+                if let Some(v) = value.as_u64() {
+                    config.mlp_hidden_dim = v as usize;
+                }
+            }
             "env_batch_size" => {
                 if let Some(v) = value.as_u64() {
                     config.env_batch_size = v as usize;

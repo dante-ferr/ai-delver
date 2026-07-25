@@ -38,7 +38,13 @@ pub struct Ppo {
 impl Ppo {
     pub fn new(config: Config, device: Device) -> tch::Result<Self> {
         let vs = nn::VarStore::new(device);
-        let model = ActorCritic::new(&vs.root(), device);
+        let model = ActorCritic::new(
+            &vs.root(),
+            device,
+            config.local_feature_dim as i64,
+            config.lstm_hidden_size as i64,
+            config.mlp_hidden_dim as i64,
+        );
         let optimizer = nn::Adam::default().build(&vs, config.learning_rate)?;
         Ok(Self {
             vs,

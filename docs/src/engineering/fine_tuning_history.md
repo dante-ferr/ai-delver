@@ -12,7 +12,8 @@ flowchart TD
     P2 -->|Turn Penalty & Goal Dominance| P3[Phase 3: Broad Pit & Sparse Reward]
     P3 -->|Wall Grace Period & Policy Confidence| P4[Phase 4: Policy Consolidation & Argmax Alignment]
     P4 -->|Expanded Search Space & Fresh Container| P5[Phase 5: Pure Organic Exploration & Reward Discovery]
-    P5 --> Promoted[Current Promoted Engine Defaults]
+    P5 -->|Sequential Mastery Objective and Radius 12 View| P6[Phase 6: Sequential Mastery Protocol]
+    P6 --> Promoted[Current Promoted Engine Defaults]
 ```
 
 ---
@@ -105,7 +106,7 @@ Executed a 15-cycle Optuna study across `platforming-1` to `platforming-10` on a
 
 ## 6. Promoted Baseline Engine Configuration
 
-Current promoted defaults in `intelligence/config.toml` resulting from the organic Phase 5 tuning protocol:
+Current promoted defaults in `intelligence/config.toml` resulting from the organic Phase 5 tuning protocol (still subject to a future sequential-mastery Optuna pass):
 
 | Parameter | Promoted Value | Purpose |
 | :--- | :--- | :--- |
@@ -118,3 +119,18 @@ Current promoted defaults in `intelligence/config.toml` resulting from the organ
 | **`entropy_regularization`** | **`0.1496`** | High exploratory drive to discover gap jumps |
 | **`learning_rate`** | **`0.000295`** | Optimal PPO step size for multi-level curriculum rollouts |
 | **Exploration Engine** | **3-Tile Vertical Span** | Feet-to-head height profile tile tracking |
+| **`local_view`** | **25×25 (radius 12)** | Occupancy grid covering 8-tile pits on platforming-9/10 |
+| **`local_feature_dim`** | **`256`** | Local-view encoder width (625 → 256) |
+| **`lstm_hidden_size`** | **`128`** | Recurrent state size (Optuna-tunable) |
+| **`mlp_hidden_dim`** | **`256`** | Fused MLP hidden width before LSTM |
+
+---
+
+## 7. Phase 6: Sequential Mastery Protocol & Wider Vision
+
+### Protocol
+`tune` no longer maximizes a diluted pack average. Each trial isolates a blank agent, trains sequentially with weight inheritance, then play-evals with **≥15** showcases per level. Optuna maximizes the **mean of the `tail_k` lowest per-level WRs** (default 3); a set is promotable only when **`min` ≥ 0.8**. Always log min / mean / per-level curves. Architecture search (`--tune-architecture`) is a **second pass** after rewards / LR / entropy stabilize.
+
+### Vision
+Radius increased from 7 (15×15 / 225) to **12 (25×25 / 625)** after confirming `platforming-9` / `10` pits are 8 tiles — previously outside the Delver's sightline at the jump commitment point. Radius 12 covers those pits with less input noise than 14. Encoding remains pure binary occupancy (no heuristic shortcuts).
+

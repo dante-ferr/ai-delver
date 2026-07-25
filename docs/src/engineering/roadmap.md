@@ -1,6 +1,8 @@
 # Roadmap & Future Plans
 
-Open / near-term engineering plans. Completed behaviors (weight transfer, CLI `train` overrides, Optuna `tune`, 3-tile vertical exploration brush, distance guidance reward scale, eval-pack protocols) are documented under [CLI](../cli/index.md), [Engineering](index.md), and [Agentic Fine-Tuning](../agentic_fine_tuning/index.md) — not repeated here.
+Open / near-term engineering plans. Completed behaviors (weight transfer, CLI `train` overrides, Optuna sequential-mastery `tune`, 25×25 local view, architecture knobs, 3-tile vertical exploration brush, distance guidance reward scale, eval-pack protocols) are documented under [CLI](../cli/index.md), [Engineering](index.md), and [Agentic Fine-Tuning](../agentic_fine_tuning/index.md) — not repeated here.
+
+**Landed recently (engine fine-tune protocol):** Optuna maximizes mean of the lowest `tail_k` per-level play WRs after sequential curriculum + play eval (`eval_runs` default 15); promotion still requires `min ≥ 0.8`; trials use blank agents; `--tune-architecture` is a second pass; `local_view` radius is **12** (625 cells). Optional later experiment: 2D conv local encoder. See [Engine Protocol](../agentic_fine_tuning/engine_protocol.md) and [Fine-Tuning Handoff](fine_tuning_handoff.md).
 
 ---
 

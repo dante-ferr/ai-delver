@@ -257,34 +257,47 @@ fn run_session_training(
     }
 
     if request.play {
+        let play_runs = cycles.max(1);
         let _ = session.event_tx.send(ReplayMessage::Event(json!({
             "type": "info",
-            "message": format!("Play mode: putting Delver to play {} selected level(s)...", levels.len()),
+            "message": format!(
+                "Play mode: putting Delver to play {} selected level(s) for {} showcase run(s) each...",
+                levels.len(),
+                play_runs
+            ),
         })));
 
         for (i, level) in levels.iter().enumerate() {
-            if session.interrupted.load(Ordering::Relaxed) {
-                let _ = session.event_tx.send(ReplayMessage::Event(json!({
-                    "type": "interrupted",
-                    "message": "Play session interrupted."
-                })));
-                return Ok(());
-            }
-
-            let level_hash = &level_hashes[i];
-            match crate::trainer::showcase::run_showcase(Arc::clone(level), level_hash, &config, &ppo, device) {
-                Ok(trajectory_json) => {
+            for run_idx in 0..play_runs {
+                if session.interrupted.load(Ordering::Relaxed) {
                     let _ = session.event_tx.send(ReplayMessage::Event(json!({
-                        "type": "showcase",
-                        "trajectory": trajectory_json,
-                        "level_episode_count": 1
+                        "type": "interrupted",
+                        "message": "Play session interrupted."
                     })));
+                    return Ok(());
                 }
-                Err(error) => {
-                    let _ = session.event_tx.send(ReplayMessage::Event(json!({
-                        "type": "info",
-                        "message": format!("Error playing level {}: {error:#}", level.name),
-                    })));
+
+                let level_hash = &level_hashes[i];
+                match crate::trainer::showcase::run_showcase(
+                    Arc::clone(level),
+                    level_hash,
+                    &config,
+                    &ppo,
+                    device,
+                ) {
+                    Ok(trajectory_json) => {
+                        let _ = session.event_tx.send(ReplayMessage::Event(json!({
+                            "type": "showcase",
+                            "trajectory": trajectory_json,
+                            "level_episode_count": run_idx + 1
+                        })));
+                    }
+                    Err(error) => {
+                        let _ = session.event_tx.send(ReplayMessage::Event(json!({
+                            "type": "info",
+                            "message": format!("Error playing level {}: {error:#}", level.name),
+                        })));
+                    }
                 }
             }
 

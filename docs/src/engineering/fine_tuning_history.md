@@ -2,6 +2,8 @@
 
 A chronological record of empirical discoveries, root-cause analyses, reward-shaping calibrations, and protocol sharpenings while fine-tuning the **AI Delver Intelligence Engine**.
 
+> Didactic “how it works now”: [How the Intelligence Learns](../intelligence/index.md). This page is the **timeline** of how we got here.
+
 ---
 
 ## Chronological Evolution
@@ -15,7 +17,8 @@ flowchart TD
     P5 -->|Sequential Mastery Objective and Radius 12 View| P6[Phase 6: Sequential Mastery Protocol]
     P6 -->|Reviews Consolidation and Focus-Slot Accounting| P7[Phase 7: Rise Retention and Combo Consolidation]
     P7 --> Promoted[Current Promoted Engine Defaults]
-    Promoted -.->|Next| P8[Stage B: Jump Cleanliness Polish]
+    Promoted --> P8[Phase 8: True Stage B Jump Metrics and Rehearsal Lock]
+    P8 --> Validated[Local play-test: fast clears + first-cycle hard maps]
 ```
 
 ---
@@ -87,7 +90,7 @@ The Delver struggled on 5–6 tile broad gaps (`platforming-4`) and suffered fro
 ### Engineering & Protocol Resolution
 1. **Wall Grace Period (10 frames / 1.0s)**: Added `wall_stuck_frames` in `reward.rs` so brief wall contact during running, landing, or falling carries $0.0$ penalty. Reduced `wall_hugging_reward` to `-0.02`. Standing still remains 100% unpenalized to preserve future elevator and physics timing mechanics.
 2. **Policy Confidence Metric**: Added `greedy_action_with_confidence` in `model.rs` and attached `policy_confidence` to showcase metadata in `showcase.rs`.
-3. **Best-Trajectory Replay Lock & Confidence Consolidation**: Retains winning trajectory buffers across rollout minibatches and enforces gated consolidation cycles until policy confidence reaches $\ge 70\%$, locking the greedy `argmax` peak in place.
+3. **Best-Trajectory Replay Lock (documented intent)**: Phase 4 *intended* retaining winning trajectories until confidence ≥ 70%. Only the confidence **metric** shipped at the time; the lock itself landed later as **Goal Rehearsal Lock** (Phase 8) — see §9.
 
 ---
 
@@ -150,18 +153,23 @@ Pass 1 with consolidate `6,7,9` (30 cycles, 12 trials, `E=1500`): **Trial 1 and 
 
 ## 8. Promoted Baseline Engine Configuration
 
-Current promoted defaults in `intelligence/config.toml` from **Phase 7 sequential-mastery Trial 1** (commit `0c5b383`):
+Current promoted defaults in `intelligence/config.toml` from **Phase 7 sequential-mastery Trial 1** (non-E/J knobs) plus **Phase 8 jump-aware Trial 5** (mastery + minimize takeoffs):
 
 | Parameter | Promoted Value | Purpose |
 | :--- | :--- | :--- |
-| **`tile_exploration_reward`** | **`0.025`** | Per newly marked tile (provisional scale after accounting change) |
+| **`tile_exploration_reward`** | **`0.0165`** | Per newly marked tile (jump-aware Trial 5) |
 | **`wall_hugging_reward`** | **`-0.0325`** | Wall scrape tax with 10-frame grace period |
 | **`goal_distance_reward_scale`** | **`0.0169`** | Continuous step progress guidance |
 | **`turn_reward`** | **`-0.28`** | Anti-hesitation at pit edges |
-| **`jump_reward`** | **`-0.67`** | Once per takeoff impulse (not per held air frame) |
+| **`jump_reward`** | **`-2.0`** | Discovery-band takeoff cost (before first clear) |
+| **`jump_reward_polish`** | **`-3.5`** | Post-clear anneal target |
+| **`jump_anneal_cycles`** | **`20`** | Cycles after clear to reach polish |
 | **`finished_reward`** | **`235.19`** | Strong goal-completion dominance |
 | **`entropy_regularization`** | **`0.0321`** | Lower than Phase 5 organic default |
 | **`learning_rate`** | **`0.000158`** | Sequential-mastery PPO step size |
+| **`goal_rehearsal_lock`** | **`true`** | Scout + lock fewest-takeoff victories |
+| **`goal_rehearsal_epochs`** | **`8`** | BC epochs per cycle over locked traj |
+| **`goal_rehearsal_scout_episodes`** | **`4`** | Stochastic scouts per level per cycle |
 | **Exploration Engine** | **3-Tile Vertical Span** | Feet-to-head height profile tile tracking |
 | **`local_view`** | **25×25 (radius 12)** | Occupancy grid covering 8-tile pits on platforming-9/10 |
 | **`local_feature_dim`** | **`256`** | Local-view encoder width (625 → 256) |
@@ -170,12 +178,26 @@ Current promoted defaults in `intelligence/config.toml` from **Phase 7 sequentia
 | **Tune retention** | **Reviews E=1500 + consolidate 6/7/9** | Required for promotable sequential mastery |
 
 > [!NOTE]
-> Local play still shows **excess jumping**. That is expected under mild `jump_reward`: Stage A optimized for mastery retention, not trajectory neatness. Explore pay is now **per newly marked tile** and jump cost is **once per takeoff** — see [Stage B](jump_polish_stage_b.md) and the plain-floor invariant discussion there. Do **not** harden jump cost inside a full multi-HP discovery pass without re-checking the E/J invariant.
-
+> Discovery-safe jump band + lock/anneal supersedes relying on a single static harsh `jump_reward`. Jump-aware Trial 5 remains historical evidence that takeoff metrics work (`pack_mean_jumps` 1.0 vs Trial-6 baseline 3.0). Judge neatness by takeoffs, not UI reward ≈1.00.
 ---
 
-## 9. Open: Stage B Jump Cleanliness / E+J polish
+## 9. Phase 8: True Stage B (lock + post-clear jump anneal)
 
-**Dilemma:** weaker jump penalty helps invent rises and coyote gaps; stronger jump penalty yields cleaner runs but recreates pit-fear if applied too early. Boolean explore pay also made forward flat jumps mint multiple `+E` frames while walk self-sealed.
+### Landed
 
-**Direction:** keep Stage A mastery HPs for non-E/J knobs; retune **`tile_exploration_reward` (per tile)** and **`jump_reward` (takeoff once)** under a mastery lock. Fast Optuna mode: `tune --tune-ej-only` (only those two search dims). Full protocol: [Stage B: Jump Cleanliness Polish](jump_polish_stage_b.md).
+1. **Takeoff metrics**: showcase trajectories emit `jump_takeoffs`; `level_mastery` emits `mean_jumps` / `max_jumps` (victorious-only when possible).
+2. **Goal Rehearsal Lock (stronger)**: greedy showcase + stochastic scouts; lock fewest-takeoff victory (confidence tie-break); BC each cycle (`goal_rehearsal_epochs=8`).
+3. **Post-clear jump anneal**: per-level discovery `jump_reward` until first clear, then anneal toward `jump_reward_polish` over `jump_anneal_cycles`. **Do not** anneal `turn_reward`.
+4. **`--tune-ej-only`**: still available; demoted vs lock+anneal — future E/J tune must keep a discovery smoke on early pits.
+
+### Protocol
+
+- Inner loop (PPO): discovery-safe shaping → after clear, jump pressure schedule + scout/lock BC.
+- Outer loop (Optuna Stage B): optional; mastery first, takeoffs second; do not treat static harsh J as the neatness solution.
+- Formalization: polish stages pick **one** under-constrained style metric (here takeoffs); turn neatness ≠ harsher turn tax when mazes are in scope.
+
+### Next
+
+**Play-test win (local):** with discovery-safe J + scouts/lock + post-clear anneal, levels clear quickly; hard maps can lock a victory on the **first cycle**. Treat that as validation of the Stage B success check (discover under mild J, hold clean greedy after clear).
+
+Didactic walkthrough: [How the Intelligence Learns](../intelligence/index.md). Design detail remains this page + [Neatness](../intelligence/neatness.md). Escalate (SIL / entropy anneal / architecture) only if mastery or neatness regresses on a fair pack try.

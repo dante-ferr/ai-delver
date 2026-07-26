@@ -285,11 +285,14 @@ fn run_session_training(
                     &ppo,
                     device,
                 ) {
-                    Ok(trajectory_json) => {
+                    Ok(result) => {
                         let _ = session.event_tx.send(ReplayMessage::Event(json!({
                             "type": "showcase",
-                            "trajectory": trajectory_json,
-                            "level_episode_count": run_idx + 1
+                            "trajectory": result.trajectory_json,
+                            "level_episode_count": run_idx + 1,
+                            "jump_takeoffs": result.jump_takeoffs,
+                            "victorious": result.victorious,
+                            "policy_confidence": result.policy_confidence
                         })));
                     }
                     Err(error) => {
@@ -364,6 +367,12 @@ fn run_session_training(
                         })));
                     }
                 }
+            }
+            "info" => {
+                if let Some(object) = value.as_object_mut() {
+                    object.insert("type".into(), json!("info"));
+                }
+                let _ = event_tx.send(ReplayMessage::Event(value));
             }
             _ => {}
         }
@@ -473,9 +482,29 @@ fn apply_config_overrides(config: &mut Config, overrides: Option<&Value>) {
                     config.jump_reward = v as f32;
                 }
             }
+            "jump_reward_polish" => {
+                if let Some(v) = value.as_f64() {
+                    config.jump_reward_polish = v as f32;
+                }
+            }
+            "jump_anneal_cycles" => {
+                if let Some(v) = value.as_u64() {
+                    config.jump_anneal_cycles = v as usize;
+                }
+            }
             "wall_hugging_reward" => {
                 if let Some(v) = value.as_f64() {
                     config.wall_hugging_reward = v as f32;
+                }
+            }
+            "goal_rehearsal_epochs" => {
+                if let Some(v) = value.as_u64() {
+                    config.goal_rehearsal_epochs = v as usize;
+                }
+            }
+            "goal_rehearsal_scout_episodes" => {
+                if let Some(v) = value.as_u64() {
+                    config.goal_rehearsal_scout_episodes = v as usize;
                 }
             }
             "goal_distance_reward_scale" => {

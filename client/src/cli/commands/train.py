@@ -36,6 +36,22 @@ def print_json(event: str, **kwargs):
     payload = {"event": event, **kwargs}
     print(json.dumps(payload), flush=True)
 
+
+def _count_jump_takeoffs_from_actions(actions) -> int:
+    """Fallback takeoff count: rising edges of the jump action bit."""
+    takeoffs = 0
+    prev = False
+    for action in actions:
+        if isinstance(action, dict):
+            jump = bool(action.get("jump", False))
+        else:
+            jump = bool(getattr(action, "jump", False))
+        if jump and not prev:
+            takeoffs += 1
+        prev = jump
+    return takeoffs
+
+
 async def interrupt_training(server_url: str):
     """Sends the interrupt request to the training server if a session is active."""
     global interrupted
@@ -535,6 +551,8 @@ def run_train(args):
             ep_cycle_eff = episodes_per_cycle_for(phase_runs, phase_episodes_per_cycle)
             phase_showcase_victories = 0
             phase_showcase_amount = 0
+            phase_jump_takeoffs: list[int] = []
+            phase_victorious_jump_takeoffs: list[int] = []
 
             async def on_trajectory(trajectory, level_episode_count):
                 nonlocal current_cycle, phase_showcase_victories, phase_showcase_amount
@@ -549,8 +567,20 @@ def run_train(args):
                         )
                         persisted = True
                         phase_showcase_amount += 1
+                        takeoffs = getattr(trajectory, "jump_takeoffs", None)
+                        if takeoffs is None:
+                            # Fallback for older servers: count rising edges of jump bit.
+                            takeoffs = _count_jump_takeoffs_from_actions(
+                                getattr(trajectory, "delver_actions", None) or []
+                            )
+                        try:
+                            takeoffs_i = int(takeoffs)
+                        except (TypeError, ValueError):
+                            takeoffs_i = 0
+                        phase_jump_takeoffs.append(takeoffs_i)
                         if getattr(trajectory, "victorious", False):
                             phase_showcase_victories += 1
+                            phase_victorious_jump_takeoffs.append(takeoffs_i)
                 current_cycle += 1
                 # Focus progress is absolute across sequential levels for the GUI bar
                 progress_cycle = (
@@ -724,18 +754,31 @@ def run_train(args):
                 and phase_showcase_amount > 0
             ):
                 win_rate = phase_showcase_victories / phase_showcase_amount
+                # Prefer victorious-only takeoff averages for neatness; fall back to all runs.
+                jump_source = (
+                    phase_victorious_jump_takeoffs
+                    if phase_victorious_jump_takeoffs
+                    else phase_jump_takeoffs
+                )
+                mean_jumps = (
+                    sum(jump_source) / len(jump_source) if jump_source else 0.0
+                )
+                max_jumps = max(jump_source) if jump_source else 0
                 print_json(
                     "level_mastery",
                     level=levels_list[0],
                     victories=phase_showcase_victories,
                     amount=phase_showcase_amount,
                     win_rate=round(win_rate, 6),
+                    mean_jumps=round(mean_jumps, 4),
+                    max_jumps=int(max_jumps),
+                    jump_metric="takeoffs",
                     training_phase=phase_name,
                     play=bool(is_play_mode),
                     message=(
                         f"Level mastery '{levels_list[0]}': "
                         f"{phase_showcase_victories}/{phase_showcase_amount} "
-                        f"({win_rate:.1%})"
+                        f"({win_rate:.1%}), mean_takeoffs={mean_jumps:.2f}"
                     ),
                 )
 

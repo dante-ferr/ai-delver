@@ -22,6 +22,11 @@ class EpisodeTrajectory:
     kind: str = "train"
     # Sum of per-step rewards for the showcase episode (None on older trajectories).
     total_reward: float | None = None
+    # Takeoff impulses in the episode (None on older trajectories). Prefer this over
+    # counting held jump frames when measuring neatness.
+    jump_takeoffs: int | None = None
+    # Mean greedy action confidence across the episode (None on older trajectories).
+    policy_confidence: float | None = None
 
     # For the original, action-based replay
     delver_actions: "List[DelverAction]" = field(default_factory=list)
@@ -64,6 +69,8 @@ class EpisodeTrajectoryFactory:
             data.get("level_hash", ""),
             data.get("kind", "train"),
             data.get("total_reward"),
+            data.get("jump_takeoffs"),
+            data.get("policy_confidence"),
         )
 
         if "delver_actions" in data:

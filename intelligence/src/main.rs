@@ -137,12 +137,15 @@ fn run_train(args: TrainArgs) -> Result<()> {
             }
             let level_hash = level_hashes.get(i).map(String::as_str).unwrap_or("");
             match trainer::showcase::run_showcase(Arc::clone(level), level_hash, &config, &ppo, device) {
-                Ok(trajectory_json) => {
+                Ok(result) => {
                     cli::emit(
                         "showcase",
                         json!({
-                            "trajectory": trajectory_json,
-                            "level_episode_count": 1
+                            "trajectory": result.trajectory_json,
+                            "level_episode_count": 1,
+                            "jump_takeoffs": result.jump_takeoffs,
+                            "victorious": result.victorious,
+                            "policy_confidence": result.policy_confidence
                         }),
                     );
                 }
@@ -202,8 +205,12 @@ fn apply_overrides(config: &mut Config, args: &TrainArgs) {
     override_value!(frame_step_reward);
     override_value!(tile_exploration_reward);
     override_value!(jump_reward);
+    override_value!(jump_reward_polish);
+    override_value!(jump_anneal_cycles);
     override_value!(wall_hugging_reward);
     override_value!(goal_distance_reward_scale);
+    override_value!(goal_rehearsal_epochs);
+    override_value!(goal_rehearsal_scout_episodes);
     override_value!(ppo_num_epochs);
     override_value!(value_coefficient);
     override_value!(minibatch_size);

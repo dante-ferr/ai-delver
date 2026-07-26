@@ -1,5 +1,7 @@
 # Run Types & Policy Execution Modes
 
+> Didactic intro: [Seeing what it learned](../intelligence/seeing_what_it_learned.md).
+
 AI Delver categorizes episode executions into three distinct **run types** (execution modes). Each mode serves a specific operational purpose in the training and evaluation pipeline, differing in action selection strategy, data streaming, and learning behavior.
 
 ---
@@ -43,10 +45,11 @@ AI Delver categorizes episode executions into three distinct **run types** (exec
 
 ## 4. Exploration vs. Weight Drift
 
-A common point of confusion is why a Showcase run might show degraded or jumping behavior after a previous Showcase run demonstrated an optimal jumpless path.Runtime Exploration vs. Weight Drift
+A common point of confusion is why a Showcase run might show degraded or jumping behavior after a previous Showcase run demonstrated an optimal jumpless path.
 
 - **Runtime Exploration**: Takes place **only during Training Collect Runs** via stochastic sampling. Showcase runs do not perform runtime exploration.
 - **Weight Drift**: Takes place **between Showcase runs** as a result of training updates.
+- **Showcase is not “best ever”**: each showcase re-runs argmax on **current** weights. It does not freeze or replay the historically best trajectory.
 
 ```text
 [Showcase #1]
@@ -65,6 +68,12 @@ Argmax selects JUMP      --->  Showcase #2 shows jumping behavior!
 
 ### Why Decision Boundaries Shift
 
-If the reward penalty for jumping (`jump_reward`) is small relative to the goal completion reward (`finished_reward`), training rollouts that include jumps receive nearly identical high rewards as jumpless rollouts.
+If the reward penalty for jumping (`jump_reward`) is small relative to the goal completion reward (`finished_reward`), training rollouts that include jumps receive nearly identical high rewards as jumpless rollouts. After `reward_scale()` (≈ `finished_reward`), a finish alone is ~1.00 normalized — a few takeoffs barely move the UI’s two-decimal reward.
 
 During training updates, PPO updates the shared feature extractor and LSTM weights. If `entropy_regularization` is high, the action heads are pushed toward uniform probabilities. As a result, the network's internal decision boundary can shift so that `logit(Jump)` exceeds `logit(Run)` at certain states. When the next Showcase run executes `argmax`, it deterministically follows this new, degraded decision boundary.
+
+### Goal Rehearsal Lock + post-clear jump anneal (mitigation)
+
+When enabled (`goal_rehearsal_lock` in `config.toml`), each cycle runs a greedy showcase plus stochastic **scouts**, locks the fewest-takeoff victory (confidence tie-break), and behavioral-clones it into PPO (`goal_rehearsal_epochs`). Training collect stays stochastic; the lock pulls argmax back toward the neat win.
+
+Separately, after a level’s first clear this train session, effective `jump_reward` anneals from discovery-band toward `jump_reward_polish` over `jump_anneal_cycles`. **`turn_reward` is not annealed** (mazes need cheap turns). See [Stage B](jump_polish_stage_b.md).

@@ -1,90 +1,119 @@
 # Stage B: Jump Cleanliness Polish
 
-Design note for the **next** engine fine-tuning stage after sequential mastery on `platforming-1`…`platforming-10`.
+Design deep-dive for post-mastery jump frugality on `platforming-1`…`platforming-10`.
 
-Stage A (Phase 7) proved the Delver can **master** the pack under pure vision RL. Stage B asks a different question: can we keep that mastery while making trajectories **as jump-frugal and clean as possible**?
+> For the didactic path (recommended first read): [Neatness](../intelligence/neatness.md) and [How the Intelligence Learns](../intelligence/index.md).
 
-Related: [Fine-Tuning History](fine_tuning_history.md) §7–§9, [Engine Protocol](../agentic_fine_tuning/engine_protocol.md), [Run Types](run_types.md).
+Stage A (Phase 7) proved the Delver can **master** the pack under pure vision RL. Stage B asks: keep that mastery while making trajectories **as jump-frugal as possible**.
+
+Related: [Fine-Tuning History](fine_tuning_history.md), [Engine Protocol](../agentic_fine_tuning/engine_protocol.md), [Run Types](run_types.md).
 
 ---
 
-## 1. The dilemma (why Stage A alone is not enough)
+## 1. Why Stage A alone is not enough
 
 | Pressure | What it wants | Effect on `jump_reward` |
 | :--- | :--- | :--- |
-| **Discovery** | Invent gap commits, wall-rises, coyote-tight combos | Milder penalty (e.g. promoted `-0.67`) so stochastic exploration tries Jump |
-| **Clean play** | Walk when walking works; jump only when geometry demands it | Stronger penalty so flat hops and “nervous” air spam lose |
+| **Discovery** | Invent gap commits, wall-rises | Milder penalty so stochastic exploration tries Jump |
+| **Clean play** | Walk when walking works | Stronger penalty so flat hops lose |
 
-Stage A Optuna maximized **sequential mastery** (tail-k / min WR), not neatness. Mild jump cost + residual entropy still yields argmax policies that **clear every level while jumping more than a skilled human**.
+Stage A Optuna maximized **sequential mastery** (tail-k / min WR), not neatness. Finish (~235) dwarfs takeoff cost (~2–3), so after `reward_scale` jumpy and neat wins both show ~`1.00` UI reward. Mild jump cost + entropy still yields argmax policies that **clear every level while jumping more than needed**.
 
-Cranking `jump_reward` harder **inside the same blank-agent discovery pass** historically recreates **pit-fear** (Phase 2): at a gap edge, Jump looks worse than turn-away, and the agent never learns the skill.
-
-**Conclusion:** discovery and cleanliness are **two objectives**. Solve them in **two stages**, not one scalar.
+**Conclusion:** discovery and cleanliness are **two objectives**. A single static “magic” `jump_reward` is mostly an illusion. Stage B **sidesteps** that constant by changing *when* jump pressure applies and by locking clean wins.
 
 ```mermaid
 flowchart LR
   stageA["Stage A: Mastery and retention"] --> mastered["min WR ≥ 0.8 on pack"]
-  mastered --> stageB["Stage B: Jump polish under mastery lock"]
-  stageB --> clean["Same mastery + lower jump rate"]
-  stageA -.->|Do not harden jump here| pitFear["Pit-fear / unlearning risk"]
+  mastered --> stageB["Stage B: lock + post-clear jump anneal"]
+  stageB --> clean["Same mastery + lower takeoffs"]
 ```
 
 ---
 
-## 2. Non-negotiables (philosophy)
+## 2. Non-negotiables
 
-Carry forward from the engine protocol:
-
-1. **Pure vision RL** — `local_view` (25×25) + `global_state` only. No scripted jump rules, no goal painted into the grid, no action overrides.
-2. **Standing still stays unpenalized** — elevators / timing later.
-3. **Backtracking stays unpenalized** — mazes later.
-4. **Success still means sequential mastery** — play **min WR ≥ 0.8** (prefer ≥ 0.8 with full per-level table). Diluted means do not promote.
-5. **Do not demote Stage A** until Stage B produces a mastery-preserving cleaner set.
+1. **Pure vision RL** — no scripted “no jump on flat” heuristics.
+2. Standing still / backtracking stay unpenalized.
+3. Success still requires sequential mastery (`min` WR ≥ 0.8).
+4. Do not demote Stage A until Stage B produces a mastery-preserving **cleaner** set (lower pack mean takeoffs).
+5. **Do not anneal `turn_reward`** the same way — labyrinths need many intentional turns. Neatness polish here is **jump-takeoff focused**.
 
 ---
 
 ## 3. What “clean” means (measurable)
 
-Define jump cleanliness from **play-mode** showcases (argmax), not from training multinomial rollouts.
+From **play-mode** argmax showcases (not training multinomial):
 
-### Primary cleanliness metric
+- **`jump_takeoffs`**: count of takeoff impulses (same signal as `jump_reward`), emitted on trajectory JSON.
+- Per-level **`mean_jumps` / `max_jumps`** on `level_mastery` (victorious-only average when any wins exist).
+- **`pack_mean_jumps`**: mean of per-level `mean_jumps` across the curriculum.
 
-For each level, over `eval_runs` (default **15**) victorious play trajectories (or all trajectories if we also care about failed spam):
+Do **not** count held jump frames for Optuna — one gap commit held in air is not “many jumps.”
 
-- **`jumps_per_episode`**: count of action steps where the jump bit is asserted (same signal the GUI labels “Jump”).
-- **`jump_rate`**: `jumps_per_episode / episode_length` (optional length-normalized).
-- Pack summary: **mean** and **max** of per-level mean `jumps_per_episode` (max catches one messy level).
-
-### Mastery lock
-
-- Per-level play WR, **min**, **mean**, full table — identical to Stage A promotion gate.
-- A Stage B candidate is **infeasible** if `min < 0.8` (or a chosen stricter bar such as `min ≥ 0.9` once Stage A is solid).
-
-### Ranking among feasible trials
-
-Lexicographic (example):
-
-1. Feasible under mastery lock.
-2. Minimize pack **mean jumps_per_episode** (or max).
-3. Tie-break: higher min WR, then higher mean WR, then lower entropy / more negative jump cost for reproducibility notes.
-
-Do **not** optimize jump rate without the mastery constraint — that recovers “never jump, fail gaps.”
+Showcase = **current** weights’ argmax, not “best trajectory ever.” Clean-then-jumpy regressions under continued training are **weight drift** ([Run Types](run_types.md) §4), not showcase exploring.
 
 ---
 
-## 4. Recommended Stage B procedure
+## 4. Primary levers (landed): Rehearsal Lock + Post-Clear Jump Anneal
 
-### 4.0 Accounting prerequisites (landed)
+### Lever A — Goal Rehearsal Lock (scouts + BC)
 
-Before polishing magnitudes:
+Config (`intelligence/config.toml`):
 
-1. **`jump_reward` once per takeoff** — impulse detection in `level_env` (holding jump in air does not re-tax).
-2. **Per newly marked tile explore pay** — `step_on_vertical_span` returns a count; reward is `n × tile_exploration_reward` (air + floor). Boolean step bonus removed.
-3. Provisional `tile_exploration_reward ≈ 0.025` so a full brush ≈ old single-step boolean pay; **must be Optuna-retuned**.
+- `goal_rehearsal_lock = true`
+- `goal_rehearsal_epochs = 8`
+- `goal_rehearsal_scout_episodes = 4`
 
-### 4.1 Fast path: E+J only
+Behavior:
 
-Full Pass 1 searched many HPs → long wall-clock. For this polish, use:
+1. After each cycle: greedy showcase + `K` stochastic scouts.
+2. Lock the fewest-takeoff **victory** among them (strictly fewer takeoffs, or equal takeoffs with higher `policy_confidence`).
+3. Each cycle, behavioral-clone (`Ppo::rehearse`) locked trajectories for `goal_rehearsal_epochs`.
+4. Training collect stays stochastic; rehearsal sticks argmax to the clean win even when return near-ties.
+
+No flat-floor ban — only observed clean wins are reinforced.
+
+### Lever B — Per-level post-clear jump anneal
+
+Config:
+
+- `jump_reward` — discovery-band takeoff cost (e.g. `-2.0`) until a level’s first victorious showcase this train session.
+- `jump_reward_polish` — harsher target after clear (e.g. `-3.5`).
+- `jump_anneal_cycles` — cycles after first clear to interpolate discovery → polish.
+
+Rules:
+
+1. Track whether each coach level has ever produced a victorious showcase this train call.
+2. Before first clear: use discovery `jump_reward`.
+3. After first clear: interpolate toward `jump_reward_polish` over `jump_anneal_cycles`.
+4. New `/train` call (coach level change) starts discovery band again.
+5. **Do not** anneal `turn_reward`.
+
+This is “mild until win, then schedule pressure” — compatible with pure vision and future mazes.
+
+```mermaid
+flowchart TD
+  train["Train on level"] --> firstWin["First victorious showcase"]
+  firstWin --> anneal["Anneal jump_reward toward polish"]
+  firstWin --> scout["Stochastic scouts find cleaner wins"]
+  scout --> lock["Lock fewest-takeoff traj"]
+  anneal --> ppo["PPO collect prefers fewer takeoffs"]
+  lock --> bc["BC rehearse locked traj"]
+  ppo --> sticky["Greedy showcase stays neat"]
+  bc --> sticky
+```
+
+---
+
+## 5. Secondary / demoted: static harsh J via Optuna
+
+`--tune-ej-only` still exists for searching discovery-band E/J under a **mastery lock**, then minimizing pack mean takeoffs. It is **not** the preferred neatness lever anymore.
+
+If you re-run E/J Optuna:
+
+1. Keep a **discovery smoke** on early pit levels (blank agent must still invent gap jumps under proposed `jump_reward`).
+2. Prefer promoting a discovery-safe `jump_reward` plus lock+anneal polish knobs — not a forever-harsh static J that blocks first clears.
+3. Promote only if mastery holds **and** pack mean takeoffs beat the prior baseline.
 
 ```bash
 poetry run python src/cli/main.py tune \
@@ -100,84 +129,37 @@ poetry run python src/cli/main.py tune \
   --server localhost:8001
 ```
 
-`--tune-ej-only` searches **only** `tile_exploration_reward` and `jump_reward`. Other rewards/LR/entropy stay at server `config.toml` defaults (not overridden). That shrinks the search space from ~8 continuous dims to **2**, so fewer trials suffice and each trial is the same train cost — overall study time drops mainly because **trial count / cycles** can be smaller, not because each cycle is faster.
+---
 
-Still expensive per trial (sequential 10 levels). Further speed levers: fewer `--cycles`, fewer `--trials`, warm-start from a mastered agent (future flag). Do **not** drop `--eval-runs` below 15 if promoting.
+## 6. Accounting prerequisites (landed)
 
-### 4.2 Starting point
-
-Prefer **warm-start** from a Stage A mastered agent when available; blank agents are OK for E+J-only under retention knobs but slower to re-clear the pack.
-
-### 4.3 Search levers
-
-| Lever | Notes |
-| :--- | :--- |
-| `jump_reward` | Takeoff once; search more negative for cleaner runs, e.g. `[-3.0, -0.05]` |
-| `tile_exploration_reward` | **Per tile**; search e.g. `[0.005, 0.08]` |
-| Other HPs | Frozen under `--tune-ej-only` |
-
-### 4.4 Budget
-
-- E+J polish: **15–20 cycles**, **8–12 trials**, consolidate 6/7/9, `E=1500` reviews.
-- Always `--eval-runs ≥ 15`.
-
-### 4.5 Objective sketch
-
-```text
-if min_play_WR < mastery_threshold:
-    score = -1  # or prune / huge penalty
-else:
-    score = -mean_jumps_per_episode   # maximize in Optuna ⇒ minimize jumps
-```
-
-Until jump counters exist in CLI JSON, interim objective can remain sequential-mastery score while manually inspecting jumpiness, or maximize mastery with a preference for more negative `jump_reward` among tied trials.
-
-Promotion: mastery lock **and** cleaner than Stage A baseline when jump metrics exist.
+1. `jump_reward` once per takeoff impulse.
+2. Per newly marked tile explore pay.
+3. Trajectory + `level_mastery` expose takeoff stats for Optuna.
 
 ---
 
-## 5. Alternatives considered (and when to use them)
+## 7. Formalization (why jump, not every neatness signal)
 
-| Idea | Pros | Cons | Verdict |
-| :--- | :--- | :--- | :--- |
-| Harden `jump_reward` in Stage A only | One pass | Pit-fear; loses mastery | **Reject** |
-| Anneal jump cost inside one trial (schedule) | Single agent lifetime | Hard to Optuna; schedule is a new hyperparam | Later experiment |
-| Heuristic “no jump on flat” | Instantly clean | Violates pure vision philosophy | **Reject** |
-| Goal Rehearsal Lock on lowest-jump wins | Solidifies clean successes | Needs Stage B metrics + replay infra | Complement after polish works |
-| Pass 2 `--tune-architecture` for cleanliness | More capacity | Wrong lever for “when to jump” preference | Only if polish cannot hold mastery |
+Pattern for polish stages:
 
----
+1. **Mastery lock** (play WR).
+2. **One under-constrained style metric** matching the current failure mode.
+3. **Rehearse** wins that are good on that metric; optionally **schedule** the matching reward after clear.
 
-## 6. Risks
-
-1. **Unlearning rises / platforming-9** under harsh jump cost — keep consolidation + reviews; watch per-level table every trial.
-2. **Confusing training jumps with play jumps** — metrics must come from `--play` argmax showcases.
-3. **Optimizing jump count on failures** — prefer victorious-only averages, or weight by victory.
-4. **Overfitting to pack** — Stage B still must clear all ten; do not score only `platforming-1` flat neatness.
+Jump takeoffs are Stage B’s metric because flat hop spam is the observed bug and return barely ranks neat vs jumpy. Elapsed frames / turn counts stay as PPO shaping until they become an explicit later polish stage. **Turn neatness ≠ harsher `turn_reward`** when mazes are in scope.
 
 ---
 
-## 7. Discussion checklist (before implementing)
+## 8. Risks
 
-Use this when deciding how strict Stage B should be:
-
-1. **Mastery bar:** keep `0.8`, or raise to `0.9` / `1.0` because Stage A already hit `1.0`?
-2. **Warm-start vs blank:** default warm-start from Trial 1 weights?
-3. **Jump metric:** raw jump actions vs jumps only while grounded vs jump_rate?
-4. **Search width:** jump+entropy only, or also LR / exploration?
-5. **Instrumentation first:** block the Optuna run until CLI emits jump stats?
-6. **Promote rule:** replace Stage A defaults only if cleaner **and** mastery-locked?
+1. Anneal too fast / polish too harsh → pit-fear on rises / `platforming-9` — keep consolidate + reviews; widen discovery band if first clears stall.
+2. Confusing train jumps with play takeoffs — Optuna uses play mastery only.
+3. Rehearsal overfitting to one neat path — still require full-pack mastery before promote; monitor lock churn / confidence.
+4. Scouts never see a cleaner win → lock sticks on “clear +1 hop”; escalate later (SIL / entropy anneal) only after a fair local try.
 
 ---
 
-## 8. Suggested first implementation slice
+## 9. Success check
 
-When ready to execute (separate from this design doc):
-
-1. Add play-eval jump counters to CLI mastery JSON.
-2. Measure **Stage A baseline** jump stats under current promoted `config.toml` (same 15 showcases × 10 levels).
-3. Implement Stage B objective in `tune` (or a `tune --polish-jumps` flag) with mastery lock + minimize jumps.
-4. Warm-start study; promote only if cleaner under lock.
-5. Append results to [Fine-Tuning History](fine_tuning_history.md) as Phase 8.
-
-Until then, Stage A promoted defaults remain the engine baseline: mastery first, cleanliness next.
+Treat success as: **discover under mild J, then hold clean greedy play after clear** — not “Optuna found the one true J.”

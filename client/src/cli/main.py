@@ -133,8 +133,10 @@ def main():
         "--tune-ej-only",
         action="store_true",
         help=(
-            "Fast polish: only search tile_exploration_reward (E) and jump_reward (J); "
-            "all other HPs stay at server/config defaults (not overridden)"
+            "Stage B secondary: search only tile_exploration_reward (E) and jump_reward (J); "
+            "mastery lock then pack mean takeoffs. Prefer discovery-safe J; primary neatness is "
+            "Goal Rehearsal Lock + post-clear jump anneal (see jump_polish_stage_b.md). "
+            "Other HPs stay at server/config defaults."
         ),
     )
     tune_p.add_argument(

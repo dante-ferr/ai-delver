@@ -19,6 +19,8 @@ pub struct Step {
     pub reward: f32,
     pub done: bool,
     pub victory: bool,
+    /// True when a jump takeoff impulse occurred this step (not held-air frames).
+    pub jump_takeoff: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -97,10 +99,9 @@ impl LevelEnvironment {
             .exploration
             .step_on_vertical_span(tx, feet_ty, head_ty, 1);
         // Takeoff = jump impulse applied this step (including coyote). Holding jump in air
-        // keeps action_jump true but does not re-apply impulse → no extra jump_reward.
-        let jump_takeoff = jump
-            && delver.vy >= jump_impulse * 0.99
-            && vy_before < jump_impulse * 0.99;
+        // does not re-apply impulse. Detect via a sharp upward vy delta: same-frame gravity
+        // pulls post-step vy well below raw `jump_impulse`, so an absolute threshold fails.
+        let jump_takeoff = jump && delver.vy > vy_before + jump_impulse * 0.25;
         let distance = self.rewards.dijkstra.distance(tx, ty);
         let reward = self.rewards.calculate(
             RewardInput {
@@ -122,6 +123,7 @@ impl LevelEnvironment {
             reward,
             done,
             victory: delver.is_victory,
+            jump_takeoff,
         }
     }
 

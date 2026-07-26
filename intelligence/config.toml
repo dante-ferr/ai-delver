@@ -36,10 +36,13 @@ finished_reward = 235.19          # Sequential-mastery Optuna Trial 1
 turn_reward = -0.28               # Sequential-mastery Optuna Trial 1 (matches prior organic turn weight)
 
 frame_step_reward = -0.01         # Time penalty per step to encourage faster execution
-# Per newly marked tile (air + floor). Boolean step bonus removed — scale is ~old/8 so a
-# full 3×3 brush ≈ prior single-step explore pay. Retune via E+J polish (see jump_polish_stage_b).
-tile_exploration_reward = 0.025   # Provisional per-tile rate after accounting change
-jump_reward = -0.67               # Once per takeoff impulse (not per held air frame)
+# Per newly marked tile (air + floor). Boolean step bonus removed.
+# Discovery-safe explore/jump band: neatness comes from Goal Rehearsal Lock + post-clear
+# jump anneal (not a single static harsh jump_reward).
+tile_exploration_reward = 0.0165
+jump_reward = -2.0                # Discovery-band takeoff cost (before first clear)
+jump_reward_polish = -3.5         # Post-clear anneal target (more negative = neater pressure)
+jump_anneal_cycles = 20           # Cycles after first clear to reach jump_reward_polish
 wall_hugging_reward = -0.0325     # Sequential-mastery Optuna Trial 1 (10-frame grace period unchanged)
 
 goal_distance_reward_scale = 0.0169 # Sequential-mastery Optuna Trial 1
@@ -58,3 +61,7 @@ seed = 42                         # Random seed for reproducibility
 checkpoint_interval = 0           # Frequency (in cycles) to save intermediate checkpoints (0 to disable)
 no_learning = false               # Execute random actions only without gradient updates for profiling/testing
 max_training_levels = 10          # Cap on concurrent curriculum levels (surfaced via GET /init)
+# Goal Rehearsal Lock: scout stochastic wins, lock fewest takeoffs, BC into PPO.
+goal_rehearsal_lock = true
+goal_rehearsal_epochs = 8         # BC epochs per locked trajectory each cycle
+goal_rehearsal_scout_episodes = 4 # Stochastic scouts per level per cycle (find cleaner than greedy)

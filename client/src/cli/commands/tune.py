@@ -119,6 +119,8 @@ def _run_train_subprocess(
                         "victories": int(event_data.get("victories") or 0),
                         "amount": int(event_data.get("amount") or 0),
                         "win_rate": float(event_data.get("win_rate") or 0.0),
+                        "mean_jumps": float(event_data.get("mean_jumps") or 0.0),
+                        "max_jumps": int(event_data.get("max_jumps") or 0),
                         "play": bool(event_data.get("play")),
                     }
             elif event_type == "error":
@@ -151,37 +153,62 @@ def _mastery_score(
     mastery: dict[str, dict],
     threshold: float,
     tail_k: int = 3,
-) -> tuple[float, float, float, float, dict]:
-    """Return (optuna_score, tail_mean, min_wr, mean_wr, detail).
+    *,
+    polish_jumps: bool = False,
+) -> tuple[float, float, float, float, float, dict]:
+    """Return (optuna_score, tail_mean, min_wr, mean_wr, pack_mean_jumps, detail).
 
-    Optuna maximizes a lexicographic scalar:
-    ``tail_k_mean + 1e-3 * min_wr + 1e-6 * mean_wr`` so washouts with identical
-    zero tails do not beat trials that cleared more of the pack. Promotion still
-    keys off min ≥ threshold only.
-    Missing levels count as 0.0.
+    Default Optuna maximizes a lexicographic WR scalar:
+    ``tail_k_mean + 1e-3 * min_wr + 1e-6 * mean_wr``.
+
+    When ``polish_jumps`` is true (``--tune-ej-only`` Stage B):
+    - if any level is below mastery threshold → near-zero score (infeasible);
+    - else maximize ``1.0 - pack_mean_jumps / (1 + pack_mean_jumps)`` plus tiny WR lex
+      so fewer takeoffs win among masters.
     """
     rates = []
+    jumps = []
     detail = {}
     for name in level_names:
         entry = mastery.get(name) or {}
         wr = float(entry.get("win_rate") or 0.0)
+        mean_jumps = float(entry.get("mean_jumps") or 0.0)
         rates.append(wr)
+        jumps.append(mean_jumps)
         detail[name] = {
             "win_rate": wr,
             "victories": entry.get("victories", 0),
             "amount": entry.get("amount", 0),
+            "mean_jumps": mean_jumps,
+            "max_jumps": entry.get("max_jumps", 0),
             "meets_threshold": wr >= threshold,
         }
     if not rates:
-        return 0.0, 0.0, 0.0, 0.0, detail
+        return 0.0, 0.0, 0.0, 0.0, 0.0, detail
     min_wr = min(rates)
     mean_wr = sum(rates) / len(rates)
+    pack_mean_jumps = sum(jumps) / len(jumps)
     k = max(1, min(int(tail_k), len(rates)))
     worst = sorted(rates)[:k]
     tail_mean = sum(worst) / len(worst)
-    # Lexicographic preference without changing the promotion gate.
-    optuna_score = tail_mean + 1e-3 * min_wr + 1e-6 * mean_wr
-    return optuna_score, tail_mean, min_wr, mean_wr, detail
+    meets = all(row["meets_threshold"] for row in detail.values())
+
+    if polish_jumps:
+        if not meets:
+            # Keep a tiny WR signal so partial clears still rank above total washouts.
+            optuna_score = 1e-3 * tail_mean + 1e-6 * min_wr + 1e-9 * mean_wr
+        else:
+            # Map takeoffs into (0, 1]: 0 jumps → 1.0; more jumps → lower.
+            neatness = 1.0 / (1.0 + pack_mean_jumps)
+            optuna_score = (
+                1.0
+                + neatness
+                + 1e-3 * min_wr
+                + 1e-6 * mean_wr
+            )
+    else:
+        optuna_score = tail_mean + 1e-3 * min_wr + 1e-6 * mean_wr
+    return optuna_score, tail_mean, min_wr, mean_wr, pack_mean_jumps, detail
 
 
 def _consolidation_levels(level_names: list[str], consolidate_csv: str) -> list[str]:
@@ -257,8 +284,10 @@ def run_tune(args):
         print_json(
             "info",
             message=(
-                "E+J-only search: Optuna varies tile_exploration_reward and jump_reward; "
-                "other HPs remain at intelligence server/config defaults."
+                "E+J-only Stage B (secondary): Optuna varies tile_exploration_reward and "
+                "jump_reward; scores mastery lock then minimizes pack mean takeoffs. "
+                "Prefer discovery-safe J; primary neatness is lock + post-clear jump anneal. "
+                "Other HPs remain at intelligence server/config defaults."
             ),
         )
 
@@ -418,8 +447,12 @@ def run_tune(args):
             name: data for name, data in mastery.items() if data.get("play")
         }
         score_source = play_mastery if play_mastery else mastery
-        optuna_score, tail_mean, min_wr, mean_wr, detail = _mastery_score(
-            level_names, score_source, mastery_threshold, tail_k=tail_k
+        optuna_score, tail_mean, min_wr, mean_wr, pack_mean_jumps, detail = _mastery_score(
+            level_names,
+            score_source,
+            mastery_threshold,
+            tail_k=tail_k,
+            polish_jumps=tune_ej_only,
         )
         meets = all(row["meets_threshold"] for row in detail.values()) and bool(detail)
 
@@ -428,8 +461,10 @@ def run_tune(args):
             message=(
                 f"Finished Trial {trial.number}: "
                 f"optuna_score={optuna_score:.6f} "
-                f"(tail_k={tail_k} mean={tail_mean:.4f} + lex), "
+                f"(tail_k={tail_k} mean={tail_mean:.4f} + lex"
+                f"{', polish_jumps' if tune_ej_only else ''}), "
                 f"min_win_rate={min_wr:.4f}, mean_win_rate={mean_wr:.4f}, "
+                f"pack_mean_jumps={pack_mean_jumps:.4f}, "
                 f"mastery_met={meets}, per_level={detail}"
             ),
         )
@@ -437,6 +472,7 @@ def run_tune(args):
         trial.set_user_attr("mastery_met", meets)
         trial.set_user_attr("min_win_rate", min_wr)
         trial.set_user_attr("mean_win_rate", mean_wr)
+        trial.set_user_attr("pack_mean_jumps", pack_mean_jumps)
         trial.set_user_attr("tail_mean", tail_mean)
         trial.set_user_attr("trial_agent", trial_agent)
         return optuna_score
@@ -449,6 +485,7 @@ def run_tune(args):
     best_min = float(study.best_trial.user_attrs.get("min_win_rate", 0.0) or 0.0)
     best_mean = float(study.best_trial.user_attrs.get("mean_win_rate", 0.0) or 0.0)
     best_tail = float(study.best_trial.user_attrs.get("tail_mean", 0.0) or 0.0)
+    best_jumps = float(study.best_trial.user_attrs.get("pack_mean_jumps", 0.0) or 0.0)
     print_json(
         "completed",
         best_params=study.best_params,
@@ -456,8 +493,10 @@ def run_tune(args):
         best_tail_mean=best_tail,
         best_min_win_rate=best_min,
         best_mean_win_rate=best_mean,
+        best_pack_mean_jumps=best_jumps,
         mastery_threshold=mastery_threshold,
         mastery_met=best_met,
+        polish_jumps=tune_ej_only,
         tail_k=tail_k,
         consolidate_levels=consolidate_names,
         consolidation_cycles=consolidation_cycles if consolidate_names else 0,
@@ -466,7 +505,8 @@ def run_tune(args):
         message=(
             "Hyperparameter tuning study completed "
             f"(best score={study.best_value:.6f}, tail-{tail_k}={best_tail:.4f}, "
-            f"min={best_min:.4f}, mean={best_mean:.4f}; "
+            f"min={best_min:.4f}, mean={best_mean:.4f}, "
+            f"pack_mean_jumps={best_jumps:.4f}; "
             f"{'meets' if best_met else 'below'} mastery threshold {mastery_threshold})."
         ),
     )

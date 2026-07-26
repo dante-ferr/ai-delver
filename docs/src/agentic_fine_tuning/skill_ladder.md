@@ -69,3 +69,5 @@ When **P** is empty (first family: platforming), skip Pass B’s warm-start requ
 | 4 | Physics handling (or other) | all prior in sim | Same formula |
 
 Apply the **same** formula for every later family; only S, P, and the concrete level list change.
+
+For style polish after S clears (fewer wasteful triggers, cleaner solves), reuse the Stage B **discover → lock/anneal** pattern with an S-specific metric — see [Scalability](../intelligence/scalability.md). Do not assume jump knobs transfer unchanged.

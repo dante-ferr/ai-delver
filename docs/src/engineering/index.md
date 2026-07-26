@@ -1,13 +1,14 @@
 # Engineering
 
-Internal architecture notes and historical / forward-looking engineering docs.
+Internal architecture notes, chronology, and forward-looking plans.
+
+> **New here?** For a didactic walkthrough of the training engine, start at [How the Intelligence Learns](../intelligence/index.md). This section holds history and deep-dives.
 
 | Doc | Purpose |
 | :--- | :--- |
-| [Fine-Tuning History](fine_tuning_history.md) | Chronological record of reward-shaping discoveries and engine calibrations |
-| [Stage B: Jump Cleanliness Polish](jump_polish_stage_b.md) | Post-mastery design: keep min WR while minimizing jump spam |
-| [Fine-Tuning Handoff](fine_tuning_handoff.md) | Authoritative handoff record for resuming fine-tuning protocol evolution |
-| [Run Types & Policy Modes](run_types.md) | Execution modes, action selection, and weight drift |
+| [Fine-Tuning History](fine_tuning_history.md) | Chronological record of reward-shaping discoveries and promotions |
+| [Stage B: Jump Cleanliness Polish](jump_polish_stage_b.md) | Design deep-dive for lock + post-clear jump anneal |
+| [Run Types & Policy Modes](run_types.md) | Train / showcase / play matrix and weight-drift explanation |
 | [Error Handling](error_handling.md) | Domain exceptions and WS error propagation |
 | [Physics Performance](physics_performance.md) | Trainer/runtime performance history and benchmarks |
-| [Roadmap](roadmap.md) | Near-term plans (open items only; completed work lives in other docs) |
+| [Roadmap](roadmap.md) | Near-term open items (completed work lives in history / intelligence) |

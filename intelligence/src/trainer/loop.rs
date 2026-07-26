@@ -1,16 +1,17 @@
 use crate::{
-    agent::ppo::{Ppo, Rollout, UpdateMetrics},
+    agent::ppo::{Ppo, RehearsalTrajectory, Rollout, UpdateMetrics},
     config::Config,
     environments::{
         level_env::LevelEnvironment, GLOBAL_STATE_SIZE, LOCAL_VIEW_CELLS,
     },
-    trainer::showcase,
+    trainer::showcase::{self, ShowcaseResult},
 };
 use ai_delver_level::Level;
 use anyhow::{Context, Result};
 use rayon::prelude::*;
 use serde_json::{json, Value};
 use std::{
+    collections::HashMap,
     fs,
     path::Path,
     sync::{
@@ -23,6 +24,15 @@ use tch::{no_grad, Device, Kind, Tensor};
 
 /// Callback for training lifecycle events (`metrics`, `progress`, `checkpoint`, …).
 pub type EventSink = Box<dyn FnMut(&str, Value) + Send>;
+
+struct RehearsalLock {
+    takeoffs: usize,
+    confidence: f32,
+    trajectory: RehearsalTrajectory,
+}
+
+/// Cycles since first clear for a level (`None` = never cleared this session).
+type ClearProgress = HashMap<String, usize>;
 
 pub fn train(
     levels: Vec<Arc<Level>>,
@@ -38,20 +48,16 @@ pub fn train(
     device: Device,
     mut on_event: EventSink,
 ) -> Result<()> {
-    let config = Arc::new(config);
-    let mut envs: Vec<_> = (0..config.env_batch_size)
-        .map(|index| {
-            LevelEnvironment::new(
-                Arc::clone(&levels[index % levels.len()]),
-                Arc::clone(&config),
-            )
-        })
-        .collect();
-    let rollout_steps = (config.actions_per_second * config.collect_seconds_per_env).max(1);
-    let rollouts_per_cycle = episodes_per_cycle.div_ceil(config.env_batch_size).max(1);
+    let base_config = Arc::new(config);
+    let mut clear_progress: ClearProgress = HashMap::new();
+    let rollout_steps = (base_config.actions_per_second * base_config.collect_seconds_per_env).max(1);
+    let rollouts_per_cycle = episodes_per_cycle.div_ceil(base_config.env_batch_size).max(1);
     let checkpoint_dir = data_root.join("agents").join(agent_name);
     fs::create_dir_all(&checkpoint_dir)
         .with_context(|| format!("failed to create {}", checkpoint_dir.display()))?;
+
+    // Per-level cleanest victorious trajectory (fewest takeoffs) for Goal Rehearsal Lock.
+    let mut rehearsal_locks: HashMap<String, RehearsalLock> = HashMap::new();
 
     for cycle in 1..=cycles {
         if interrupted.load(Ordering::Relaxed) {
@@ -62,6 +68,10 @@ pub fn train(
             );
             return Ok(());
         }
+
+        // Rebuild envs so each level uses its annealed jump_reward for this cycle.
+        let mut envs = build_envs(&levels, level_hashes, &base_config, &clear_progress);
+
         let mut completed_episodes = 0usize;
         let mut victories = 0usize;
         let mut reward_sum = 0.0_f32;
@@ -73,7 +83,6 @@ pub fn train(
 
         for _ in 0..rollouts_per_cycle {
             // Every rollout is a complete recurrent sequence starting from zero state.
-            // Resetting here keeps collection and PPO sequence recomputation identical.
             let mut observations: Vec<_> = envs.iter_mut().map(LevelEnvironment::reset).collect();
             let mut starts = vec![1.0_f32; envs.len()];
             let mut recurrent = ppo.model.initial_state(envs.len() as i64);
@@ -109,7 +118,7 @@ pub fn train(
                     .view([envs.len() as i64, GLOBAL_STATE_SIZE as i64])
                     .to_device(device);
                 let start_tensor = Tensor::from_slice(&starts).to_device(device);
-                let (runs, jumps, log_probs, values) = if config.no_learning {
+                let (runs, jumps, log_probs, values) = if base_config.no_learning {
                     (
                         Tensor::randint(3, [envs.len() as i64], (Kind::Int64, device)),
                         Tensor::randint(2, [envs.len() as i64], (Kind::Int64, device)),
@@ -159,7 +168,7 @@ pub fn train(
                 .iter()
                 .flat_map(|observation| observation.global_state)
                 .collect::<Vec<_>>();
-            let bootstrap_values = if config.no_learning {
+            let bootstrap_values = if base_config.no_learning {
                 Tensor::zeros([envs.len() as i64], (Kind::Float, device))
             } else {
                 let (_, _, _, values) = no_grad(|| {
@@ -208,7 +217,7 @@ pub fn train(
                 bootstrap_values,
             };
             let update_began = Instant::now();
-            last_metrics = if config.no_learning {
+            last_metrics = if base_config.no_learning {
                 UpdateMetrics::default()
             } else {
                 ppo.update(rollout)
@@ -255,20 +264,40 @@ pub fn train(
                 "message": format!("Completed cycle {cycle}")
             }),
         );
+
         for (showcase_level, showcase_hash) in levels.iter().zip(level_hashes.iter()) {
+            let level_cfg = annealed_config_for_hash(
+                &base_config,
+                showcase_hash,
+                &clear_progress,
+            );
             match showcase::run_showcase(
                 Arc::clone(showcase_level),
                 showcase_hash,
-                config.as_ref(),
+                level_cfg.as_ref(),
                 &ppo,
                 device,
             ) {
-                Ok(trajectory_json) => {
+                Ok(result) => {
+                    if result.victorious {
+                        mark_level_cleared(&mut clear_progress, showcase_hash);
+                    }
+                    maybe_update_lock(
+                        &mut rehearsal_locks,
+                        &mut on_event,
+                        base_config.as_ref(),
+                        showcase_hash,
+                        &result,
+                        "greedy",
+                    );
                     on_event(
                         "showcase",
                         json!({
-                            "trajectory": trajectory_json,
-                            "level_episode_count": completed_episodes
+                            "trajectory": result.trajectory_json,
+                            "level_episode_count": completed_episodes,
+                            "jump_takeoffs": result.jump_takeoffs,
+                            "victorious": result.victorious,
+                            "policy_confidence": result.policy_confidence
                         }),
                     );
                 }
@@ -283,6 +312,65 @@ pub fn train(
                     );
                 }
             }
+
+            if base_config.goal_rehearsal_lock
+                && !base_config.no_learning
+                && base_config.goal_rehearsal_scout_episodes > 0
+            {
+                for scout_idx in 0..base_config.goal_rehearsal_scout_episodes {
+                    let scout_cfg = annealed_config_for_hash(
+                        &base_config,
+                        showcase_hash,
+                        &clear_progress,
+                    );
+                    match showcase::run_scout(
+                        Arc::clone(showcase_level),
+                        showcase_hash,
+                        scout_cfg.as_ref(),
+                        &ppo,
+                        device,
+                    ) {
+                        Ok(scout) => {
+                            if scout.victorious {
+                                mark_level_cleared(&mut clear_progress, showcase_hash);
+                            }
+                            maybe_update_lock(
+                                &mut rehearsal_locks,
+                                &mut on_event,
+                                base_config.as_ref(),
+                                showcase_hash,
+                                &scout,
+                                &format!("scout-{scout_idx}"),
+                            );
+                        }
+                        Err(error) => {
+                            on_event(
+                                "info",
+                                json!({
+                                    "message": format!(
+                                        "Goal Rehearsal scout failed for {}: {error:#}",
+                                        showcase_hash
+                                    )
+                                }),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // Advance anneal clocks for levels that have already cleared.
+        for elapsed in clear_progress.values_mut() {
+            *elapsed = elapsed.saturating_add(1);
+        }
+
+        if base_config.goal_rehearsal_lock
+            && !base_config.no_learning
+            && base_config.goal_rehearsal_epochs > 0
+        {
+            for (_hash, lock) in rehearsal_locks.iter() {
+                ppo.rehearse(&lock.trajectory, base_config.goal_rehearsal_epochs);
+            }
         }
         if checkpoint_interval > 0 && cycle % checkpoint_interval == 0 {
             let path = save_checkpoint(&ppo, &checkpoint_dir, cycle, "checkpoint")?;
@@ -292,6 +380,87 @@ pub fn train(
     let path = save_checkpoint(&ppo, &checkpoint_dir, cycles, "final")?;
     on_event("completed", json!({"cycles": cycles, "checkpoint": path}));
     Ok(())
+}
+
+fn build_envs(
+    levels: &[Arc<Level>],
+    level_hashes: &[String],
+    base_config: &Arc<Config>,
+    clear_progress: &ClearProgress,
+) -> Vec<LevelEnvironment> {
+    (0..base_config.env_batch_size)
+        .map(|index| {
+            let level_index = index % levels.len();
+            let hash = level_hashes
+                .get(level_index)
+                .map(String::as_str)
+                .unwrap_or("");
+            let cfg = annealed_config_for_hash(base_config, hash, clear_progress);
+            LevelEnvironment::new(Arc::clone(&levels[level_index]), cfg)
+        })
+        .collect()
+}
+
+fn annealed_config_for_hash(
+    base_config: &Arc<Config>,
+    level_hash: &str,
+    clear_progress: &ClearProgress,
+) -> Arc<Config> {
+    let cycles_since = clear_progress.get(level_hash).copied();
+    let jump = base_config.annealed_jump_reward(cycles_since);
+    Arc::new(base_config.with_jump_reward(jump))
+}
+
+fn mark_level_cleared(clear_progress: &mut ClearProgress, level_hash: &str) {
+    clear_progress.entry(level_hash.to_string()).or_insert(0);
+}
+
+fn maybe_update_lock(
+    locks: &mut HashMap<String, RehearsalLock>,
+    on_event: &mut EventSink,
+    config: &Config,
+    level_hash: &str,
+    result: &ShowcaseResult,
+    source: &str,
+) {
+    if !config.goal_rehearsal_lock
+        || config.no_learning
+        || !result.victorious
+        || result.transitions.steps == 0
+    {
+        return;
+    }
+    let replace = match locks.get(level_hash) {
+        None => true,
+        Some(best) => {
+            result.jump_takeoffs < best.takeoffs
+                || (result.jump_takeoffs == best.takeoffs
+                    && result.policy_confidence > best.confidence)
+        }
+    };
+    if !replace {
+        return;
+    }
+    locks.insert(
+        level_hash.to_string(),
+        RehearsalLock {
+            takeoffs: result.jump_takeoffs,
+            confidence: result.policy_confidence,
+            trajectory: result.transitions.clone(),
+        },
+    );
+    on_event(
+        "info",
+        json!({
+            "message": format!(
+                "Goal Rehearsal Lock updated for level hash {} via {}: takeoffs={}, confidence={:.3}",
+                level_hash,
+                source,
+                result.jump_takeoffs,
+                result.policy_confidence
+            )
+        }),
+    );
 }
 
 fn save_checkpoint(ppo: &Ppo, directory: &Path, cycle: usize, label: &str) -> Result<String> {

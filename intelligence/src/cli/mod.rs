@@ -71,7 +71,15 @@ pub struct TrainArgs {
     #[arg(long)]
     pub jump_reward: Option<f32>,
     #[arg(long)]
+    pub jump_reward_polish: Option<f32>,
+    #[arg(long)]
+    pub jump_anneal_cycles: Option<usize>,
+    #[arg(long)]
     pub wall_hugging_reward: Option<f32>,
+    #[arg(long)]
+    pub goal_rehearsal_epochs: Option<usize>,
+    #[arg(long)]
+    pub goal_rehearsal_scout_episodes: Option<usize>,
     #[arg(long)]
     pub goal_distance_reward_scale: Option<f32>,
     #[arg(long)]

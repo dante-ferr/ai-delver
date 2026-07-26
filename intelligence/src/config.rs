@@ -28,6 +28,12 @@ pub struct Config {
     pub frame_step_reward: f32,
     pub tile_exploration_reward: f32,
     pub jump_reward: f32,
+    /// Post-clear jump cost target (typically more negative than `jump_reward`).
+    /// After a level's first victory, `jump_reward` anneals toward this over
+    /// `jump_anneal_cycles`. Not applied to turn_reward (mazes need cheap turns).
+    pub jump_reward_polish: f32,
+    /// Cycles after first clear to fully reach `jump_reward_polish`.
+    pub jump_anneal_cycles: usize,
     pub wall_hugging_reward: f32,
     pub goal_distance_reward_scale: f32,
     pub actions_per_second: usize,
@@ -37,6 +43,12 @@ pub struct Config {
     pub seed: u64,
     pub no_learning: bool,
     pub max_training_levels: usize,
+    /// When true, cleanest victorious trajectories are rehearsed into PPO.
+    pub goal_rehearsal_lock: bool,
+    /// Behavioral-cloning epochs over each locked trajectory each cycle.
+    pub goal_rehearsal_epochs: usize,
+    /// Stochastic scout episodes per level per cycle (find cleaner wins than greedy).
+    pub goal_rehearsal_scout_episodes: usize,
 }
 
 #[cfg(test)]
@@ -63,6 +75,8 @@ impl Default for Config {
             frame_step_reward: -0.01,
             tile_exploration_reward: 0.025,
             jump_reward: -0.15,
+            jump_reward_polish: -0.5,
+            jump_anneal_cycles: 20,
             wall_hugging_reward: -0.2,
             goal_distance_reward_scale: 0.005,
             actions_per_second: 10,
@@ -72,6 +86,9 @@ impl Default for Config {
             seed: 42,
             no_learning: false,
             max_training_levels: 10,
+            goal_rehearsal_lock: true,
+            goal_rehearsal_epochs: 8,
+            goal_rehearsal_scout_episodes: 4,
         }
     }
 }
@@ -94,6 +111,7 @@ impl Config {
             self.frame_step_reward,
             self.tile_exploration_reward * MAX_EXPLORE_TILES_PER_STEP,
             self.jump_reward,
+            self.jump_reward_polish,
             self.wall_hugging_reward,
             self.goal_distance_reward_scale,
         ]
@@ -101,6 +119,23 @@ impl Config {
         .map(f32::abs)
         .fold(0.0, f32::max)
         .max(1.0)
+    }
+
+    /// Effective jump cost for a level given cycles since its first clear (`None` = uncleared).
+    pub fn annealed_jump_reward(&self, cycles_since_clear: Option<usize>) -> f32 {
+        let Some(elapsed) = cycles_since_clear else {
+            return self.jump_reward;
+        };
+        let span = self.jump_anneal_cycles.max(1) as f32;
+        let t = (elapsed as f32 / span).clamp(0.0, 1.0);
+        self.jump_reward + t * (self.jump_reward_polish - self.jump_reward)
+    }
+
+    /// Clone with an overridden jump reward (used for per-level post-clear anneal).
+    pub fn with_jump_reward(&self, jump_reward: f32) -> Self {
+        let mut clone = self.clone();
+        clone.jump_reward = jump_reward;
+        clone
     }
 
     /// How many collect-window training slots equal one full-length run.
@@ -114,5 +149,32 @@ impl Config {
     /// Converts a user-facing run budget into the trainer's episode-slot budget.
     pub fn runs_to_episodes(&self, runs: usize) -> usize {
         runs.saturating_mul(self.episodes_per_run())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn annealed_jump_stays_discovery_until_clear() {
+        let mut config = Config::default();
+        config.jump_reward = -2.0;
+        config.jump_reward_polish = -3.5;
+        config.jump_anneal_cycles = 20;
+        assert!((config.annealed_jump_reward(None) - (-2.0)).abs() < 1e-6);
+        assert!((config.annealed_jump_reward(Some(0)) - (-2.0)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn annealed_jump_interpolates_then_caps() {
+        let mut config = Config::default();
+        config.jump_reward = -2.0;
+        config.jump_reward_polish = -3.5;
+        config.jump_anneal_cycles = 20;
+        let mid = config.annealed_jump_reward(Some(10));
+        assert!((mid - (-2.75)).abs() < 1e-5);
+        assert!((config.annealed_jump_reward(Some(20)) - (-3.5)).abs() < 1e-6);
+        assert!((config.annealed_jump_reward(Some(100)) - (-3.5)).abs() < 1e-6);
     }
 }

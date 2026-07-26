@@ -47,7 +47,7 @@ For platforming bootstrap, the agent may paste the [platforming instance table](
 7. No complex agent-authored layouts; humans build from the emitted list.
 8. Extend the CLI rather than one-off HTTP scripts for lifecycle actions.
 9. **Pure vision RL**: the Delver must learn from `local_view` (25×25 occupancy, radius 12 → 625 cells) plus `global_state` proprioception / relative goal. No artificial conditional rules or heuristic action overrides. Standing still and backtracking stay unpenalized (elevators, mazes, timing).
-10. Fine-tuning runs **once per skill family**; long Optuna budgets are allowed. Search rewards / LR / entropy **first**; enable `--tune-architecture` only as a **second pass** after those stabilize.
+10. Fine-tuning runs **once per skill family**; long Optuna budgets are allowed. Search rewards / LR / entropy **first** in a **discovery-safe** band (Stage B polish is lock+anneal, not forever-harsh static jump tax). Enable `--tune-architecture` only as a **second pass** if capacity blocks mastery.
 
 ---
 
@@ -108,12 +108,32 @@ Each trial:
 4. Optuna maximizes the **mean of the `tail_k` lowest per-level win rates** (default `tail_k=3`) so one noisy showcase does not dominate. Always log **min**, **mean**, and the full per-level table.
 5. A set is “ideal” / promotable only when **`min` per-level WR ≥ `--mastery-threshold`** (default 0.8). Diluted pack averages (e.g. 9%) are **not** success.
 
+**Stage B primary (lock + anneal):** Goal Rehearsal Lock scouts + BC, plus per-level post-clear `jump_reward` → `jump_reward_polish` anneal. Do **not** anneal `turn_reward`. Didactic overview: [Neatness](../intelligence/neatness.md). Design deep-dive: [Stage B](../engineering/jump_polish_stage_b.md).
+
+**Stage B stance (strict gates, exploratory discovery):**
+
+| Keep strict | Lean exploratory |
+| :--- | :--- |
+| Promotion: **`min` play WR ≥ mastery threshold** | Discovery-band `jump_reward`, explore, entropy search ranges |
+| Pass C retention when P is non-empty | Prefer inventing first clears over forever-harsh static J |
+| Pure vision RL; no action hardcodes | Let lock + anneal polish style after clear |
+| Eval pack ritual before new skill families | Smoke-test discovery on early pits when touching E/J |
+
+Now that lock+anneal is alive, Optuna should **not** hunt a single forever-harsh jump constant. Search discovery-safe shaping for mastery; treat neatness as an inner-loop schedule + rehearsal problem. `--tune-ej-only` is optional/secondary and must keep a discovery smoke.
+
+**Stage B secondary (`--tune-ej-only`, demoted):** search only `tile_exploration_reward` and `jump_reward`. After the mastery lock, Optuna minimizes **pack mean takeoffs**. Prefer discovery-safe J plus lock+anneal over forever-harsh static J. Promote only if mastery holds **and** jumps beat the prior baseline.
+
+**Goal Rehearsal Lock** (`goal_rehearsal_lock`, `goal_rehearsal_scout_episodes`, `goal_rehearsal_epochs`): greedy + stochastic scouts lock fewest-takeoff victories; BC each cycle. Independent of Optuna; primary Stage B neatness lever alongside jump anneal.
+
 Optuna prunes if `abs(loss) > 20` during train.
 
-**Two-pass search (required practice):**
+**Two-pass search (practice):**
 
-1. **Pass 1 — rewards / LR / entropy only** (no `--tune-architecture`).
-2. **Pass 2 — architecture** (`--tune-architecture`: PPO epochs / minibatch / value coeff and `local_feature_dim` / `lstm_hidden_size` / `mlp_hidden_dim`) once Pass 1 is clearing mid-pack levels.
+1. **Pass 1 — rewards / LR / entropy** (no `--tune-architecture`). Favor discovery-safe bands; do not require harsh J for neatness.
+2. **Pass 2 — architecture** (`--tune-architecture`) only if capacity blocks mastery under lock+anneal.
+3. **Stage B polish** is mostly **config defaults** (lock + anneal). Optional `--tune-ej-only` only with discovery smoke.
+
+How learning works end-to-end: [How the Intelligence Learns](../intelligence/index.md).
 
 Apply `best_params` to a longer eval `train`, then promote to `config.toml` with comments when justified.
 

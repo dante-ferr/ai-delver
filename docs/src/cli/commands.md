@@ -175,6 +175,8 @@ Runs a developer-only Optuna study for **engine** hyperparameters. Each trial:
 4. Maximizes the **mean of the `tail_k` lowest per-level win rates** (default `tail_k=3`) from `level_mastery` events — smoother than raw min, still bottleneck-aware. Logs min / mean / per-level table. Promotion still requires **`min` ≥ `--mastery-threshold`**.
 5. Prunes early if train `abs(loss) > 20`.
 
+With **`--tune-ej-only`** (optional Stage B Optuna): search only E/J; after mastery lock, maximize neatness from **`pack_mean_jumps`**. Prefer discovery-safe J; primary neatness is Goal Rehearsal Lock + post-clear jump anneal in the engine. See [Stage B](../engineering/jump_polish_stage_b.md).
+
 ```bash
 poetry run python src/cli/main.py tune \
     --levels "platforming-1,platforming-2,platforming-3,platforming-4,platforming-5,platforming-6,platforming-7,platforming-8,platforming-9,platforming-10" \
@@ -187,7 +189,7 @@ poetry run python src/cli/main.py tune \
     --mastery-threshold 0.8
 ```
 
-Optional flags: `--eval-runs`, `--tail-k`, `--mastery-threshold`, `--tune-architecture` (**second pass only** — searches PPO epochs / minibatch / value coeff and `local_feature_dim` / `lstm_hidden_size` / `mlp_hidden_dim` after rewards stabilize).
+Optional flags: `--eval-runs`, `--tail-k`, `--mastery-threshold`, `--tune-ej-only` (secondary Stage B E/J search), `--tune-architecture` (**second pass only** — searches PPO epochs / minibatch / value coeff and `local_feature_dim` / `lstm_hidden_size` / `mlp_hidden_dim` after rewards stabilize).
 
 **GUI Trigger**: Developer CLI command only.
 
@@ -216,14 +218,14 @@ for line in iter(self.train_process.stdout.readline, ""):
 
 | Event | Source Command | Description |
 |:---|:---|:---|
-| `info` | `train` | Informational messages (e.g. batch-size adjustment, review cadence) |
+| `info` | `train` | Informational messages (e.g. batch-size adjustment, review cadence, Goal Rehearsal Lock updates) |
 | `init_started` | `train` | Levels are being prepared |
 | `review_plan` | `train` | Focus vs review plan (session levels, queue remaining, E/R/K, target episodes) |
 | `training_phase` | `train` | Start of a chained focus or review `/train` (`expected_progress_steps`, optional `progress_base` for sequential focus bars) |
 | `request_sent` | `train` | Training request sent to server |
 | `session_created` | `train` | Server accepted and registered the session |
 | `progress` | `train` | A showcase completed (`training_phase`, `is_review` / `persisted` for review filtering) |
-| `level_mastery` | `train` | Per-level showcase win rate after a single-level focus/play phase (`victories`, `amount`, `win_rate`) |
+| `level_mastery` | `train` | Per-level showcase stats after a single-level focus/play phase (`victories`, `amount`, `win_rate`, `mean_jumps`, `max_jumps` takeoffs) |
 | `level_transition` | `train` | Agent graduated to a new level (`is_review` when applicable) |
 | `metrics` | `train` | Deep learning metrics snapshot (loss, average return, step, episodes) |
 | `checkpoint` | `train` | Intermediate model weights checkpoint received from server |

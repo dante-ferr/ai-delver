@@ -1,5 +1,5 @@
 use crate::{
-    agent::ppo::Ppo,
+    agent::ppo::{Ppo, RehearsalTrajectory},
     config::Config,
     environments::{
         level_env::{DelverPose, LevelEnvironment},
@@ -12,15 +12,61 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use tch::{no_grad, Device, Kind, Tensor};
 
-/// Runs one greedy episode and returns an EpisodeTrajectory-compatible JSON **string**
-/// (the client calls `json.loads` on the WebSocket `trajectory` field).
+/// How actions are selected during an evaluation / scout episode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ActionMode {
+    /// Deterministic argmax (GUI showcase / play).
+    Greedy,
+    /// Stochastic multinomial (Goal Rehearsal Lock scouts).
+    Stochastic,
+}
+
+/// Result of one episode (trajectory JSON + lock metadata).
+pub struct ShowcaseResult {
+    pub trajectory_json: String,
+    pub victorious: bool,
+    pub jump_takeoffs: usize,
+    pub policy_confidence: f32,
+    pub transitions: RehearsalTrajectory,
+}
+
+/// Runs one greedy episode (GUI showcase / play eval).
 pub fn run_showcase(
     level: Arc<Level>,
     level_hash: &str,
     config: &Config,
     ppo: &Ppo,
     device: Device,
-) -> Result<String> {
+) -> Result<ShowcaseResult> {
+    run_episode(level, level_hash, config, ppo, device, ActionMode::Greedy)
+}
+
+/// Runs one stochastic scout episode for Goal Rehearsal Lock.
+pub fn run_scout(
+    level: Arc<Level>,
+    level_hash: &str,
+    config: &Config,
+    ppo: &Ppo,
+    device: Device,
+) -> Result<ShowcaseResult> {
+    run_episode(
+        level,
+        level_hash,
+        config,
+        ppo,
+        device,
+        ActionMode::Stochastic,
+    )
+}
+
+fn run_episode(
+    level: Arc<Level>,
+    level_hash: &str,
+    config: &Config,
+    ppo: &Ppo,
+    device: Device,
+    mode: ActionMode,
+) -> Result<ShowcaseResult> {
     let mut env = LevelEnvironment::new(Arc::clone(&level), Arc::new(config.clone()));
     let mut observation = env.reset();
     let mut recurrent = ppo.model.initial_state(1);
@@ -29,15 +75,24 @@ pub fn run_showcase(
     let mut frame_snapshots = Vec::new();
     let mut victorious = false;
     let mut total_reward = 0.0_f32;
+    let mut jump_takeoffs = 0usize;
+    let mut local_data = Vec::new();
+    let mut global_data = Vec::new();
+    let mut starts_data = Vec::new();
+    let mut runs_data = Vec::new();
+    let mut jumps_data = Vec::new();
     let max_steps = (config.max_seconds_per_episode * config.actions_per_second).max(1);
 
-    // Initial pose so interpolation has a start frame before the first action.
     frame_snapshots.push(frame_snapshot_from_pose(env.delver_pose()));
 
     let mut total_confidence = 0.0_f32;
     let mut step_count = 0_usize;
 
     for _ in 0..max_steps {
+        local_data.extend_from_slice(&observation.local_view);
+        global_data.extend_from_slice(&observation.global_state);
+        starts_data.push(episode_start);
+
         let local = Tensor::from_slice(&observation.local_view)
             .view([1, LOCAL_VIEW_CELLS as i64])
             .to_device(device);
@@ -45,23 +100,49 @@ pub fn run_showcase(
             .view([1, GLOBAL_STATE_SIZE as i64])
             .to_device(device);
         let starts = Tensor::from_slice(&[episode_start]).to_device(device);
-        let (run, jump, conf) = no_grad(|| {
-            ppo.model
-                .greedy_action_with_confidence(&local, &global, &starts, &mut recurrent)
+        let (run_idx, jump_idx, conf) = no_grad(|| match mode {
+            ActionMode::Greedy => {
+                let (run, jump, conf) = ppo.model.greedy_action_with_confidence(
+                    &local,
+                    &global,
+                    &starts,
+                    &mut recurrent,
+                );
+                let run_idx =
+                    Vec::<i64>::try_from(&run.to_device(Device::Cpu).to_kind(Kind::Int64))
+                        .expect("run action")[0];
+                let jump_idx =
+                    Vec::<i64>::try_from(&jump.to_device(Device::Cpu).to_kind(Kind::Int64))
+                        .expect("jump action")[0];
+                (run_idx, jump_idx, conf)
+            }
+            ActionMode::Stochastic => {
+                let (run, jump, _log_prob, _value) =
+                    ppo.model
+                        .action_and_value(&local, &global, &starts, &mut recurrent);
+                let run_idx =
+                    Vec::<i64>::try_from(&run.to_device(Device::Cpu).to_kind(Kind::Int64))
+                        .expect("run action")[0];
+                let jump_idx =
+                    Vec::<i64>::try_from(&jump.to_device(Device::Cpu).to_kind(Kind::Int64))
+                        .expect("jump action")[0];
+                // Scouts use greedy confidence only as a weak tie-break signal; sample
+                // confidence is not comparable, so leave near zero unless later needed.
+                (run_idx, jump_idx, 0.0_f32)
+            }
         });
         total_confidence += conf;
         step_count += 1;
-        let run_idx = Vec::<i64>::try_from(&run.to_device(Device::Cpu).to_kind(Kind::Int64))
-            .expect("run action")[0];
-        let jump_idx = Vec::<i64>::try_from(&jump.to_device(Device::Cpu).to_kind(Kind::Int64))
-            .expect("jump action")[0];
-        // Discrete heads use {0,1,2} for run and {0,1} for jump; trajectory schema uses
-        // run ∈ {-1,0,1} and jump as bool (same mapping as LevelEnvironment::step).
+        runs_data.push(run_idx);
+        jumps_data.push(jump_idx);
         actions.push(json!({
             "run": run_idx - 1,
             "jump": jump_idx != 0,
         }));
         let step = env.step(run_idx, jump_idx);
+        if step.jump_takeoff {
+            jump_takeoffs += 1;
+        }
         total_reward += step.reward;
         frame_snapshots.push(frame_snapshot_from_pose(env.delver_pose()));
         observation = step.observation;
@@ -84,10 +165,25 @@ pub fn run_showcase(
         "level_hash": level_hash,
         "total_reward": total_reward,
         "policy_confidence": avg_confidence,
+        "jump_takeoffs": jump_takeoffs,
         "delver_actions": actions,
         "frame_snapshots": frame_snapshots,
     });
-    Ok(serde_json::to_string(&trajectory)?)
+
+    Ok(ShowcaseResult {
+        trajectory_json: serde_json::to_string(&trajectory)?,
+        victorious,
+        jump_takeoffs,
+        policy_confidence: avg_confidence,
+        transitions: RehearsalTrajectory {
+            local: local_data,
+            global: global_data,
+            episode_starts: starts_data,
+            runs: runs_data,
+            jumps: jumps_data,
+            steps: step_count,
+        },
+    })
 }
 
 fn frame_snapshot_from_pose(pose: DelverPose) -> Value {

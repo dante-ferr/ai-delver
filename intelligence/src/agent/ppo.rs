@@ -18,6 +18,17 @@ pub struct Rollout {
     pub bootstrap_values: Tensor,
 }
 
+/// Flattened single-episode transitions for Goal Rehearsal Lock (behavioral cloning).
+#[derive(Clone, Default)]
+pub struct RehearsalTrajectory {
+    pub local: Vec<f32>,
+    pub global: Vec<f32>,
+    pub episode_starts: Vec<f32>,
+    pub runs: Vec<i64>,
+    pub jumps: Vec<i64>,
+    pub steps: usize,
+}
+
 #[derive(Default)]
 pub struct UpdateMetrics {
     pub loss: f64,
@@ -154,6 +165,50 @@ impl Ppo {
             metrics.entropy = entropy_sum.double_value(&[]) / count;
         }
         metrics
+    }
+
+    /// Behavioral-cloning update that reinforces a locked clean victorious trajectory.
+    ///
+    /// Used by Goal Rehearsal Lock: training collect stays stochastic, but neat
+    /// argmax solutions get repeated positive log-prob pressure so they stick.
+    pub fn rehearse(&mut self, trajectory: &RehearsalTrajectory, epochs: usize) {
+        if trajectory.steps == 0 || epochs == 0 {
+            return;
+        }
+        let steps = trajectory.steps as i64;
+        let local = Tensor::from_slice(&trajectory.local)
+            .view([1, steps, crate::environments::LOCAL_VIEW_CELLS as i64])
+            .to_device(self.device);
+        let global = Tensor::from_slice(&trajectory.global)
+            .view([1, steps, crate::environments::GLOBAL_STATE_SIZE as i64])
+            .to_device(self.device);
+        let starts = Tensor::from_slice(&trajectory.episode_starts)
+            .view([1, steps])
+            .to_device(self.device);
+        let runs = Tensor::from_slice(&trajectory.runs)
+            .view([1, steps])
+            .to_device(self.device);
+        let jumps = Tensor::from_slice(&trajectory.jumps)
+            .view([1, steps])
+            .to_device(self.device);
+
+        for _ in 0..epochs {
+            let output = self.model.forward_sequence(&local, &global, &starts);
+            let run_log_probs = output
+                .run_logits
+                .log_softmax(-1, Kind::Float)
+                .gather(-1, &runs.unsqueeze(-1), false)
+                .squeeze_dim(-1);
+            let jump_log_probs = output
+                .jump_logits
+                .log_softmax(-1, Kind::Float)
+                .gather(-1, &jumps.unsqueeze(-1), false)
+                .squeeze_dim(-1);
+            // Maximize demonstrated action likelihood (no entropy bonus — sharpen peak).
+            let loss = -(&run_log_probs + &jump_log_probs).mean(Kind::Float);
+            self.optimizer
+                .backward_step_clip(&loss, self.config.max_grad_norm);
+        }
     }
 }
 

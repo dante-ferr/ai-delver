@@ -4,9 +4,12 @@
 # ==============================================================================
 # RL Hyperparameters
 # ==============================================================================
-learning_rate = 0.000295            # Optimized step size via organic Optuna platforming-1..10 tune
+# Promoted from Pass 1 sequential-mastery Optuna (Trial 1): reviews E=1500,
+# consolidate platforming-6,7,9; play min/mean WR = 1.0 on platforming-1..10
+# (15 showcases/level). See intelligence/logs/pass1_p9_consolidation_tune.log.
+learning_rate = 0.000158            # Sequential-mastery Optuna Trial 1
 gamma = 0.995                     # Discount factor for future rewards (balancing short-term vs long-term goals)
-entropy_regularization = 0.1496    # Optimized entropy bonus via organic Optuna platforming-1..10 tune (high exploratory drive)
+entropy_regularization = 0.0321    # Sequential-mastery Optuna Trial 1 (lower than prior organic default)
 ppo_num_epochs = 4                # Number of optimization epochs per gradient update step
 clip_epsilon = 0.2                # PPO policy-ratio clipping range
 gae_lambda = 0.95                 # Bias/variance tradeoff for generalized advantage estimation
@@ -29,15 +32,15 @@ mlp_hidden_dim = 256              # Fused MLP hidden width before the LSTM
 # Reward & Penalty Weights
 # ==============================================================================
 not_finished_reward = -10.0       # Penalty given if agent fails to reach the goal within limit
-finished_reward = 112.44          # Sparse positive reward awarded upon successfully solving level (organically tuned)
-turn_reward = -0.28               # Penalty for reversing direction (organically tuned to eliminate pacing oscillation)
+finished_reward = 235.19          # Sequential-mastery Optuna Trial 1
+turn_reward = -0.28               # Sequential-mastery Optuna Trial 1 (matches prior organic turn weight)
 
 frame_step_reward = -0.01         # Time penalty per step to encourage faster execution
-tile_exploration_reward = 0.1495  # Tile exploration drive (organically tuned; walking = +0.45, flat hop = -0.73 net loss)
-jump_reward = -0.88               # Optimized jump penalty via organic Optuna tune
-wall_hugging_reward = -0.0163     # Penalty to discourage sticking/scraping against walls (with 10-frame grace period)
+tile_exploration_reward = 0.2028  # Sequential-mastery Optuna Trial 1
+jump_reward = -0.67               # Sequential-mastery Optuna Trial 1
+wall_hugging_reward = -0.0325     # Sequential-mastery Optuna Trial 1 (10-frame grace period unchanged)
 
-goal_distance_reward_scale = 0.0144 # Continuous step-by-step guidance reward scale (organically tuned)
+goal_distance_reward_scale = 0.0169 # Sequential-mastery Optuna Trial 1
 
 # ==============================================================================
 # Training Environment

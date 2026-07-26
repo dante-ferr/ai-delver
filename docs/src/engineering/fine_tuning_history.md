@@ -9,11 +9,13 @@ A chronological record of empirical discoveries, root-cause analyses, reward-sha
 ```mermaid
 flowchart TD
     P1[Phase 1: Exploration Jump Farming] -->|3-Tile Vertical Brush| P2[Phase 2: Pit Fear Oscillation]
-    P2 -->|Turn Penalty & Goal Dominance| P3[Phase 3: Broad Pit & Sparse Reward]
-    P3 -->|Wall Grace Period & Policy Confidence| P4[Phase 4: Policy Consolidation & Argmax Alignment]
-    P4 -->|Expanded Search Space & Fresh Container| P5[Phase 5: Pure Organic Exploration & Reward Discovery]
+    P2 -->|Turn Penalty and Goal Dominance| P3[Phase 3: Broad Pit and Sparse Reward]
+    P3 -->|Wall Grace Period and Policy Confidence| P4[Phase 4: Policy Consolidation and Argmax Alignment]
+    P4 -->|Expanded Search Space and Fresh Container| P5[Phase 5: Pure Organic Exploration and Reward Discovery]
     P5 -->|Sequential Mastery Objective and Radius 12 View| P6[Phase 6: Sequential Mastery Protocol]
-    P6 --> Promoted[Current Promoted Engine Defaults]
+    P6 -->|Reviews Consolidation and Focus-Slot Accounting| P7[Phase 7: Rise Retention and Combo Consolidation]
+    P7 --> Promoted[Current Promoted Engine Defaults]
+    Promoted -.->|Next| P8[Stage B: Jump Cleanliness Polish]
 ```
 
 ---
@@ -104,29 +106,7 @@ Executed a 15-cycle Optuna study across `platforming-1` to `platforming-10` on a
 
 ---
 
-## 6. Promoted Baseline Engine Configuration
-
-Current promoted defaults in `intelligence/config.toml` resulting from the organic Phase 5 tuning protocol (still subject to a future sequential-mastery Optuna pass):
-
-| Parameter | Promoted Value | Purpose |
-| :--- | :--- | :--- |
-| **`tile_exploration_reward`** | **`0.1495`** | Organically tuned exploration drive (walking = +0.45; flat hop = -0.73 net loss) |
-| **`wall_hugging_reward`** | **`-0.0163`** | Organically tuned wall penalty with 10-frame grace period |
-| **`goal_distance_reward_scale`** | **`0.0144`** | Organically tuned continuous step progress guidance |
-| **`turn_reward`** | **`-0.28`** | Anti-hesitation penalty eliminating pit-edge pacing loops |
-| **`jump_reward`** | **`-0.88`** | Mild jump penalty enabling gap clearance |
-| **`finished_reward`** | **`112.44`** | Goal completion dominance |
-| **`entropy_regularization`** | **`0.1496`** | High exploratory drive to discover gap jumps |
-| **`learning_rate`** | **`0.000295`** | Optimal PPO step size for multi-level curriculum rollouts |
-| **Exploration Engine** | **3-Tile Vertical Span** | Feet-to-head height profile tile tracking |
-| **`local_view`** | **25×25 (radius 12)** | Occupancy grid covering 8-tile pits on platforming-9/10 |
-| **`local_feature_dim`** | **`256`** | Local-view encoder width (625 → 256) |
-| **`lstm_hidden_size`** | **`128`** | Recurrent state size (Optuna-tunable) |
-| **`mlp_hidden_dim`** | **`256`** | Fused MLP hidden width before LSTM |
-
----
-
-## 7. Phase 6: Sequential Mastery Protocol & Wider Vision
+## 6. Phase 6: Sequential Mastery Protocol & Wider Vision
 
 ### Protocol
 `tune` no longer maximizes a diluted pack average. Each trial isolates a blank agent, trains sequentially with weight inheritance, then play-evals with **≥15** showcases per level. Optuna maximizes the **mean of the `tail_k` lowest per-level WRs** (default 3); a set is promotable only when **`min` ≥ 0.8**. Always log min / mean / per-level curves. Architecture search (`--tune-architecture`) is a **second pass** after rewards / LR / entropy stabilize.
@@ -134,3 +114,68 @@ Current promoted defaults in `intelligence/config.toml` resulting from the organ
 ### Vision
 Radius increased from 7 (15×15 / 225) to **12 (25×25 / 625)** after confirming `platforming-9` / `10` pits are 8 tiles — previously outside the Delver's sightline at the jump commitment point. Radius 12 covers those pits with less input noise than 14. Encoding remains pure binary occupancy (no heuristic shortcuts).
 
+---
+
+## 7. Phase 7: Rise Retention & Combo Consolidation
+
+### Symptom
+After the sequential-mastery objective landed, Pass 1 studies still failed the promotion gate (`min` WR ≥ 0.8) even though individual skill families were clearly learnable:
+
+| Study | Pattern |
+| :--- | :--- |
+| Early short Pass 1 (no reviews / consolidation) | Best trial cleared **1–5 and 8–10** at WR=1.0 but **6–7 = 0** (isolated rises wiped) |
+| Same study inverse trial | **6–7 = 1.0** while gaps/combos died |
+| Rise-only consolidation (`6,7`) | Best trial cleared **1–8 and 10** at 1.0; **only platforming-9 = 0** |
+| Heavy cycles alone (45×12) | Did not fix mastery; reviews still rarely armed |
+
+So the Delver was **not** failing “simple platforming.” It was failing **continual learning**: isolated **+3/+4 wall-rises** (`platforming-6` / `7`) antagonize later **descent/gap** skills, and consolidating only rises overwrote the fragile **short-runup 8-pit→rise** combo on `platforming-9`.
+
+### Root Cause Discovery
+1. **Skill antagonism**: rises vs gaps/descents under one weight chain without enough rehearsal.
+2. **Reviews never armed under protocol budgets**: default `E=8000` exceeded total focus slots; worse, train committed **completed-episode metrics** (undercount) instead of **projected focus slots** (`cycles × episodes_per_cycle`), so even `E=1500` looked unreachable until accounting was fixed.
+3. **No post-curriculum consolidation**: after `1→10`, nothing re-armed mid-pack skills before play eval.
+4. **Optuna tie-break**: when every trial had `tail_k = 0`, “best” collapsed to the first washout.
+
+### Engineering & Protocol Resolution
+1. **`tune` → `train` review knobs** with engine default `E=1500`, `R=100`, `K=5`.
+2. **Focus-slot accounting**: commit `max(metrics_episodes, phase_projected)` so review arms track training volume.
+3. **Consolidation tail** before play eval: re-focus `platforming-6,platforming-7`, then expanded to **`+platforming-9`**.
+4. **Lexicographic Optuna score**: `tail_k_mean + 1e-3·min + 1e-6·mean` (promotion gate still `min ≥ 0.8` only).
+5. Detached intelligence serve + higher mem/shm defaults so long Optuna runs survive agent pipes.
+
+### Empirical Result
+Pass 1 with consolidate `6,7,9` (30 cycles, 12 trials, `E=1500`): **Trial 1 and Trial 11** achieved play **min = 1.0 / mean = 1.0** on all ten levels (15/15 showcases each). Log: `intelligence/logs/pass1_p9_consolidation_tune.log`. CLI support: commit `57fe1d1`.
+
+---
+
+## 8. Promoted Baseline Engine Configuration
+
+Current promoted defaults in `intelligence/config.toml` from **Phase 7 sequential-mastery Trial 1** (commit `0c5b383`):
+
+| Parameter | Promoted Value | Purpose |
+| :--- | :--- | :--- |
+| **`tile_exploration_reward`** | **`0.2028`** | Sequential-mastery exploration drive |
+| **`wall_hugging_reward`** | **`-0.0325`** | Wall scrape tax with 10-frame grace period |
+| **`goal_distance_reward_scale`** | **`0.0169`** | Continuous step progress guidance |
+| **`turn_reward`** | **`-0.28`** | Anti-hesitation at pit edges |
+| **`jump_reward`** | **`-0.67`** | Mild jump cost (favors discovery; Stage B may harden) |
+| **`finished_reward`** | **`235.19`** | Strong goal-completion dominance |
+| **`entropy_regularization`** | **`0.0321`** | Lower than Phase 5 organic default |
+| **`learning_rate`** | **`0.000158`** | Sequential-mastery PPO step size |
+| **Exploration Engine** | **3-Tile Vertical Span** | Feet-to-head height profile tile tracking |
+| **`local_view`** | **25×25 (radius 12)** | Occupancy grid covering 8-tile pits on platforming-9/10 |
+| **`local_feature_dim`** | **`256`** | Local-view encoder width (625 → 256) |
+| **`lstm_hidden_size`** | **`128`** | Recurrent state size |
+| **`mlp_hidden_dim`** | **`256`** | Fused MLP hidden width before LSTM |
+| **Tune retention** | **Reviews E=1500 + consolidate 6/7/9** | Required for promotable sequential mastery |
+
+> [!NOTE]
+> Local play still shows **excess jumping**. That is expected under mild `jump_reward`: Stage A optimized for mastery retention, not trajectory neatness. Do **not** harden jump cost inside the same discovery pass — see [Stage B: Jump Cleanliness Polish](jump_polish_stage_b.md).
+
+---
+
+## 9. Open: Stage B Jump Cleanliness
+
+**Dilemma:** weaker jump penalty helps invent rises and coyote gaps; stronger jump penalty yields cleaner runs but recreates pit-fear if applied too early.
+
+**Direction (not executed yet):** keep Stage A mastery defaults, then a constrained polish that searches more negative `jump_reward` / lower entropy **only among trials that preserve play min WR ≥ 0.8**, ranking survivors by jump rate. Full protocol: [Stage B: Jump Cleanliness Polish](jump_polish_stage_b.md).

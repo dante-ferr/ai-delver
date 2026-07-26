@@ -43,11 +43,13 @@ This document serves as the **authoritative handoff record** for resuming the AI
 - Expanded Optuna search space in `client/src/cli/commands/tune.py` to tune:
   `tile_exploration_reward`, `wall_hugging_reward`, `goal_distance_reward_scale`, `turn_reward`, `jump_reward`, `finished_reward`, `learning_rate`, and `entropy_regularization`.
 - **Sequential mastery objective**: each trial uses a blank `{agent}_trial_{n}`, trains `platforming-1`→`10` with weight inheritance, then play-evals with `--eval-runs` (default **15**). Optuna maximizes **mean of the `tail_k` lowest per-level WRs** (default 3); promotion requires **`min` ≥ `--mastery-threshold`** (0.8). Always log min / mean / per-level table.
+- **Retention for mastery**: tune wires review `E`/`R`/`K` (default `E=1500`), projected focus-slot accounting, post-curriculum consolidation (`platforming-6,7,9`), and lexicographic Optuna ranking.
 - `--tune-architecture` is a **second-pass** flag only.
 - `train` emits `level_mastery` JSON events after each single-level focus/play phase.
 
 ### C. Docker Infrastructure
 - Clean release build with **0 compiler warnings**.
+- Detached `run-ai-dev.sh` by default with higher mem/shm defaults for long Optuna runs.
 - Environment file `.env` configures `TRAIN_ARGS=serve --host 0.0.0.0 --port 8001`.
 - Server API active and healthy on `http://localhost:8001/init`.
 
@@ -60,9 +62,11 @@ This document serves as the **authoritative handoff record** for resuming the AI
 | Q1 Sequential mastery Optuna scoring | **Done** — tail-k Optuna score + min promotion gate; see `tune.py` + [Engine Protocol](../agentic_fine_tuning/engine_protocol.md) |
 | Q2 Vision + NN architecture liberty | **Done** — radius 12 local view; architecture CLI / second-pass `--tune-architecture` |
 | Q3 Documentation sync | **Done** — protocol, roadmap, commands, this handoff |
+| Q4 Pack mastery under retention | **Done** — Phase 7; promoted Trial 1 defaults (`min`/`mean` WR = 1.0); see [Fine-Tuning History](fine_tuning_history.md) |
+| Q5 Jump cleanliness vs discovery | **Open** — Stage B polish design; see [Jump Cleanliness Polish](jump_polish_stage_b.md) |
 
 ### Next agent action
-1. Rebuild intelligence container, then run **Pass 1** sequential-mastery Optuna on `platforming-1`…`10` **without** `--tune-architecture`.
-2. Promote `config.toml` only when **`min` per-level play WR ≥ 0.8** (inspect mean + per-level table too).
-3. Optionally run Pass 2 with `--tune-architecture` if mid-pack clears but capacity is the bottleneck.
-4. Do **not** promote from diluted averages.
+1. Stage A mastery defaults are promoted — do **not** re-litigate Pass 1 discovery by hardening `jump_reward` alone.
+2. Discuss / implement **Stage B** jump polish per [jump_polish_stage_b.md](jump_polish_stage_b.md): mastery lock + minimize play jump rate (instrumentation first).
+3. Pass 2 `--tune-architecture` only if polish cannot hold mastery.
+4. Do **not** promote from diluted averages or from cleaner-but-below-threshold jump trials.

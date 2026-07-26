@@ -74,58 +74,65 @@ Do **not** optimize jump rate without the mastery constraint — that recovers �
 
 ## 4. Recommended Stage B procedure
 
-### 4.1 Starting point
+### 4.0 Accounting prerequisites (landed)
 
-Prefer **warm-start** from a Stage A mastered agent (e.g. `engine_eval_agent_trial_1` weights that cleared all ten at WR=1.0), not a blank brain:
+Before polishing magnitudes:
 
-- Skills already exist in weights.
-- Polish is about **reshaping preferences** (when Jump wins under argmax), not rediscovering geometry from scratch.
+1. **`jump_reward` once per takeoff** — impulse detection in `level_env` (holding jump in air does not re-tax).
+2. **Per newly marked tile explore pay** — `step_on_vertical_span` returns a count; reward is `n × tile_exploration_reward` (air + floor). Boolean step bonus removed.
+3. Provisional `tile_exploration_reward ≈ 0.025` so a full brush ≈ old single-step boolean pay; **must be Optuna-retuned**.
 
-Blank-agent Stage B is allowed as a control, but expect higher risk of unlearning under harsh jump cost.
+### 4.1 Fast path: E+J only
 
-### 4.2 Search levers (small space)
+Full Pass 1 searched many HPs → long wall-clock. For this polish, use:
 
-Keep Stage A retention knobs on (`E=1500`, consolidate `platforming-6,7,9` unless warm-start + short polish proves reviews unnecessary).
+```bash
+poetry run python src/cli/main.py tune \
+  --tune-ej-only \
+  --levels "platforming-1,...,platforming-10" \
+  --cycles 20 \
+  --episodes-per-cycle 24 \
+  --trials 8 \
+  --eval-runs 15 \
+  --consolidate-levels "platforming-6,platforming-7,platforming-9" \
+  --focus-episodes-between-passes 1500 \
+  --agent engine_eval_agent \
+  --server localhost:8001
+```
 
-Search primarily:
+`--tune-ej-only` searches **only** `tile_exploration_reward` and `jump_reward`. Other rewards/LR/entropy stay at server `config.toml` defaults (not overridden). That shrinks the search space from ~8 continuous dims to **2**, so fewer trials suffice and each trial is the same train cost — overall study time drops mainly because **trial count / cycles** can be smaller, not because each cycle is faster.
 
-| Lever | Stage A promoted | Stage B search (suggested) |
-| :--- | :--- | :--- |
-| `jump_reward` | `-0.67` | more negative, e.g. `[-2.5, -0.67]` |
-| `entropy_regularization` | `0.0321` | lower or similar, e.g. `[0.005, 0.04]` |
-| `learning_rate` | `0.000158` | equal or slightly lower for polish, e.g. `[5e-5, 1.6e-4]` |
+Still expensive per trial (sequential 10 levels). Further speed levers: fewer `--cycles`, fewer `--trials`, warm-start from a mastered agent (future flag). Do **not** drop `--eval-runs` below 15 if promoting.
 
-Hold fixed initially: `finished_reward`, `turn_reward`, `tile_exploration_reward`, `wall_hugging_reward`, `goal_distance_reward_scale`, network widths (Pass 2 architecture stays out unless polish stalls).
+### 4.2 Starting point
 
-### 4.3 Budget
+Prefer **warm-start** from a Stage A mastered agent when available; blank agents are OK for E+J-only under retention knobs but slower to re-clear the pack.
 
-Shorter than Stage A discovery:
+### 4.3 Search levers
 
-- Warm-start polish: **10–20 cycles** per level (or a single multi-level mix with reviews), **8–12 trials**.
-- Always `--eval-runs ≥ 15` for stable WRs and jump stats.
-- Keep `--mode static`.
+| Lever | Notes |
+| :--- | :--- |
+| `jump_reward` | Takeoff once; search more negative for cleaner runs, e.g. `[-3.0, -0.05]` |
+| `tile_exploration_reward` | **Per tile**; search e.g. `[0.005, 0.08]` |
+| Other HPs | Frozen under `--tune-ej-only` |
 
-### 4.4 Objective sketch
+### 4.4 Budget
+
+- E+J polish: **15–20 cycles**, **8–12 trials**, consolidate 6/7/9, `E=1500` reviews.
+- Always `--eval-runs ≥ 15`.
+
+### 4.5 Objective sketch
 
 ```text
 if min_play_WR < mastery_threshold:
     score = -1  # or prune / huge penalty
 else:
     score = -mean_jumps_per_episode   # maximize in Optuna ⇒ minimize jumps
-    # optional: score += tiny bonus for min_WR / mean_WR
 ```
 
-Promotion: mastery lock **and** mean jump rate **strictly better** than Stage A baseline measured the same way on the promoted defaults.
+Until jump counters exist in CLI JSON, interim objective can remain sequential-mastery score while manually inspecting jumpiness, or maximize mastery with a preference for more negative `jump_reward` among tied trials.
 
-### 4.5 Instrumentation (likely code work before the study)
-
-Today showcases expose actions to the trajectory viewer; Stage B needs **aggregated jump counts in CLI JSON** (e.g. extend `level_mastery` or a `play_style` event with `jumps`, `frames`, `victorious`). Without that, Optuna cannot rank cleanliness automatically.
-
-Minimal path:
-
-1. Count jump bits while collecting play trajectories.
-2. Emit per-level means into tune’s mastery / completed payload.
-3. Document the formula in the tune log.
+Promotion: mastery lock **and** cleaner than Stage A baseline when jump metrics exist.
 
 ---
 

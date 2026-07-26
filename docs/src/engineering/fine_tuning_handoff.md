@@ -63,10 +63,10 @@ This document serves as the **authoritative handoff record** for resuming the AI
 | Q2 Vision + NN architecture liberty | **Done** — radius 12 local view; architecture CLI / second-pass `--tune-architecture` |
 | Q3 Documentation sync | **Done** — protocol, roadmap, commands, this handoff |
 | Q4 Pack mastery under retention | **Done** — Phase 7; promoted Trial 1 defaults (`min`/`mean` WR = 1.0); see [Fine-Tuning History](fine_tuning_history.md) |
-| Q5 Jump cleanliness vs discovery | **Open** — Stage B polish design; see [Jump Cleanliness Polish](jump_polish_stage_b.md) |
+| Q5 Jump cleanliness vs discovery | **In progress** — per-tile explore + takeoff-once jump landed; E+J polish via `--tune-ej-only`; see [Jump Cleanliness Polish](jump_polish_stage_b.md) |
 
 ### Next agent action
-1. Stage A mastery defaults are promoted — do **not** re-litigate Pass 1 discovery by hardening `jump_reward` alone.
-2. Discuss / implement **Stage B** jump polish per [jump_polish_stage_b.md](jump_polish_stage_b.md): mastery lock + minimize play jump rate (instrumentation first).
+1. Rebuild intelligence container after reward accounting change.
+2. Run **E+J-only** polish (`tune --tune-ej-only`) with retention knobs; promote E/J only if mastery holds.
 3. Pass 2 `--tune-architecture` only if polish cannot hold mastery.
 4. Do **not** promote from diluted averages or from cleaner-but-below-threshold jump trials.

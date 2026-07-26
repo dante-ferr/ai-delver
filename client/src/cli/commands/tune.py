@@ -193,19 +193,6 @@ def _consolidation_levels(level_names: list[str], consolidate_csv: str) -> list[
 
 def run_tune(args):
     """Executes a hyperparameter search using Optuna with sequential mastery scoring."""
-    print_json(
-        "info",
-        message=(
-            f"Starting Optuna sequential-mastery study with {args.trials} trials "
-            f"(eval_runs={args.eval_runs}, mastery_threshold={args.mastery_threshold}, "
-            f"tail_k={getattr(args, 'tail_k', 3)}, "
-            f"tune_architecture={bool(getattr(args, 'tune_architecture', False))}, "
-            f"review_E={getattr(args, 'focus_episodes_between_passes', None)}, "
-            f"review_R={getattr(args, 'review_episodes_per_level', None)}, "
-            f"review_K={getattr(args, 'review_levels_per_arm', None)})."
-        ),
-    )
-
     client_dir = Path(__file__).resolve().parents[3]
     level_names = [level.strip() for level in args.levels.split(",") if level.strip()]
     if not level_names:
@@ -213,10 +200,20 @@ def run_tune(args):
         return
 
     tune_architecture = bool(getattr(args, "tune_architecture", False))
+    tune_ej_only = bool(getattr(args, "tune_ej_only", False))
+    if tune_architecture and tune_ej_only:
+        print_json(
+            "error",
+            message="Cannot combine --tune-architecture with --tune-ej-only.",
+        )
+        return
     mastery_threshold = float(getattr(args, "mastery_threshold", 0.8))
     eval_runs = max(1, int(getattr(args, "eval_runs", 15)))
     tail_k = max(1, int(getattr(args, "tail_k", 3)))
-    consolidate_csv = str(getattr(args, "consolidate_levels", "platforming-6,platforming-7") or "")
+    consolidate_csv = str(
+        getattr(args, "consolidate_levels", "platforming-6,platforming-7,platforming-9")
+        or ""
+    )
     consolidate_names = _consolidation_levels(level_names, consolidate_csv)
     consolidation_cycles_arg = getattr(args, "consolidation_cycles", None)
     if consolidation_cycles_arg is None:
@@ -232,6 +229,19 @@ def run_tune(args):
         "review_levels_per_arm": getattr(args, "review_levels_per_arm", 5),
     }
 
+    print_json(
+        "info",
+        message=(
+            f"Starting Optuna sequential-mastery study with {args.trials} trials "
+            f"(eval_runs={eval_runs}, mastery_threshold={mastery_threshold}, "
+            f"tail_k={tail_k}, tune_architecture={tune_architecture}, "
+            f"tune_ej_only={tune_ej_only}, "
+            f"review_E={review_knobs['focus_episodes_between_passes']}, "
+            f"review_R={review_knobs['review_episodes_per_level']}, "
+            f"review_K={review_knobs['review_levels_per_arm']})."
+        ),
+    )
+
     if consolidate_names:
         print_json(
             "info",
@@ -243,6 +253,15 @@ def run_tune(args):
     else:
         print_json("info", message="Rise consolidation disabled (no matching levels).")
 
+    if tune_ej_only:
+        print_json(
+            "info",
+            message=(
+                "E+J-only search: Optuna varies tile_exploration_reward and jump_reward; "
+                "other HPs remain at intelligence server/config defaults."
+            ),
+        )
+
     if tune_architecture:
         print_json(
             "info",
@@ -253,49 +272,56 @@ def run_tune(args):
         )
 
     def objective(trial: optuna.Trial) -> float:
-        learning_rate = trial.suggest_float("learning_rate", 5e-5, 8e-4, log=True)
-        entropy_reg = trial.suggest_float("entropy_reg", 0.01, 0.20)
-        finished_reward = trial.suggest_float("finished_reward", 80.0, 250.0)
+        # Per-tile explore rates are ~8× smaller than the old boolean step bonus.
         jump_reward = trial.suggest_float("jump_reward", -3.0, -0.05)
-        goal_distance_reward_scale = trial.suggest_float(
-            "goal_distance_reward_scale", 0.005, 0.05
-        )
-        turn_reward = trial.suggest_float("turn_reward", -0.5, 0.0)
         tile_exploration_reward = trial.suggest_float(
-            "tile_exploration_reward", 0.05, 0.30
+            "tile_exploration_reward", 0.005, 0.08
         )
-        wall_hugging_reward = trial.suggest_float("wall_hugging_reward", -0.05, 0.0)
 
-        overrides = {
-            "learning_rate": f"{learning_rate:.6f}",
-            "entropy_regularization": f"{entropy_reg:.4f}",
-            "finished_reward": f"{finished_reward:.2f}",
-            "jump_reward": f"{jump_reward:.2f}",
-            "goal_distance_reward_scale": f"{goal_distance_reward_scale:.4f}",
-            "turn_reward": f"{turn_reward:.2f}",
-            "tile_exploration_reward": f"{tile_exploration_reward:.4f}",
-            "wall_hugging_reward": f"{wall_hugging_reward:.4f}",
-        }
+        if tune_ej_only:
+            overrides = {
+                "jump_reward": f"{jump_reward:.2f}",
+                "tile_exploration_reward": f"{tile_exploration_reward:.4f}",
+            }
+        else:
+            learning_rate = trial.suggest_float("learning_rate", 5e-5, 8e-4, log=True)
+            entropy_reg = trial.suggest_float("entropy_reg", 0.01, 0.20)
+            finished_reward = trial.suggest_float("finished_reward", 80.0, 250.0)
+            goal_distance_reward_scale = trial.suggest_float(
+                "goal_distance_reward_scale", 0.005, 0.05
+            )
+            turn_reward = trial.suggest_float("turn_reward", -0.5, 0.0)
+            wall_hugging_reward = trial.suggest_float("wall_hugging_reward", -0.05, 0.0)
+            overrides = {
+                "learning_rate": f"{learning_rate:.6f}",
+                "entropy_regularization": f"{entropy_reg:.4f}",
+                "finished_reward": f"{finished_reward:.2f}",
+                "jump_reward": f"{jump_reward:.2f}",
+                "goal_distance_reward_scale": f"{goal_distance_reward_scale:.4f}",
+                "turn_reward": f"{turn_reward:.2f}",
+                "tile_exploration_reward": f"{tile_exploration_reward:.4f}",
+                "wall_hugging_reward": f"{wall_hugging_reward:.4f}",
+            }
 
-        if tune_architecture:
-            overrides["ppo_num_epochs"] = trial.suggest_categorical(
-                "ppo_num_epochs", [2, 4, 6, 8]
-            )
-            overrides["value_coefficient"] = (
-                f"{trial.suggest_float('value_coefficient', 0.25, 1.0):.4f}"
-            )
-            overrides["minibatch_size"] = trial.suggest_categorical(
-                "minibatch_size", [128, 256, 384, 512]
-            )
-            overrides["local_feature_dim"] = trial.suggest_categorical(
-                "local_feature_dim", [128, 256, 384]
-            )
-            overrides["lstm_hidden_size"] = trial.suggest_categorical(
-                "lstm_hidden_size", [64, 128, 256]
-            )
-            overrides["mlp_hidden_dim"] = trial.suggest_categorical(
-                "mlp_hidden_dim", [128, 256, 384]
-            )
+            if tune_architecture:
+                overrides["ppo_num_epochs"] = trial.suggest_categorical(
+                    "ppo_num_epochs", [2, 4, 6, 8]
+                )
+                overrides["value_coefficient"] = (
+                    f"{trial.suggest_float('value_coefficient', 0.25, 1.0):.4f}"
+                )
+                overrides["minibatch_size"] = trial.suggest_categorical(
+                    "minibatch_size", [128, 256, 384, 512]
+                )
+                overrides["local_feature_dim"] = trial.suggest_categorical(
+                    "local_feature_dim", [128, 256, 384]
+                )
+                overrides["lstm_hidden_size"] = trial.suggest_categorical(
+                    "lstm_hidden_size", [64, 128, 256]
+                )
+                overrides["mlp_hidden_dim"] = trial.suggest_categorical(
+                    "mlp_hidden_dim", [128, 256, 384]
+                )
 
         trial_agent = f"{args.agent}_trial_{trial.number}"
         _reset_trial_agent(trial_agent)

@@ -130,6 +130,14 @@ def main():
         help="Second-pass only: also search network widths / PPO epochs / minibatch / value coeff",
     )
     tune_p.add_argument(
+        "--tune-ej-only",
+        action="store_true",
+        help=(
+            "Fast polish: only search tile_exploration_reward (E) and jump_reward (J); "
+            "all other HPs stay at server/config defaults (not overridden)"
+        ),
+    )
+    tune_p.add_argument(
         "--focus-episodes-between-passes",
         type=int,
         default=1500,
@@ -149,7 +157,7 @@ def main():
     )
     tune_p.add_argument(
         "--consolidate-levels",
-        default="platforming-6,platforming-7",
+        default="platforming-6,platforming-7,platforming-9",
         help=(
             "After sequential curriculum, re-focus these levels (comma-separated) before "
             "play eval; filtered to levels present in --levels. Empty string disables."

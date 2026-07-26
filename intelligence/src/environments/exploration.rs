@@ -31,41 +31,36 @@ impl ExplorationGrid {
         was_new
     }
 
-    /// Sweeps a vertical span (from feet_y to head_y) at horizontal position x.
-    /// Marks all tiles along the vertical body height as visited.
-    /// Returns true if any tile in the center span was previously unvisited.
+    /// Sweeps a vertical span (from feet_y to head_y) at horizontal position x,
+    /// painting `x±radius_x` × body height. Returns how many cells flipped
+    /// unvisited → visited (air and floor). Used for per-tile exploration pay.
     pub fn step_on_vertical_span(
         &mut self,
         x: i32,
         feet_y: i32,
         head_y: i32,
         radius_x: i32,
-    ) -> bool {
+    ) -> usize {
         if x < 0 || feet_y >= self.height as i32 || head_y < 0 || x >= self.width as i32 {
-            return false;
+            return 0;
         }
         let (min_y, max_y) = (feet_y.min(head_y), feet_y.max(head_y));
-        let mut was_new = false;
-
-        for y in min_y.max(0)..=max_y.min(self.height as i32 - 1) {
-            let idx = y as usize * self.width + x as usize;
-            if !self.visited[idx] {
-                was_new = true;
-            }
-        }
-
         let start_x = (x - radius_x).max(0);
         let end_x = (x + radius_x).min(self.width as i32 - 1);
         let start_y = min_y.max(0);
         let end_y = max_y.min(self.height as i32 - 1);
 
+        let mut newly_marked = 0usize;
         for yy in start_y..=end_y {
             for xx in start_x..=end_x {
-                self.visited[yy as usize * self.width + xx as usize] = true;
+                let idx = yy as usize * self.width + xx as usize;
+                if !self.visited[idx] {
+                    self.visited[idx] = true;
+                    newly_marked += 1;
+                }
             }
         }
-
-        was_new
+        newly_marked
     }
 }
 
@@ -82,14 +77,21 @@ mod tests {
     }
 
     #[test]
-    fn vertical_span_prevents_duplicate_air_jump_exploration() {
+    fn vertical_span_counts_new_tiles_once() {
         let mut grid = ExplorationGrid::new(10, 10);
-        // Delver walks on ground at x=2, feet_y=4, head_y=2 (3 tiles tall: rows 2, 3, 4)
-        assert!(grid.step_on_vertical_span(2, 4, 2, 0));
+        // Grounded brush at x=2, feet=4, head=2, radius_x=0 → 3 cells
+        assert_eq!(grid.step_on_vertical_span(2, 4, 2, 0), 3);
+        // Same footprint again → 0
+        assert_eq!(grid.step_on_vertical_span(2, 4, 2, 0), 0);
+        // Jump higher (head=0) marks two new apex rows
+        assert_eq!(grid.step_on_vertical_span(2, 4, 0, 0), 2);
+    }
 
-        // Delver subsequently jumps into the air at x=2, feet_y=2, head_y=0 (rows 0, 1, 2)
-        // Since rows 2, 3, 4 were already marked visited during ground walk, stepping at row 2 returns false for new exploration
-        assert!(!grid.step_on_vertical_span(2, 4, 2, 0));
+    #[test]
+    fn radius_x_marks_side_columns() {
+        let mut grid = ExplorationGrid::new(10, 10);
+        // radius_x=1, 3 rows → 3×3 = 9
+        assert_eq!(grid.step_on_vertical_span(2, 4, 2, 1), 9);
+        assert_eq!(grid.step_on_vertical_span(2, 4, 2, 1), 0);
     }
 }
-

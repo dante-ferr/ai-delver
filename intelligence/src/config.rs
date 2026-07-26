@@ -61,7 +61,7 @@ impl Default for Config {
             finished_reward: 100.0,
             turn_reward: 0.0,
             frame_step_reward: -0.01,
-            tile_exploration_reward: 0.04,
+            tile_exploration_reward: 0.025,
             jump_reward: -0.15,
             wall_hugging_reward: -0.2,
             goal_distance_reward_scale: 0.005,
@@ -84,12 +84,15 @@ impl Config {
     }
 
     pub fn reward_scale(&self) -> f32 {
+        // Per-tile explore can pay multiple cells per step (brush ≈ 3×3–4×3).
+        // Scale by a conservative max footprint so explore does not dominate normalization.
+        const MAX_EXPLORE_TILES_PER_STEP: f32 = 12.0;
         [
             self.not_finished_reward,
             self.finished_reward,
             self.turn_reward,
             self.frame_step_reward,
-            self.tile_exploration_reward,
+            self.tile_exploration_reward * MAX_EXPLORE_TILES_PER_STEP,
             self.jump_reward,
             self.wall_hugging_reward,
             self.goal_distance_reward_scale,

@@ -154,11 +154,11 @@ Current promoted defaults in `intelligence/config.toml` from **Phase 7 sequentia
 
 | Parameter | Promoted Value | Purpose |
 | :--- | :--- | :--- |
-| **`tile_exploration_reward`** | **`0.2028`** | Sequential-mastery exploration drive |
+| **`tile_exploration_reward`** | **`0.025`** | Per newly marked tile (provisional scale after accounting change) |
 | **`wall_hugging_reward`** | **`-0.0325`** | Wall scrape tax with 10-frame grace period |
 | **`goal_distance_reward_scale`** | **`0.0169`** | Continuous step progress guidance |
 | **`turn_reward`** | **`-0.28`** | Anti-hesitation at pit edges |
-| **`jump_reward`** | **`-0.67`** | Mild jump cost (favors discovery; Stage B may harden) |
+| **`jump_reward`** | **`-0.67`** | Once per takeoff impulse (not per held air frame) |
 | **`finished_reward`** | **`235.19`** | Strong goal-completion dominance |
 | **`entropy_regularization`** | **`0.0321`** | Lower than Phase 5 organic default |
 | **`learning_rate`** | **`0.000158`** | Sequential-mastery PPO step size |
@@ -170,12 +170,12 @@ Current promoted defaults in `intelligence/config.toml` from **Phase 7 sequentia
 | **Tune retention** | **Reviews E=1500 + consolidate 6/7/9** | Required for promotable sequential mastery |
 
 > [!NOTE]
-> Local play still shows **excess jumping**. That is expected under mild `jump_reward`: Stage A optimized for mastery retention, not trajectory neatness. Do **not** harden jump cost inside the same discovery pass — see [Stage B: Jump Cleanliness Polish](jump_polish_stage_b.md).
+> Local play still shows **excess jumping**. That is expected under mild `jump_reward`: Stage A optimized for mastery retention, not trajectory neatness. Explore pay is now **per newly marked tile** and jump cost is **once per takeoff** — see [Stage B](jump_polish_stage_b.md) and the plain-floor invariant discussion there. Do **not** harden jump cost inside a full multi-HP discovery pass without re-checking the E/J invariant.
 
 ---
 
-## 9. Open: Stage B Jump Cleanliness
+## 9. Open: Stage B Jump Cleanliness / E+J polish
 
-**Dilemma:** weaker jump penalty helps invent rises and coyote gaps; stronger jump penalty yields cleaner runs but recreates pit-fear if applied too early.
+**Dilemma:** weaker jump penalty helps invent rises and coyote gaps; stronger jump penalty yields cleaner runs but recreates pit-fear if applied too early. Boolean explore pay also made forward flat jumps mint multiple `+E` frames while walk self-sealed.
 
-**Direction (not executed yet):** keep Stage A mastery defaults, then a constrained polish that searches more negative `jump_reward` / lower entropy **only among trials that preserve play min WR ≥ 0.8**, ranking survivors by jump rate. Full protocol: [Stage B: Jump Cleanliness Polish](jump_polish_stage_b.md).
+**Direction:** keep Stage A mastery HPs for non-E/J knobs; retune **`tile_exploration_reward` (per tile)** and **`jump_reward` (takeoff once)** under a mastery lock. Fast Optuna mode: `tune --tune-ej-only` (only those two search dims). Full protocol: [Stage B: Jump Cleanliness Polish](jump_polish_stage_b.md).

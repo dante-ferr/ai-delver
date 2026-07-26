@@ -67,11 +67,13 @@ pub struct RewardInput {
     pub reached_goal: bool,
     pub timed_out: bool,
     pub run: i64,
-    pub jump: bool,
+    /// True only on the env step where a jump takeoff impulse occurs (not while held in air).
+    pub jump_takeoff: bool,
     pub previous_run: Option<i64>,
     pub x: f32,
     pub grounded: bool,
-    pub newly_explored: bool,
+    /// Number of exploration cells newly marked this step (air + floor).
+    pub tiles_explored: usize,
     pub distance: f32,
 }
 
@@ -102,12 +104,12 @@ impl RewardState {
         {
             reward += config.turn_reward;
         }
-        if input.jump {
+        if input.jump_takeoff {
             reward += config.jump_reward;
         }
         reward += config.frame_step_reward;
-        if input.newly_explored {
-            reward += config.tile_exploration_reward;
+        if input.tiles_explored > 0 {
+            reward += config.tile_exploration_reward * input.tiles_explored as f32;
         }
         if input.distance >= 0.0 && self.last_distance >= 0.0 {
             reward += (self.last_distance - input.distance) * config.goal_distance_reward_scale;
@@ -132,6 +134,26 @@ impl RewardState {
 mod tests {
     use super::*;
 
+    fn test_level() -> Level {
+        Level::from_json(
+            r#"{
+              "_name": "t",
+              "map": {
+                "grid_size": [8, 8],
+                "tile_size": [16.0, 16.0],
+                "tilemap": { "layers": [{ "elements": [
+                  {"name": "Terrain", "position": [0, 0], "size": [8, 1]}
+                ]}] },
+                "world_objects_map": { "layers": [{ "elements": [
+                  {"name": "Delver", "position": [1, 1], "size": [1, 3]},
+                  {"name": "Goal", "position": [6, 1], "size": [1, 1]}
+                ]}] }
+              }
+            }"#,
+        )
+        .expect("test level")
+    }
+
     #[test]
     fn reward_scale_includes_wall_hugging() {
         let mut config = Config::default();
@@ -139,5 +161,62 @@ mod tests {
         config.not_finished_reward = 0.0;
         config.wall_hugging_reward = -12.0;
         assert_eq!(config.reward_scale(), 12.0);
+    }
+
+    #[test]
+    fn exploration_pays_per_tile_and_jump_only_on_takeoff() {
+        let mut config = Config::default();
+        config.finished_reward = 0.0;
+        config.not_finished_reward = 0.0;
+        config.turn_reward = 0.0;
+        config.frame_step_reward = 0.0;
+        config.wall_hugging_reward = 0.0;
+        config.goal_distance_reward_scale = 0.0;
+        config.tile_exploration_reward = 0.1;
+        config.jump_reward = -0.5;
+
+        let mut state = RewardState::new(&test_level());
+        let base = RewardInput {
+            reached_goal: false,
+            timed_out: false,
+            run: 1,
+            jump_takeoff: false,
+            previous_run: Some(1),
+            x: 0.0,
+            grounded: true,
+            tiles_explored: 0,
+            distance: -1.0,
+        };
+
+        let explore_only = state.calculate(
+            RewardInput {
+                tiles_explored: 3,
+                ..base
+            },
+            &config,
+        );
+        let scale = config.reward_scale();
+        assert!((explore_only - 0.3 / scale).abs() < 1e-5);
+
+        let jump_only = state.calculate(
+            RewardInput {
+                jump_takeoff: true,
+                tiles_explored: 0,
+                ..base
+            },
+            &config,
+        );
+        assert!((jump_only - (-0.5) / scale).abs() < 1e-5);
+
+        let held_jump_no_takeoff = state.calculate(
+            RewardInput {
+                jump_takeoff: false,
+                tiles_explored: 0,
+                grounded: false,
+                ..base
+            },
+            &config,
+        );
+        assert!((held_jump_no_takeoff - 0.0).abs() < 1e-5);
     }
 }

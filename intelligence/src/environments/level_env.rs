@@ -70,6 +70,11 @@ impl LevelEnvironment {
     pub fn step(&mut self, run_action: i64, jump_action: i64) -> Step {
         let run = run_action - 1;
         let jump = jump_action != 0;
+        let before = self
+            .physics
+            .delver()
+            .expect("physics engine always contains the delver");
+        let vy_before = before.vy;
         self.physics
             .set_delver_action(run as f32, jump)
             .expect("physics engine always contains the delver");
@@ -83,24 +88,30 @@ impl LevelEnvironment {
         let done = delver.is_victory || delver.is_dead || timed_out;
         let (x, y) = (delver.x, delver.y);
         let player_height = runtime_core::DelverConfig::default().player_height;
+        let jump_impulse = runtime_core::DelverConfig::default().jump_impulse;
         let half_h = player_height / 2.0;
         let (tx, ty) = self.grid_position(x, y);
         let feet_ty = self.grid_position(x, y - half_h).1;
         let head_ty = self.grid_position(x, y + half_h).1;
-        let newly_explored = self
+        let tiles_explored = self
             .exploration
             .step_on_vertical_span(tx, feet_ty, head_ty, 1);
+        // Takeoff = jump impulse applied this step (including coyote). Holding jump in air
+        // keeps action_jump true but does not re-apply impulse → no extra jump_reward.
+        let jump_takeoff = jump
+            && delver.vy >= jump_impulse * 0.99
+            && vy_before < jump_impulse * 0.99;
         let distance = self.rewards.dijkstra.distance(tx, ty);
         let reward = self.rewards.calculate(
             RewardInput {
                 reached_goal: delver.is_victory,
                 timed_out: timed_out || delver.is_dead,
                 run,
-                jump,
+                jump_takeoff,
                 previous_run: self.previous_run,
                 x,
                 grounded: delver.is_on_ground,
-                newly_explored,
+                tiles_explored,
                 distance,
             },
             &self.config,

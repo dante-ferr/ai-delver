@@ -23,7 +23,7 @@ Longer-term, parameter protection (e.g. EWC) is tracked on the [engineering road
 
 ---
 
-## 2. Knobs (defaults in `client/src/config.json` → `review`)
+## 2. Knobs (defaults in `client/src/config.toml` → `review`)
 
 | Knob | Config key | Meaning |
 | --- | --- | --- |
@@ -167,7 +167,7 @@ Checkpoint bundles store the same curriculum snapshot beside weights so restores
 
 | Piece | Path |
 | --- | --- |
-| Defaults (`E`/`R`/`K`) | `client/src/config.json` → `review` |
+| Defaults (`E`/`R`/`K`) | `client/src/config.toml` → `review` |
 | Planner / commit | `client/src/cli/commands/review_planner.py` |
 | Train wiring / phase chain | `client/src/cli/commands/train.py` |
 | Static env mix | `intelligence/src/trainer/loop.rs` |

@@ -1,3 +1,13 @@
+## Configuration constants
+
+Never hardcode tunable constants (timing, sizes, counts, thresholds, feature knobs, etc.) in application code. Put them in the appropriate config file and read them through the existing config loader instead.
+
+- Client GUI / CLI knobs: `client/src/config.toml` via `from src.config import config`
+- Intelligence training knobs: `intelligence/config.toml`
+- Runtime physics / world knobs: the relevant `*.toml` under `runtime/` (e.g. `delver.toml`, `world.toml`)
+
+Prefer extending an existing config section over inventing a parallel source of truth. Magic numbers that only make sense as local implementation details of an algorithm (e.g. a one-off loop bound tied to nearby math) may stay inline; anything an operator might want to tweak must live in config.
+
 ## Commits
 
 The commit message should be structured as follows:

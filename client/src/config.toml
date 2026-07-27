@@ -1,0 +1,42 @@
+tilemap_layer_names = ["platforms"]
+window_width = 1280
+window_height = 720
+window_title = "AI Delver"
+fps = 60
+min_canvas_zoom = 2
+max_canvas_zoom = 5
+initial_canvas_zoom = 2
+min_brush_size = 1
+max_brush_size = 9
+initial_brush_size = 1
+
+[camera]
+start_zoom = 2.0
+min_zoom = 1.0
+max_zoom = 4.0
+scroll_speed = 1.0
+zoom_speed = 0.3
+
+[style.font]
+small_size = 12
+standard_size = 14
+subtitle_size = 18
+
+[style]
+section_spacing = 48
+
+[review]
+focus_episodes_between_passes = 16000
+review_episodes_per_level = 100
+review_levels_per_arm = 5
+tune_focus_episodes_between_passes = 1500
+
+# Path Visualizer (trajectory minimap) reveal / wipe animation.
+# Durations are wall-clock targets; tick work scales with grid/path size.
+[path_visualizer]
+tick_ms = 24
+tile_reveal_ms = 400
+tile_wipe_ms = 320
+path_reveal_ms = 450
+grow_frames = 10
+debounce_ms = 80

@@ -1,21 +1,31 @@
 import sys
-import json
 from pathlib import Path
 from typing import Any, Dict, Union
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python < 3.11
+    import tomli as tomllib  # type: ignore
+
 
 class Config:
-    """A class to hold and provide access to configuration settings from a JSON file."""
+    """A class to hold and provide access to configuration settings from a TOML file."""
 
-    def __init__(self, config_source: Union[str, Dict[str, Any]] = "src/config.json"):
-        if isinstance(config_source, str):
+    def __init__(
+        self,
+        config_source: Union[str, Path, Dict[str, Any], None] = None,
+    ):
+        if config_source is None:
+            config_source = Path(__file__).resolve().parent / "config.toml"
+
+        if isinstance(config_source, (str, Path)):
             self._config_path: Path | None = Path(config_source)
             self._data = self._load_config()
         elif isinstance(config_source, dict):
             self._config_path = None  # No file path for nested configs
             self._data = config_source
         else:
-            raise TypeError("config_source must be a string path or a dictionary.")
+            raise TypeError("config_source must be a path, dictionary, or None.")
 
         # These are top-level properties, only set for the main config instance
         if self._config_path is not None:
@@ -25,11 +35,11 @@ class Config:
     def _load_config(self) -> dict:
         if self._config_path is None:
             return {}
-        with open(self._config_path, "r") as f:
-            return json.load(f)
+        with open(self._config_path, "rb") as f:
+            return tomllib.load(f)
 
     def __getattr__(self, name: str) -> Any:
-        # Converts Python's UPPER_SNAKE_CASE attribute access to json's snake_case for lookup.
+        # Converts Python's UPPER_SNAKE_CASE attribute access to toml's snake_case for lookup.
         key = name.lower()
         if key in self._data:
             value = self._data[key]

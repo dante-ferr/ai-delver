@@ -33,7 +33,7 @@ class EpisodesSettingPanel(ctk.CTkFrame):
         self.training_cycles_input.pack(pady=(0, 16), fill="x")
         training_state_manager.amount_of_cycles = init_val
 
-        init_runs = 5
+        init_runs = 50
         self.runs_per_cycle_input = RangeSliderInput(
             self,
             label_text="Runs per Cycle",

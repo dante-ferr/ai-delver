@@ -2,6 +2,7 @@ import customtkinter as ctk
 from app.components import RangeSliderInput
 from typing import Callable
 from state_managers import training_state_manager
+from src.config import config
 
 
 class EpisodesSettingPanel(ctk.CTkFrame):
@@ -57,8 +58,22 @@ class EpisodesSettingPanel(ctk.CTkFrame):
             on_update=self._set_checkpoint_interval,
             fg_color="transparent",
         )
-        self.checkpoint_interval_input.pack(pady=0, fill="x")
+        self.checkpoint_interval_input.pack(pady=(0, 12), fill="x")
         training_state_manager.checkpoint_interval = init_checkpoint
+
+        self.early_stop_var = ctk.BooleanVar(value=False)
+        self.early_stop_checkbox = ctk.CTkCheckBox(
+            self,
+            text="Early stop on convergence",
+            variable=self.early_stop_var,
+            command=self._set_early_stop,
+            checkbox_width=20,
+            checkbox_height=20,
+            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+        )
+        self.early_stop_checkbox.pack(anchor="w", pady=(0, 0))
+        training_state_manager.early_stop = False
+        training_state_manager.add_disable_on_train_element(self.early_stop_checkbox)
 
     def _set_training_cycles(self, value):
         training_state_manager.amount_of_cycles = value
@@ -70,3 +85,6 @@ class EpisodesSettingPanel(ctk.CTkFrame):
 
     def _set_checkpoint_interval(self, value):
         training_state_manager.checkpoint_interval = int(value)
+
+    def _set_early_stop(self):
+        training_state_manager.early_stop = bool(self.early_stop_var.get())

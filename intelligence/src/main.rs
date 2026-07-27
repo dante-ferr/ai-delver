@@ -185,6 +185,7 @@ fn run_train(args: TrainArgs) -> Result<()> {
         ppo,
         device,
         on_event,
+        args.early_stop && !args.play,
     )
 }
 

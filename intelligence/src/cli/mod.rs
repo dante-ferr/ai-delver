@@ -106,6 +106,9 @@ pub struct TrainArgs {
     /// Put the agent to play the selected levels once without training, generating trajectories.
     #[arg(long, action = ArgAction::SetTrue)]
     pub play: bool,
+    /// Stop a level early once the policy converges (showcase mastery or return plateau).
+    #[arg(long, action = ArgAction::SetTrue)]
+    pub early_stop: bool,
 }
 
 pub fn emit<T: Serialize>(event: &str, value: T) {

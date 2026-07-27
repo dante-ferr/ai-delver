@@ -63,6 +63,7 @@ class TrainingClient:
         config_overrides: dict = None,
         model_bytes_b64: str = None,
         play: bool = False,
+        early_stop: bool = False,
     ) -> dict:
         """Builds the request payload dictionary expected by the server."""
         level_jsons = []
@@ -82,6 +83,8 @@ class TrainingClient:
         }
         if play:
             payload["play"] = True
+        if early_stop and not play:
+            payload["early_stop"] = True
         if runs_per_cycle is not None:
             payload["runs_per_cycle"] = runs_per_cycle
         if episodes_per_cycle is not None:
@@ -132,6 +135,7 @@ class TrainingClient:
         on_metrics: callable = None,
         on_model_weights: callable = None,
         on_checkpoint: callable = None,
+        on_info: callable = None,
     ):
         """Connects to the WebSocket endpoint and streams trajectory results via callbacks."""
         uri = f"ws://{self.server_url}/episode-trajectory/{session_id}"
@@ -202,6 +206,10 @@ class TrainingClient:
                                 response_json.get("cycle"),
                                 response_json.get("model_bytes_b64")
                             )
+
+                    elif response_type == "info":
+                        if on_info:
+                            on_info(response_json)
         except Exception as e:
             on_error(f"WebSocket stream failed: {e}")
 

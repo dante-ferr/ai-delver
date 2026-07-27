@@ -34,6 +34,19 @@ struct RehearsalLock {
 /// Cycles since first clear for a level (`None` = never cleared this session).
 type ClearProgress = HashMap<String, usize>;
 
+/// Consecutive victorious greedy showcases required per level before early-stop.
+/// Treats reliable clears as convergence to a local (potentially global) policy minimum.
+const EARLY_STOP_VICTORY_STREAK: usize = 3;
+
+/// Minimum cycles before return-plateau early-stop can fire (avoids aborting cold starts).
+const EARLY_STOP_MIN_CYCLES: usize = 8;
+
+/// Rolling window of `average_return` samples used for plateau detection.
+const EARLY_STOP_PLATEAU_WINDOW: usize = 5;
+
+/// Relative range (`(max-min) / (1+|mean|)`) below which returns count as flat.
+const EARLY_STOP_PLATEAU_EPS: f32 = 0.02;
+
 pub fn train(
     levels: Vec<Arc<Level>>,
     level_hashes: &[String],
@@ -47,6 +60,7 @@ pub fn train(
     mut ppo: Ppo,
     device: Device,
     mut on_event: EventSink,
+    early_stop: bool,
 ) -> Result<()> {
     let base_config = Arc::new(config);
     let mut clear_progress: ClearProgress = HashMap::new();
@@ -58,6 +72,10 @@ pub fn train(
 
     // Per-level cleanest victorious trajectory (fewest takeoffs) for Goal Rehearsal Lock.
     let mut rehearsal_locks: HashMap<String, RehearsalLock> = HashMap::new();
+    // Consecutive victorious greedy showcases per level hash (early-stop mastery signal).
+    let mut victory_streaks: HashMap<String, usize> = HashMap::new();
+    let mut recent_returns: Vec<f32> = Vec::with_capacity(EARLY_STOP_PLATEAU_WINDOW);
+    let mut finished_cycles = cycles;
 
     for cycle in 1..=cycles {
         if interrupted.load(Ordering::Relaxed) {
@@ -281,6 +299,10 @@ pub fn train(
                 Ok(result) => {
                     if result.victorious {
                         mark_level_cleared(&mut clear_progress, showcase_hash);
+                        let streak = victory_streaks.entry(showcase_hash.clone()).or_insert(0);
+                        *streak = streak.saturating_add(1);
+                    } else {
+                        victory_streaks.insert(showcase_hash.clone(), 0);
                     }
                     maybe_update_lock(
                         &mut rehearsal_locks,
@@ -302,6 +324,7 @@ pub fn train(
                     );
                 }
                 Err(error) => {
+                    victory_streaks.insert(showcase_hash.clone(), 0);
                     on_event(
                         "showcase",
                         json!({
@@ -376,10 +399,75 @@ pub fn train(
             let path = save_checkpoint(&ppo, &checkpoint_dir, cycle, "checkpoint")?;
             on_event("checkpoint", json!({"cycle": cycle, "path": path}));
         }
+
+        if early_stop {
+            recent_returns.push(reward_mean);
+            if recent_returns.len() > EARLY_STOP_PLATEAU_WINDOW {
+                recent_returns.remove(0);
+            }
+
+            let mastery = level_hashes.iter().all(|hash| {
+                victory_streaks.get(hash).copied().unwrap_or(0) >= EARLY_STOP_VICTORY_STREAK
+            });
+            let all_cleared = level_hashes
+                .iter()
+                .all(|hash| clear_progress.contains_key(hash));
+            let plateau = cycle >= EARLY_STOP_MIN_CYCLES
+                && all_cleared
+                && returns_have_plateaued(&recent_returns);
+
+            if mastery || plateau {
+                let reason = if mastery {
+                    format!(
+                        "Early-stop: greedy showcase mastery (≥{EARLY_STOP_VICTORY_STREAK} consecutive clears per level)."
+                    )
+                } else {
+                    format!(
+                        "Early-stop: average return plateaued after clears (local/global minima)."
+                    )
+                };
+                on_event(
+                    "info",
+                    json!({
+                        "message": reason,
+                        "early_stop": true,
+                        "cycle": cycle,
+                        "mastery": mastery,
+                        "plateau": plateau,
+                    }),
+                );
+                finished_cycles = cycle;
+                break;
+            }
+        }
     }
-    let path = save_checkpoint(&ppo, &checkpoint_dir, cycles, "final")?;
-    on_event("completed", json!({"cycles": cycles, "checkpoint": path}));
+    let path = save_checkpoint(&ppo, &checkpoint_dir, finished_cycles, "final")?;
+    on_event(
+        "completed",
+        json!({
+            "cycles": finished_cycles,
+            "early_stopped": early_stop && finished_cycles < cycles,
+            "checkpoint": path
+        }),
+    );
     Ok(())
+}
+
+fn returns_have_plateaued(recent_returns: &[f32]) -> bool {
+    if recent_returns.len() < EARLY_STOP_PLATEAU_WINDOW {
+        return false;
+    }
+    let min = recent_returns
+        .iter()
+        .copied()
+        .fold(f32::INFINITY, f32::min);
+    let max = recent_returns
+        .iter()
+        .copied()
+        .fold(f32::NEG_INFINITY, f32::max);
+    let mean = recent_returns.iter().sum::<f32>() / recent_returns.len() as f32;
+    let range = max - min;
+    range <= EARLY_STOP_PLATEAU_EPS * (1.0 + mean.abs())
 }
 
 fn build_envs(

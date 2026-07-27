@@ -137,6 +137,7 @@ def run_train(args):
             return
 
         is_play_mode = getattr(args, "play", False)
+        early_stop = bool(getattr(args, "early_stop", False)) and not is_play_mode
         base_runs_per_cycle = getattr(args, "runs_per_cycle", None)
         base_episodes_per_cycle = getattr(args, "episodes_per_cycle", None)
         base_cycles = int(args.cycles)
@@ -151,26 +152,35 @@ def run_train(args):
             )
             base_runs_per_cycle = None
             base_episodes_per_cycle = None
-        elif base_runs_per_cycle is not None and base_runs_per_cycle > 0:
-            print_json(
-                "info",
-                message=(
-                    f"Using runs_per_cycle={base_runs_per_cycle}; server will convert to "
-                    f"~{base_runs_per_cycle * episodes_per_run} episode slots "
-                    f"({episodes_per_run} slots per run)."
-                ),
-            )
         else:
-            if base_episodes_per_cycle is None or base_episodes_per_cycle <= 0:
-                print_json("error", message="train requires --runs-per-cycle or a positive --episodes-per-cycle")
-                return
-            remainder = base_episodes_per_cycle % env_batch_size
-            if remainder != 0:
-                adjusted = max(env_batch_size, round(base_episodes_per_cycle / env_batch_size) * env_batch_size)
-                print_json("info", message=f"Adjusted episodes-per-cycle from {base_episodes_per_cycle} to {adjusted} to align with env_batch_size ({env_batch_size}) constraints.")
-                base_episodes_per_cycle = adjusted
-                args.episodes_per_cycle = adjusted
-            base_runs_per_cycle = None
+            if early_stop:
+                print_json(
+                    "info",
+                    message=(
+                        "Early-stop enabled: each level stops once the policy converges "
+                        "(showcase mastery or return plateau), up to the configured cycle budget."
+                    ),
+                )
+            if base_runs_per_cycle is not None and base_runs_per_cycle > 0:
+                print_json(
+                    "info",
+                    message=(
+                        f"Using runs_per_cycle={base_runs_per_cycle}; server will convert to "
+                        f"~{base_runs_per_cycle * episodes_per_run} episode slots "
+                        f"({episodes_per_run} slots per run)."
+                    ),
+                )
+            else:
+                if base_episodes_per_cycle is None or base_episodes_per_cycle <= 0:
+                    print_json("error", message="train requires --runs-per-cycle or a positive --episodes-per-cycle")
+                    return
+                remainder = base_episodes_per_cycle % env_batch_size
+                if remainder != 0:
+                    adjusted = max(env_batch_size, round(base_episodes_per_cycle / env_batch_size) * env_batch_size)
+                    print_json("info", message=f"Adjusted episodes-per-cycle from {base_episodes_per_cycle} to {adjusted} to align with env_batch_size ({env_batch_size}) constraints.")
+                    base_episodes_per_cycle = adjusted
+                    args.episodes_per_cycle = adjusted
+                base_runs_per_cycle = None
 
         def episodes_per_cycle_for(runs, episodes_per_cycle):
             if runs is not None and runs > 0:
@@ -225,6 +235,7 @@ def run_train(args):
             "command",
             "checkpoint",
             "play",
+            "early_stop",
             "checkpoint_interval",
             "no_learning",
             # Review knobs are client curriculum state, not server HPs.
@@ -525,6 +536,8 @@ def run_train(args):
                 config_overrides=config_overrides if config_overrides else None,
                 model_bytes_b64=model_bytes_b64,
                 play=is_play_mode,
+                # Only early-stop single-level focus; review mixes should run their budget.
+                early_stop=early_stop and phase_name == "focus" and len(levels_list) == 1,
             )
 
             print_json("request_sent", message=f"Sending training request to http://{args.server}/train...")
@@ -626,6 +639,19 @@ def run_train(args):
 
             def on_error(err):
                 print_json("error", message=err)
+
+            def on_server_info(payload):
+                message = payload.get("message")
+                if not message:
+                    return
+                print_json(
+                    "info",
+                    message=message,
+                    early_stop=bool(payload.get("early_stop")),
+                    cycle=payload.get("cycle"),
+                    mastery=payload.get("mastery"),
+                    plateau=payload.get("plateau"),
+                )
 
             def on_metrics(step, loss, average_return, episodes):
                 nonlocal session_episodes_accumulated
@@ -738,6 +764,7 @@ def run_train(args):
                     on_metrics=on_metrics,
                     on_model_weights=on_model_weights,
                     on_checkpoint=on_checkpoint,
+                    on_info=on_server_info,
                 )
             except Exception as e:
                 print_json("error", message=f"WebSocket stream error: {e}")

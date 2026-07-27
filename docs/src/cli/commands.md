@@ -29,6 +29,7 @@ With multiple `--levels`, focus training is **sequential**: N cycles on the firs
 You can optionally configure checkpoints or override individual training and reward parameters from `config.toml` for the duration of the training session:
 * `--runs-per-cycle <int>`: Full-length run equivalents of experience per cycle (preferred).
 * `--episodes-per-cycle <int>`: Legacy collect-window slot budget (used when `--runs-per-cycle` is omitted).
+* `--early-stop`: Stop a focus level early once the policy converges (greedy showcase mastery streak or return plateau after clears), then proceed to the next level. Still respects the configured max cycle budget.
 * `--checkpoint-interval <int>`: Frequency (in cycles) to save intermediate checkpoint **bundles** under `data/agents/<agent_name>/checkpoints/<uuid>/` (default `0`, which disables periodic saving). Each bundle stores `model_weights.ot` plus a `curriculum.json` snapshot.
 * `--checkpoint <name_or_number>`: Checkpoint id, bundle dir name, or legacy cycle number to warm-start from. Restores weights and, when present, the bundled curriculum (review state).
 * `--learning-rate <float>`: Learning rate for the policy optimizer.

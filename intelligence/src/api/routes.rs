@@ -45,6 +45,10 @@ pub struct TrainRequest {
     pub model_bytes_b64: Option<String>,
     #[serde(default)]
     pub play: bool,
+    /// Stop a level's cycle budget early once the policy converges (mastery streak
+    /// or return plateau after clears). Client sequential focus then advances.
+    #[serde(default)]
+    pub early_stop: bool,
 }
 
 pub async fn init(State(state): State<Arc<AppState>>) -> Json<Value> {
@@ -212,17 +216,24 @@ fn run_session_training(
     apply_config_overrides(&mut config, request.config_overrides.as_ref());
 
     let episodes_per_cycle = resolve_episodes_per_cycle(&request, &config)?;
+    let early_stop = request.early_stop && !request.play;
     let _ = session.event_tx.send(ReplayMessage::Event(json!({
         "type": "info",
         "message": format!(
-            "Training budget: {} episode slot(s) per cycle ({} run(s) × {} slots/run, or legacy episodes).",
+            "Training budget: {} episode slot(s) per cycle ({} run(s) × {} slots/run, or legacy episodes).{}",
             episodes_per_cycle,
             request.runs_per_cycle.unwrap_or(0),
-            config.episodes_per_run()
+            config.episodes_per_run(),
+            if early_stop {
+                " Early-stop enabled (mastery streak or return plateau)."
+            } else {
+                ""
+            }
         ),
         "runs_per_cycle": request.runs_per_cycle,
         "episodes_per_cycle": episodes_per_cycle,
         "episodes_per_run": config.episodes_per_run(),
+        "early_stop": early_stop,
     })));
 
     let mut levels = Vec::with_capacity(request.levels.len());
@@ -392,6 +403,7 @@ fn run_session_training(
         ppo,
         device,
         on_event,
+        early_stop,
     )?;
     Ok(())
 }

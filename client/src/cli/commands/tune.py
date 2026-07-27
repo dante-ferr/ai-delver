@@ -5,6 +5,12 @@ from pathlib import Path
 
 import optuna
 
+from src.cli.commands.review_planner import (
+    DEFAULT_REVIEW_EPISODES_PER_LEVEL,
+    DEFAULT_REVIEW_LEVELS_PER_ARM,
+)
+from src.config import config
+
 
 def print_json(event: str, **kwargs):
     """Utility to print a structured JSON event to stdout."""
@@ -250,10 +256,20 @@ def run_tune(args):
 
     review_knobs = {
         "focus_episodes_between_passes": getattr(
-            args, "focus_episodes_between_passes", 1500
+            args,
+            "focus_episodes_between_passes",
+            int(config.REVIEW.TUNE_FOCUS_EPISODES_BETWEEN_PASSES),
         ),
-        "review_episodes_per_level": getattr(args, "review_episodes_per_level", 100),
-        "review_levels_per_arm": getattr(args, "review_levels_per_arm", 5),
+        "review_episodes_per_level": getattr(
+            args,
+            "review_episodes_per_level",
+            DEFAULT_REVIEW_EPISODES_PER_LEVEL,
+        ),
+        "review_levels_per_arm": getattr(
+            args,
+            "review_levels_per_arm",
+            DEFAULT_REVIEW_LEVELS_PER_ARM,
+        ),
     }
 
     print_json(

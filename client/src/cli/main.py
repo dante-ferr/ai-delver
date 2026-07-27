@@ -5,11 +5,13 @@ import os
 # Configure Python path using bootstrap setup (which resides in src/../)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import bootstrap
+from src.config import config
 
 
 def main():
     parser = argparse.ArgumentParser(description="AI Delver CLI Client")
     subparsers = parser.add_subparsers(dest="command", required=True)
+    review_cfg = config.REVIEW
 
     # Subcommand: train
     train_p = subparsers.add_parser("train", help="Starts a training session")
@@ -39,6 +41,15 @@ def main():
     train_p.add_argument("--checkpoint", default=None, help="Checkpoint id, cycle number, or filename to load for warm-start")
     train_p.add_argument("--no-learning", action="store_true", help="Execute random actions only without gradient updates for profiling/testing")
     train_p.add_argument("--play", action="store_true", help="Puts the agent to play the selected levels once without training, generating trajectories.")
+    train_p.add_argument(
+        "--early-stop",
+        action="store_true",
+        help=(
+            "Stop training on a level early once the policy converges "
+            "(greedy showcase mastery streak or return plateau after clears), "
+            "then proceed to the next level. Still respects the max cycle budget."
+        ),
+    )
 
     # Optional hyperparameter overrides
     train_p.add_argument("--learning-rate", type=float, default=None, help="Learning rate (PPO)")
@@ -142,19 +153,23 @@ def main():
     tune_p.add_argument(
         "--focus-episodes-between-passes",
         type=int,
-        default=1500,
-        help="Review arm interval E for each trial (default 1500 so reviews fire mid-curriculum)",
+        default=int(review_cfg.TUNE_FOCUS_EPISODES_BETWEEN_PASSES),
+        help=(
+            "Review arm interval E for each trial "
+            f"(default {int(review_cfg.TUNE_FOCUS_EPISODES_BETWEEN_PASSES)} "
+            "so reviews fire mid-curriculum)"
+        ),
     )
     tune_p.add_argument(
         "--review-episodes-per-level",
         type=int,
-        default=100,
+        default=int(review_cfg.REVIEW_EPISODES_PER_LEVEL),
         help="Review budget R (episode slots per reviewed level)",
     )
     tune_p.add_argument(
         "--review-levels-per-arm",
         type=int,
-        default=5,
+        default=int(review_cfg.REVIEW_LEVELS_PER_ARM),
         help="Review breadth K (max prior levels per review arm)",
     )
     tune_p.add_argument(

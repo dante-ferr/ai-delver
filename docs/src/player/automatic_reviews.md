@@ -23,15 +23,17 @@ Longer-term, parameter protection (e.g. EWC) is tracked on the [engineering road
 
 ---
 
-## 2. Knobs (defaults)
+## 2. Knobs (defaults in `client/src/config.json` → `review`)
 
-| Knob | Default | Meaning |
+| Knob | Config key | Meaning |
 | --- | --- | --- |
-| `E` | **8000** | Focus episodes between review arms (`focus_episodes_between_passes`) |
-| `R` | **100** | Target episode slots **per level** in a review chunk (`review_episodes_per_level`) |
-| `K` | **5** | Max prior levels scheduled when arming (`review_levels_per_arm`) |
+| `E` | `focus_episodes_between_passes` | Focus episodes between review arms |
+| `R` | `review_episodes_per_level` | Target episode slots **per level** in a review chunk |
+| `K` | `review_levels_per_arm` | Max prior levels scheduled when arming |
 
-Per arm, review cost is about `R × K` = **500** episode slots vs **8000** focus (~6% overhead), whether the career has 10 or 50 maps. Full history is covered across many arms via a round-robin cursor (`review_arm_cursor`), not in one giant sweep.
+`tune` uses `tune_focus_episodes_between_passes` for `E` so reviews fire mid-curriculum during Optuna trials. CLI flags (`--focus-episodes-between-passes`, etc.) override and persist into agent metadata.
+
+Per arm, review cost is about `R × K` episode slots vs `E` focus (~6% overhead at shipped defaults), whether the career has 10 or 50 maps. Full history is covered across many arms via a round-robin cursor (`review_arm_cursor`), not in one giant sweep.
 
 ---
 
@@ -165,7 +167,7 @@ Checkpoint bundles store the same curriculum snapshot beside weights so restores
 
 | Piece | Path |
 | --- | --- |
+| Defaults (`E`/`R`/`K`) | `client/src/config.json` → `review` |
 | Planner / commit | `client/src/cli/commands/review_planner.py` |
 | Train wiring / phase chain | `client/src/cli/commands/train.py` |
 | Static env mix | `intelligence/src/trainer/loop.rs` |
-| Defaults | `E=8000`, `R=100`, `K=5` |

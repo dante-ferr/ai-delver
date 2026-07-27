@@ -24,5 +24,11 @@
       "subtitle_size": 18
     },
     "section_spacing": 48
+  },
+  "review": {
+    "focus_episodes_between_passes": 16000,
+    "review_episodes_per_level": 100,
+    "review_levels_per_arm": 5,
+    "tune_focus_episodes_between_passes": 1500
   }
 }

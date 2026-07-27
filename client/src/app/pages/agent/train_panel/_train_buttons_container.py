@@ -198,6 +198,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
             elif event == "error":
                 msg = data.get("message", "An unknown error occurred.")
                 print(f"[CLI Error] {msg}")
+                training_state_manager.remove_review_process_log()
                 training_state_manager.reset_states()
                 MessageOverlay(msg, subject="Error")
                 continue
@@ -278,6 +279,8 @@ class TrainButtonsContainer(ctk.CTkFrame):
             "--agent", agent_name,
             "--server", gui_training_client.server_url
         ]
+        if training_state_manager.early_stop:
+            cmd.append("--early-stop")
 
         try:
             self.train_process = subprocess.Popen(
@@ -316,6 +319,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
             elif event == "error":
                 msg = data.get("message", "An unknown error occurred.")
                 print(f"[CLI Error] {msg}")
+                training_state_manager.remove_review_process_log()
                 training_state_manager.reset_states()
                 MessageOverlay(msg, subject="Error")
                 continue
@@ -333,6 +337,10 @@ class TrainButtonsContainer(ctk.CTkFrame):
                 expected = int(data.get("expected_progress_steps") or 0)
                 progress_base = int(data.get("progress_base") or 0)
                 print(f"[CLI Info] Training phase: {phase}")
+                if phase == "focus":
+                    # Review bar is only for the review phase; hide it when focus resumes
+                    # or when the chain continues after a review commit.
+                    training_state_manager.remove_review_process_log()
                 if expected > 0:
                     if phase == "review":
                         training_state_manager.show_review_process_log(expected)
@@ -369,10 +377,13 @@ class TrainButtonsContainer(ctk.CTkFrame):
                 duration = time.time() - start_time
                 minutes, seconds = divmod(duration, 60)
                 time_str = f"{int(minutes)}m {int(seconds)}s" if minutes > 0 else f"{seconds:.2f}s"
+                # Drop review bar before reset in case the session ended on a review phase.
+                training_state_manager.remove_review_process_log()
                 training_state_manager.reset_states()
                 trajectory_stats_state_manager.refresh_stats()
                 MessageOverlay(f"Training session completed in {time_str}.", subject="Success")
             elif event == "interrupted":
+                training_state_manager.remove_review_process_log()
                 training_state_manager.reset_states()
                 trajectory_stats_state_manager.refresh_stats()
                 MessageOverlay("Training session interrupted.", subject="Success")

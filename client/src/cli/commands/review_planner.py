@@ -15,9 +15,13 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
-DEFAULT_FOCUS_EPISODES_BETWEEN_PASSES = 8000
-DEFAULT_REVIEW_EPISODES_PER_LEVEL = 100
-DEFAULT_REVIEW_LEVELS_PER_ARM = 5
+from src.config import config
+
+DEFAULT_FOCUS_EPISODES_BETWEEN_PASSES = int(
+    config.REVIEW.FOCUS_EPISODES_BETWEEN_PASSES
+)
+DEFAULT_REVIEW_EPISODES_PER_LEVEL = int(config.REVIEW.REVIEW_EPISODES_PER_LEVEL)
+DEFAULT_REVIEW_LEVELS_PER_ARM = int(config.REVIEW.REVIEW_LEVELS_PER_ARM)
 
 CURRICULUM_KEYS = ("trained_levels", "level_hashes", "review_state")
 

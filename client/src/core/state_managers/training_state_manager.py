@@ -33,6 +33,8 @@ class TrainingStateManager(StateManager):
         self.amount_of_cycles: int = 0
         self.runs_per_cycle: int = 0
         self.checkpoint_interval: int = 5
+        # When True, CLI passes --early-stop so levels advance on policy convergence.
+        self.early_stop: bool = False
         # True while a Play Levels session is active (vs Train).
         self.play_session: bool = False
 
@@ -108,6 +110,11 @@ class TrainingStateManager(StateManager):
     def update_review_process_log(self, current_cycle: int):
         if self.train_logs_panel:
             self.train_logs_panel.update_review_progress(current_cycle)
+
+    def remove_review_process_log(self):
+        if self.train_logs_panel:
+            self.train_logs_panel.remove_review_progress()
+
 
     def _update_ui_state(self):
         """

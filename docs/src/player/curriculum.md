@@ -68,7 +68,7 @@ See **[Automatic Reviews](automatic_reviews.md)** for the full cadence, static-m
 
 Summary:
 
-* Arms after ~**8000 focus episodes** (`E`), scheduling at most **`K=5`** priors with ~**`R=100`** episode slots each (review-only mix; budgeted cycles).
+* Arms after `E` focus episodes (`focus_episodes_between_passes` in `client/src/config.json`), scheduling at most `K` priors with ~`R` episode slots each (review-only mix; budgeted cycles).
 * One Train click can **auto-chain** focus → review when `E` is crossed (dual GUI progress bars).
 * Curriculum updates only after `model_weights` are written.
 * Review-level showcase trajectories are **not persisted** on the client; coach/focus showcases still save as usual.

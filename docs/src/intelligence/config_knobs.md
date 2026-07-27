@@ -13,7 +13,7 @@ Usually leave defaults alone. Coaching changes **weights**, not engine constants
 | Invent skills / clear new packs | Discovery rewards, entropy, LR | Forever-harsh static jump tax |
 | Keep clears neat after invent | Lock + anneal knobs | Banning actions |
 | Capacity / lagging mid-pack | Pass 2 `--tune-architecture` | Random width thrash every trial |
-| Retention across curriculum | Review E/R/K, consolidate levels | Raising finish only |
+| Retention across curriculum | Review E/R/K in `client/src/config.json`, consolidate levels | Raising finish only |
 
 ## Discovery band (invent)
 

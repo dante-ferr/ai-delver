@@ -3,6 +3,7 @@ from agent.config import AGENT_SAVE_FOLDER_PATH
 from app.components.overlay.file_loader_overlay.file_loader_overlay_spawner import (
     FileLoaderOverlaySpawner,
 )
+from state_managers import training_state_manager
 
 
 class _AgentLoaderOverlay(FileLoaderOverlay):
@@ -50,7 +51,6 @@ class _AgentLoaderOverlay(FileLoaderOverlay):
             if event_data.get("event") == "agent_loaded":
                 super()._load()
                 agent_loader.load_agent(agent_path)
-                from state_managers import training_state_manager
                 training_state_manager.clear_nerd_metrics()
                 training_state_manager.all_time_loss_history = []
                 training_state_manager.all_time_return_history = []
@@ -67,6 +67,7 @@ class AgentLoadButton(LoadButton):
 
     def __init__(self, master, **kwargs):
         super().__init__(master, command=self._on_click, **kwargs)
+        training_state_manager.add_disable_on_train_element(self)
 
     def _on_click(self):
         FileLoaderOverlaySpawner(AGENT_SAVE_FOLDER_PATH, "agent", _AgentLoaderOverlay)

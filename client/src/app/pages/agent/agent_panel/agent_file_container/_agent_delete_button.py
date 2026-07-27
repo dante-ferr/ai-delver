@@ -3,6 +3,7 @@ from agent.config import AGENT_SAVE_FOLDER_PATH
 from app.components.overlay.file_loader_overlay.file_loader_overlay_spawner import (
     FileLoaderOverlaySpawner,
 )
+from state_managers import training_state_manager
 
 
 class _AgentDeleterOverlay(FileDeleterOverlay):
@@ -22,6 +23,7 @@ class AgentDeleteButton(DeleteButton):
 
     def __init__(self, master, **kwargs):
         super().__init__(master, command=self._on_click, **kwargs)
+        training_state_manager.add_disable_on_train_element(self)
 
     def _on_click(self):
         FileLoaderOverlaySpawner(AGENT_SAVE_FOLDER_PATH, "agent", _AgentDeleterOverlay)

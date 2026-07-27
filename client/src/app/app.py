@@ -24,7 +24,9 @@ class App(ctk.CTk):
         super().__init__()
         initialize_all_state_managers()
 
-        self.title("Ai Delver")
+        from src.config import config
+
+        self.title(config.WINDOW_TITLE)
         self.attributes("-zoomed", True)
         self.minsize(width=360, height=480)
 
@@ -109,6 +111,8 @@ class App(ctk.CTk):
 
     def select_page(self, page_name: str):
         page = self.pages[page_name]
+        if self.selected_page is page:
+            return
 
         if self.selected_page is not None:
             self.selected_page.grid_forget()
@@ -117,6 +121,7 @@ class App(ctk.CTk):
         self.selected_page = page
 
         page.grid(row=0, column=0, sticky="nsew")
+        self.navbar.refresh_document_title()
 
     def clear_focus(self, event):
         widget_under_cursor = self.winfo_containing(event.x_root, event.y_root)

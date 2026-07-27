@@ -25,6 +25,24 @@ subtitle_size = 18
 [style]
 section_spacing = 48
 
+# Global editor chrome (session header above page content).
+[style.navbar]
+height = 42
+pad_x = 12
+pad_y = 6
+brand = "Ai Delver"
+brand_gap = 28
+tab_font_size = 14
+tab_height = 30
+# Horizontal padding (spaces) inside each page tab label.
+tab_pad_chars = 3
+title_max_chars = 40
+status_connected_color = "#6BBF6B"
+status_disconnected_color = "#D14E4E"
+status_loading_color = "#C9A227"
+status_muted_color = "#8A8F98"
+status_training_color = "#E8A05A"
+
 [review]
 focus_episodes_between_passes = 16000
 review_episodes_per_level = 100

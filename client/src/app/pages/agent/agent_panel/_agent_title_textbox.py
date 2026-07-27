@@ -21,3 +21,12 @@ class AgentTitleTextbox(TitleTextbox):
             # Persist display name into session meta without binding.
             if hasattr(agent_loader, "_write_session_meta"):
                 agent_loader._write_session_meta()
+        self._refresh_navbar_title()
+
+    @staticmethod
+    def _refresh_navbar_title():
+        from app_manager import app_manager
+
+        editor = getattr(app_manager, "_editor", None)
+        if editor is not None:
+            editor.navbar.refresh_document_title()

@@ -15,3 +15,12 @@ class LevelTitleTextbox(TitleTextbox):
         if new_name != level_loader.level.name:
             level_loader.level.name = new_name
             level_loader.mark_dirty()
+        self._refresh_navbar_title()
+
+    @staticmethod
+    def _refresh_navbar_title():
+        from app_manager import app_manager
+
+        editor = getattr(app_manager, "_editor", None)
+        if editor is not None:
+            editor.navbar.refresh_document_title()

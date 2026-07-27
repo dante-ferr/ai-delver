@@ -76,9 +76,8 @@ class AgentSaveButton(SaveButton):
                         continue
 
             if event_data.get("event") == "agent_saved":
+                # Bind + clear dirty; keep the Agent page mounted (no full reload).
                 agent_loader.bind_after_save(agent_name)
-                from app_manager import app_manager
-                app_manager.editor_app.restart_all_pages()
                 super()._save()
             else:
                 raise RuntimeError(event_data.get("message", "Failed to save agent via CLI."))

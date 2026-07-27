@@ -2,6 +2,7 @@ import customtkinter as ctk
 from ._level_list import LevelList
 from ._level_add_button import LevelAddButton
 from app.components import SectionTitle
+from app.fonts import app_font
 from typing import Callable
 from src.config import config
 
@@ -20,7 +21,7 @@ class LevelSelector(ctk.CTkFrame):
         first_label = ctk.CTkLabel(
             header,
             text="First to train...",
-            font=ctk.CTkFont(size=config.STYLE.FONT.SMALL_SIZE),
+            font=app_font(size=config.STYLE.FONT.SMALL_SIZE),
         )
         first_label.pack(side="left", pady=0)
 
@@ -33,6 +34,6 @@ class LevelSelector(ctk.CTkFrame):
         last_label = ctk.CTkLabel(
             self,
             text="... last to train",
-            font=ctk.CTkFont(size=config.STYLE.FONT.SMALL_SIZE),
+            font=app_font(size=config.STYLE.FONT.SMALL_SIZE),
         )
         last_label.pack(anchor="e", padx=8, pady=(2, 8))

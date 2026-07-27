@@ -3,6 +3,7 @@ from src.config import config
 from .resize_level_dialog.resize_level_dialog import ResizeLevelDialog
 from .level_file_container import LevelFileContainer
 from app.components import StandardButton
+from app.fonts import app_font
 from src.config import config
 
 class BottomFrame(ctk.CTkFrame):
@@ -26,7 +27,7 @@ class BottomFrame(ctk.CTkFrame):
         zoom_label = ctk.CTkLabel(
             zoom_container,
             text="Zoom",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         zoom_label.pack(padx=(0, 4), anchor="w")
 
@@ -53,7 +54,7 @@ class BottomFrame(ctk.CTkFrame):
             variable=canvas_state_manager.vars["grid_lines"],
             checkbox_width=20,
             checkbox_height=20,
-            font=ctk.CTkFont(size=config.STYLE.FONT.SMALL_SIZE),
+            font=app_font(size=config.STYLE.FONT.SMALL_SIZE),
         )
         grid_toggle.grid(row=0, column=1, **self.GRID_CELL_SPACEMENT)
 
@@ -61,7 +62,7 @@ class BottomFrame(ctk.CTkFrame):
             self,
             text="Resize Level",
             command=self._open_resize_level_dialog,
-            font=ctk.CTkFont(size=config.STYLE.FONT.SMALL_SIZE),
+            font=app_font(size=config.STYLE.FONT.SMALL_SIZE),
         )
         resize_level_button.grid(
             row=1, column=0, columnspan=2, sticky="ew", **self.GRID_CELL_SPACEMENT

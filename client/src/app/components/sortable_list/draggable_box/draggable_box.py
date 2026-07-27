@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from app.fonts import app_font
 from src.config import config
 from ._delete_button import DeleteButton
 from typing import TYPE_CHECKING, cast, Callable, Sequence, Union
@@ -36,7 +37,7 @@ class DraggableBox(ctk.CTkFrame):
         self.label = ctk.CTkLabel(
             self,
             text=self.name,
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
             anchor="w",
             padx=10,
         )

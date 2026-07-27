@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from app.fonts import app_font
 from PIL import Image
 from loaders import level_loader, agent_loader
 from state_managers import training_state_manager
@@ -54,7 +55,7 @@ class Navbar(ctk.CTkFrame):
         self._brand = ctk.CTkLabel(
             self._left,
             text=nav.BRAND,
-            font=ctk.CTkFont(
+            font=app_font(
                 size=config.STYLE.FONT.STANDARD_SIZE,
                 weight="bold",
             ),
@@ -67,7 +68,7 @@ class Navbar(ctk.CTkFrame):
             self,
             text="",
             anchor="center",
-            font=ctk.CTkFont(size=config.STYLE.FONT.SMALL_SIZE),
+            font=app_font(size=config.STYLE.FONT.SMALL_SIZE),
             text_color=("gray40", nav.STATUS_MUTED_COLOR),
         )
         self._title_label.grid(row=0, column=1, sticky="ew", padx=8, pady=pad_y)
@@ -78,7 +79,7 @@ class Navbar(ctk.CTkFrame):
         self._training_label = ctk.CTkLabel(
             self._right,
             text="",
-            font=ctk.CTkFont(size=config.STYLE.FONT.SMALL_SIZE),
+            font=app_font(size=config.STYLE.FONT.SMALL_SIZE),
             text_color=nav.STATUS_TRAINING_COLOR,
         )
         self._training_label.pack(side="right", padx=(12, 0))
@@ -86,7 +87,7 @@ class Navbar(ctk.CTkFrame):
         self._status_label = ctk.CTkLabel(
             self._right,
             text="",
-            font=ctk.CTkFont(size=config.STYLE.FONT.SMALL_SIZE),
+            font=app_font(size=config.STYLE.FONT.SMALL_SIZE),
         )
         self._status_label.pack(side="right")
 
@@ -124,7 +125,7 @@ class Navbar(ctk.CTkFrame):
             self._left,
             values=display_names,
             command=self._on_tab_selected,
-            font=ctk.CTkFont(size=nav.TAB_FONT_SIZE),
+            font=app_font(size=nav.TAB_FONT_SIZE),
             height=nav.TAB_HEIGHT,
         )
         self._tab_button.pack(side="left")

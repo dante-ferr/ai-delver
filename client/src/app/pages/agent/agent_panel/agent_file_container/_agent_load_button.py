@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from app.components import FileLoaderOverlay, LoadButton
+from app.fonts import app_font
 from agent.config import AGENT_SAVE_FOLDER_PATH, SESSION_STORAGE_KEY
 from app.components.overlay.file_loader_overlay.file_loader_overlay_spawner import (
     FileLoaderOverlaySpawner,
@@ -94,7 +95,7 @@ class AgentAutosaveCheckbox(ctk.CTkCheckBox):
             command=self._on_toggle,
             checkbox_width=20,
             checkbox_height=20,
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
             **kwargs,
         )
         training_state_manager.add_disable_on_train_element(self)

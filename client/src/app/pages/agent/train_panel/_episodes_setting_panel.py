@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from app.components import RangeSliderInput
+from app.fonts import app_font
 from typing import Callable
 from state_managers import training_state_manager
 from src.config import config
@@ -69,7 +70,7 @@ class EpisodesSettingPanel(ctk.CTkFrame):
             command=self._set_early_stop,
             checkbox_width=20,
             checkbox_height=20,
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         self.early_stop_checkbox.pack(anchor="w", pady=(0, 0))
         training_state_manager.add_disable_on_train_element(self.early_stop_checkbox)

@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from app.fonts import app_font
 from src.config import config
 
 class LoadingLog(ctk.CTkFrame):
@@ -17,6 +18,6 @@ class LoadingLog(ctk.CTkFrame):
             self,
             text=text,
             anchor="w",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE, weight="bold"),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE, weight="bold"),
         )
         self.label.grid(row=0, column=1, padx=0, pady=5, sticky="ew")

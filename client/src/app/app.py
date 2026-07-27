@@ -5,10 +5,12 @@ from .pages.agent import AgentPage
 from .pages import Page
 from .navbar import Navbar
 from .theme import theme
+from .fonts import init_fonts
 
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme(str(theme.path))
+init_fonts()
 
 PAGE_COMPONENTS = {
     "level_editor": LevelEditor,

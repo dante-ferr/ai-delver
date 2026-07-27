@@ -1,6 +1,7 @@
 import customtkinter as ctk
 import asyncio
 from app.components import StandardButton
+from app.fonts import app_font
 from src.config import config
 
 class ServerConnectionPanel(ctk.CTkFrame):
@@ -10,7 +11,7 @@ class ServerConnectionPanel(ctk.CTkFrame):
         self.label = ctk.CTkLabel(
             self,
             text="Training server is not connected",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         self.label.pack(pady=(20, 5))
 

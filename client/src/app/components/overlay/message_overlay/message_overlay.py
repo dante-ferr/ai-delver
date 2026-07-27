@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from app.fonts import app_font
 from typing import Callable
 from ..overlay import Overlay
 from src.config import config
@@ -35,7 +36,7 @@ class MessageOverlay(Overlay):
             text_container,
             text=message,
             wraplength=240,
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         label.pack(pady=6.4, anchor="w", fill="x")
 
@@ -44,7 +45,7 @@ class MessageOverlay(Overlay):
                 text_container,
                 text=paragraph,
                 wraplength=240,
-                font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+                font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
             )
             paragraph_label.pack(pady=2, anchor="w", fill="x")
 
@@ -67,7 +68,7 @@ class MessageOverlay(Overlay):
                     self.button_container,
                     text="Ok",
                     command=self._close,
-                    font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+                    font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
                 )
             ]
         else:
@@ -84,7 +85,7 @@ class MessageOverlay(Overlay):
                         self.button_container,
                         text=text,
                         command=_command_callback,
-                        font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+                        font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
                     )
                 )
 

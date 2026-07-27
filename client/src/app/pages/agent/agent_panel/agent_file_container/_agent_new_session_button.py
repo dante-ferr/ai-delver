@@ -1,6 +1,7 @@
 import customtkinter as ctk
 
 from app.components import StandardButton
+from app.fonts import app_font
 from app.components.overlay.message_overlay import MessageOverlay
 from state_managers import training_state_manager
 from src.config import config
@@ -14,7 +15,7 @@ class AgentNewSessionButton(StandardButton):
             master,
             text="New Delver",
             command=self._on_click,
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
             width=96,
             **kwargs,
         )

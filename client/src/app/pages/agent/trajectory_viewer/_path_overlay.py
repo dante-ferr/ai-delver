@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from app.fonts import canvas_font
 from src.app.components.minimap._tile_animation import MinimapTileAnimation
 
 if TYPE_CHECKING:
@@ -40,7 +41,7 @@ class PathOverlay:
             ex,
             ey,
             text=marker_text,
-            font=("Arial", int(max(7, scale * 0.5))),
+            font=canvas_font(int(max(7, scale * 0.5))),
             tags=("marker",),
         )
 

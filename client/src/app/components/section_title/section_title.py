@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from app.fonts import app_font
 from src.config import config
 
 class SectionTitle(ctk.CTkLabel):
@@ -7,7 +8,7 @@ class SectionTitle(ctk.CTkLabel):
         super().__init__(
             master,
             text=text,
-            font=ctk.CTkFont(size=config.STYLE.FONT.SUBTITLE_SIZE, weight="bold"),
+            font=app_font(size=config.STYLE.FONT.SUBTITLE_SIZE, weight="bold"),
             anchor="w",
             fg_color="transparent",
         )

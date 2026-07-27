@@ -1,6 +1,7 @@
 import customtkinter as ctk
 
 from app.components import StandardButton
+from app.fonts import app_font
 from app.components.overlay.checkpoint_restore_overlay import CheckpointRestoreOverlay
 from app.components.overlay.message_overlay import MessageOverlay
 from loaders import agent_loader
@@ -16,7 +17,7 @@ class AgentRestoreCheckpointButton(StandardButton):
             master,
             text="Restore",
             command=self._on_click,
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
             width=72,
             **kwargs,
         )

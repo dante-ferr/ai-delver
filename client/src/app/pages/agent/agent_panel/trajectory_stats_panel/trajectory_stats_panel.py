@@ -8,6 +8,7 @@ from state_managers import trajectory_stats_state_manager, training_state_manage
 from src.app.components import LoadingLogsPanel, SectionTitle, MouseWheelScrollableFrame
 from loaders import agent_loader
 from app.components import StandardButton
+from app.fonts import app_font, canvas_font
 from src.config import config
 from bootstrap import PROJECT_ROOT
 
@@ -102,7 +103,7 @@ class StatsMiniGraph(ctk.CTkCanvas):
             width / 2, 8,
             text=self.title,
             fill="#ffffff",
-            font=("Arial", 9, "bold")
+            font=canvas_font(9, bold=True)
         )
 
         # Draw axes
@@ -122,7 +123,7 @@ class StatsMiniGraph(ctk.CTkCanvas):
                 width / 2, height / 2,
                 text=self.empty_text,
                 fill="#888888",
-                font=("Arial", 9)
+                font=canvas_font(9)
             )
             return
 
@@ -158,7 +159,7 @@ class StatsMiniGraph(ctk.CTkCanvas):
                 text=val_str,
                 anchor="e",
                 fill="#aaaaaa",
-                font=("Arial", 7)
+                font=canvas_font(7)
             )
 
         # Draw X labels (first and last index)
@@ -167,14 +168,14 @@ class StatsMiniGraph(ctk.CTkCanvas):
             text="1",
             anchor="n",
             fill="#aaaaaa",
-            font=("Arial", 7)
+            font=canvas_font(7)
         )
         self.create_text(
             width - margin_right, height - margin_bottom + 4,
             text=str(n),
             anchor="n",
             fill="#aaaaaa",
-            font=("Arial", 7)
+            font=canvas_font(7)
         )
 
         # Draw data line
@@ -227,7 +228,7 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
             command=self._open_all_stats,
             width=120
         )
-        self.all_stats_button.pack(anchor="w", pady=(12, 0))
+        self.all_stats_button.pack(anchor="w", pady=(8, 0))
 
         self.level_archive_button = StandardButton(
             self,
@@ -235,7 +236,7 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
             command=self._open_level_archive,
             width=120,
         )
-        self.level_archive_button.pack(anchor="w", pady=(8, 0))
+        self.level_archive_button.pack(anchor="w", pady=(4, 0))
 
         # Register callbacks to refresh stats automatically
         trajectory_stats_state_manager.add_on_refresh_stats_callback(
@@ -346,9 +347,9 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
                     self.stats_container,
                     text=f"Error: {stats['error']}",
                     text_color="red",
-                    font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+                    font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
                 )
-                label.pack(anchor="w", padx=4, pady=2)
+                label.pack(anchor="w", padx=4, pady=0)
                 trajectory_stats_state_manager.victories_history = []
                 trajectory_stats_state_manager.steps_history = []
             elif stats:
@@ -359,9 +360,9 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
                     label = ctk.CTkLabel(
                         self.stats_container,
                         text=f"{stat_name.capitalize()}: {stat_value}",
-                        font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+                        font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
                     )
-                    label.pack(anchor="w", padx=4, pady=2)
+                    label.pack(anchor="w", padx=4, pady=0)
 
                 trajectory_stats_state_manager.victories_history = list(
                     stats.get("victories_history", []) or []
@@ -373,9 +374,9 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
                 label = ctk.CTkLabel(
                     self.stats_container,
                     text="No stats found.",
-                    font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+                    font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
                 )
-                label.pack(anchor="w", padx=4, pady=2)
+                label.pack(anchor="w", padx=4, pady=0)
                 trajectory_stats_state_manager.victories_history = []
                 trajectory_stats_state_manager.steps_history = []
 
@@ -428,14 +429,14 @@ class AllStatsWindow(ctk.CTkToplevel):
         header = ctk.CTkLabel(
             self,
             text="Dojo All Stats",
-            font=ctk.CTkFont(size=20, weight="bold"),
+            font=app_font(size=20, weight="bold"),
         )
         header.grid(row=0, column=0, padx=20, pady=(16, 4), sticky="w")
 
         subtitle = ctk.CTkLabel(
             self,
             text="Trajectory and training metrics across all-time history and the current or latest session.",
-            font=ctk.CTkFont(size=11),
+            font=app_font(size=11),
             text_color="#888888",
         )
         subtitle.grid(row=1, column=0, padx=20, pady=(0, 12), sticky="w")
@@ -444,7 +445,7 @@ class AllStatsWindow(ctk.CTkToplevel):
             self,
             values=[self.ALL_TIME, self.CURRENT_SESSION],
             command=self._on_page_selected,
-            font=ctk.CTkFont(size=13),
+            font=app_font(size=13),
         )
         self.page_selector.set(self.ALL_TIME)
         self.page_selector.grid(row=2, column=0, padx=20, pady=(0, 12), sticky="ew")
@@ -467,7 +468,7 @@ class AllStatsWindow(ctk.CTkToplevel):
             height=self.GRAPH_HEIGHT,
         )
         self.all_time_loss_label = ctk.CTkLabel(
-            self.graphs_container, text="Loss", font=ctk.CTkFont(size=12, weight="bold")
+            self.graphs_container, text="Loss", font=app_font(size=12, weight="bold")
         )
         self.all_time_loss_graph = StatsMiniGraph(
             self.graphs_container, title="", line_color="#ef4444", height=self.GRAPH_HEIGHT
@@ -475,7 +476,7 @@ class AllStatsWindow(ctk.CTkToplevel):
         self.all_time_return_label = ctk.CTkLabel(
             self.graphs_container,
             text="Average Return",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=app_font(size=12, weight="bold"),
         )
         self.all_time_return_graph = StatsMiniGraph(
             self.graphs_container, title="", line_color="#3b82f6", height=self.GRAPH_HEIGHT
@@ -483,7 +484,7 @@ class AllStatsWindow(ctk.CTkToplevel):
 
         # Current Session graphs
         self.current_loss_label = ctk.CTkLabel(
-            self.graphs_container, text="Loss", font=ctk.CTkFont(size=12, weight="bold")
+            self.graphs_container, text="Loss", font=app_font(size=12, weight="bold")
         )
         self.current_loss_graph = StatsMiniGraph(
             self.graphs_container,
@@ -495,7 +496,7 @@ class AllStatsWindow(ctk.CTkToplevel):
         self.current_return_label = ctk.CTkLabel(
             self.graphs_container,
             text="Average Return",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=app_font(size=12, weight="bold"),
         )
         self.current_return_graph = StatsMiniGraph(
             self.graphs_container,

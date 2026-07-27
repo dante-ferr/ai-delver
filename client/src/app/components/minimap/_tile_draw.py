@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from app.fonts import canvas_font
 from ._layout import MinimapLayout
 
 if TYPE_CHECKING:
@@ -107,7 +108,7 @@ class MinimapTileDraw:
             cy,
             text="G",
             fill="#ffffff",
-            font=("Arial", int(max(6, scale * 0.5)), "bold"),
+            font=canvas_font(int(max(6, scale * 0.5)), bold=True),
             tags=("marker",),
         )
 
@@ -135,6 +136,6 @@ class MinimapTileDraw:
             cy,
             text="S",
             fill="#ffffff",
-            font=("Arial", int(max(6, scale * 0.5)), "bold"),
+            font=canvas_font(int(max(6, scale * 0.5)), bold=True),
             tags=("marker",),
         )

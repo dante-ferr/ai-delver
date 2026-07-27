@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from app.fonts import app_font
 from typing import Callable, Optional
 from src.config import config
 
@@ -42,7 +43,7 @@ class RangeSliderInput(ctk.CTkFrame):
         self.label = ctk.CTkLabel(
             self,
             text=label_text,
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE, weight="bold"),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE, weight="bold"),
         )
         self.label.pack(anchor="w")
 
@@ -57,7 +58,7 @@ class RangeSliderInput(ctk.CTkFrame):
         self.entry = ctk.CTkEntry(
             input_frame,
             width=72,
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         self.entry.grid(row=1, column=0, padx=(0, 10), sticky="ew")
 

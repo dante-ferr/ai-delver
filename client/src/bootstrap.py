@@ -6,3 +6,8 @@ sys.path.insert(0, os.path.join(PROJECT_ROOT, ".."))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "..", "src"))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "..", "src", "core"))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "..", "src", "core", "state_managers"))
+
+# Before CustomTkinter/Tk: expose assets/fonts to fontconfig (Linux).
+from bundled_fonts import prepare_fontconfig
+
+prepare_fontconfig()

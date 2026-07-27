@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from app.fonts import app_font
 from src.config import config
 from typing import TYPE_CHECKING
 
@@ -18,6 +19,6 @@ class CanvasObjectContainer(ctk.CTkFrame):
             self,
             image=image,
             text="",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         label.pack(padx=3.2, pady=3.2)

@@ -1,4 +1,5 @@
 from app.components.overlay.message_overlay import MessageOverlay
+from app.fonts import app_font
 from app.components.overlay import Overlay
 from app.components.mouse_whell_scrollable_frame.mouse_wheel_scrollable_frame import (
     MouseWheelScrollableFrame,
@@ -33,7 +34,7 @@ class FileLoaderOverlay(Overlay):
             self,
             text=self._prompt_text(),
             wraplength=320,
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         label.pack(padx=12, pady=(12, 4), anchor="w", fill="x")
 
@@ -44,7 +45,7 @@ class FileLoaderOverlay(Overlay):
             self,
             textvariable=self._filter_var,
             placeholder_text="Filter…",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         self.filter_entry.pack(padx=12, pady=(0, 8), fill="x")
         self.filter_entry.bind("<Return>", lambda _e: self._on_action())
@@ -60,7 +61,7 @@ class FileLoaderOverlay(Overlay):
         self._empty_label = ctk.CTkLabel(
             self.list_frame,
             text="No matches.",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
 
         for name in self._sorted_names:
@@ -72,7 +73,7 @@ class FileLoaderOverlay(Overlay):
             self,
             text=self._action_button_text(),
             command=self._on_action,
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         action_button.pack(padx=12, pady=(0, 12), anchor="e")
 
@@ -108,7 +109,7 @@ class FileLoaderOverlay(Overlay):
             row,
             text=name,
             anchor="w",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         label.pack(fill="x", padx=8, pady=4)
 

@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from app.fonts import app_font
 from src.config import config
 
 
@@ -9,7 +10,7 @@ class TitleTextbox(ctk.CTkTextbox):
             master,
             height=4,
             wrap="none",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
 
         self._name = default_text

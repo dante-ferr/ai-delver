@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from app.components import MessageOverlay
+from app.fonts import app_font
 from loaders import agent_loader
 from app.utils import verify_level_issues
 from app.components import StandardButton
@@ -27,7 +28,7 @@ class TrajectoryHeader(ctk.CTkFrame):
         self.label = ctk.CTkLabel(
             self,
             text="Run:",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE, weight="bold"),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE, weight="bold"),
         )
         self.label.grid(row=0, column=0, padx=(0, 4), pady=(0, 4), sticky="w")
 
@@ -36,7 +37,7 @@ class TrajectoryHeader(ctk.CTkFrame):
             self,
             width=64,
             justify="center",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         self.index_entry.grid(row=0, column=1, padx=2, pady=(0, 4), sticky="w")
         self.index_entry.bind("<Return>", lambda e: self._on_entry_submit())
@@ -46,7 +47,7 @@ class TrajectoryHeader(ctk.CTkFrame):
         self.total_label = ctk.CTkLabel(
             self,
             text="/ 0",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         self.total_label.grid(row=0, column=2, padx=4, pady=(0, 4), sticky="w")
 
@@ -58,7 +59,7 @@ class TrajectoryHeader(ctk.CTkFrame):
             command=self._on_live_toggled,
             checkbox_width=20,
             checkbox_height=20,
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         self.live_checkbox.grid(row=0, column=3, padx=(12, 4), pady=(0, 4), sticky="w")
 

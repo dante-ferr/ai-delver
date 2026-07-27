@@ -5,6 +5,7 @@ from src.config import config
 from .level_selector import LevelSelector
 from ._episodes_setting_panel import EpisodesSettingPanel
 from app.components import AnimatedGifLabel
+from app.fonts import app_font
 from state_managers import training_state_manager
 
 
@@ -37,14 +38,14 @@ class TrainPanel(ctk.CTkFrame):
         self.cycles_label = ctk.CTkLabel(
             self.info_frame,
             text="",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         self.cycles_label.pack(anchor="w")
 
         self.runs_label = ctk.CTkLabel(
             self.info_frame,
             text="",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         self.runs_label.pack(anchor="w")
 

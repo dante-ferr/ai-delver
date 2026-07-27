@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from app.fonts import app_font
 from src.config import config
 
 Color = tuple[str, str] | str
@@ -18,13 +19,13 @@ class LayerContainer(ctk.CTkFrame):
             self,
             image=icon_image,
             text="",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         icon.grid(row=0, column=0, padx=6.4)
 
         name_label = ctk.CTkLabel(
             self,
             text=layer_name.capitalize(),
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         name_label.grid(row=0, column=1)

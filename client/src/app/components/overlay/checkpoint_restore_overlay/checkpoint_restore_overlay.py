@@ -5,6 +5,7 @@ from typing import Any
 
 import customtkinter as ctk
 
+from app.fonts import app_font
 from app.components.mouse_whell_scrollable_frame.mouse_wheel_scrollable_frame import (
     MouseWheelScrollableFrame,
 )
@@ -32,7 +33,7 @@ class CheckpointRestoreOverlay(Overlay):
         title = ctk.CTkLabel(
             self,
             text=f"Restore checkpoint for “{agent_name}”",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
             anchor="w",
         )
         title.pack(padx=12, pady=(12, 4), fill="x")
@@ -48,7 +49,7 @@ class CheckpointRestoreOverlay(Overlay):
             filters,
             textvariable=self._filter_var,
             placeholder_text="Filter by level, kind, id…",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         self.filter_entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
 
@@ -65,7 +66,7 @@ class CheckpointRestoreOverlay(Overlay):
             variable=self._level_var,
             values=["All levels", *levels],
             command=lambda _v: self._on_filters_changed(),
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         self.level_menu.grid(row=0, column=1, sticky="ew")
 
@@ -77,7 +78,7 @@ class CheckpointRestoreOverlay(Overlay):
                 header,
                 text=label,
                 anchor="w",
-                font=ctk.CTkFont(
+                font=app_font(
                     size=config.STYLE.FONT.STANDARD_SIZE,
                     weight="bold",
                 ),
@@ -93,7 +94,7 @@ class CheckpointRestoreOverlay(Overlay):
         self._empty_label = ctk.CTkLabel(
             self.list_frame,
             text="No matching checkpoints.",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
 
         for entry in self._all_checkpoints:
@@ -110,14 +111,14 @@ class CheckpointRestoreOverlay(Overlay):
             actions,
             text="Cancel",
             command=self._close,
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         ).pack(side="right", padx=(8, 0))
 
         StandardButton(
             actions,
             text="Restore",
             command=self._on_restore,
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         ).pack(side="right")
 
         self.filter_entry.bind("<Return>", lambda _e: self._on_restore())
@@ -176,7 +177,7 @@ class CheckpointRestoreOverlay(Overlay):
                 row,
                 text=text,
                 anchor="w",
-                font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+                font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
             )
             label.grid(row=0, column=i, sticky="ew", padx=8, pady=4)
 

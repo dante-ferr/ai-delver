@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import customtkinter as ctk
+from app.fonts import app_font
 
 from src.config import config
 
@@ -56,7 +57,7 @@ class Minimap(ctk.CTkFrame):
         self.resize = MinimapResize(self)
 
         self.minimap_title = ctk.CTkLabel(
-            self, text=self.TITLE, font=ctk.CTkFont(size=14, weight="bold")
+            self, text=self.TITLE, font=app_font(size=14, weight="bold")
         )
         self.minimap_title.grid(row=0, column=0, padx=12, pady=(12, 4), sticky="w")
 

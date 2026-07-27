@@ -18,6 +18,10 @@ scroll_speed = 1.0
 zoom_speed = 0.3
 
 [style.font]
+# Bundled folder under assets/fonts/, or a system family (e.g. waybar's FiraCode Nerd Font).
+family = "FiraCode Nerd Font"
+# Stretch glyph height for bundled TTFs only (1.0 = original). Ignored for system fonts.
+vertical_scale = 1.0
 small_size = 12
 standard_size = 14
 subtitle_size = 18

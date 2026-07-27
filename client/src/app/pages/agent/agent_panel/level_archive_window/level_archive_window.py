@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import customtkinter as ctk
+from app.fonts import app_font
 from level import Level
 from level.config import LEVEL_SAVE_FOLDER_PATH
 from loaders import agent_loader
@@ -54,7 +55,7 @@ class LevelArchiveWindow(ctk.CTkToplevel):
         header = ctk.CTkLabel(
             self,
             text="Level Archive",
-            font=ctk.CTkFont(size=20, weight="bold"),
+            font=app_font(size=20, weight="bold"),
         )
         header.grid(row=0, column=0, columnspan=2, padx=20, pady=(16, 4), sticky="w")
 
@@ -63,7 +64,7 @@ class LevelArchiveWindow(ctk.CTkToplevel):
             text=(
                 f"Levels this agent trained on (focus commits). Agent: {title_name}."
             ),
-            font=ctk.CTkFont(size=11),
+            font=app_font(size=11),
             text_color="#888888",
         )
         subtitle.grid(row=1, column=0, columnspan=2, padx=20, pady=(0, 12), sticky="w")
@@ -83,7 +84,7 @@ class LevelArchiveWindow(ctk.CTkToplevel):
                 col_header,
                 text=label,
                 anchor="w",
-                font=ctk.CTkFont(
+                font=app_font(
                     size=config.STYLE.FONT.STANDARD_SIZE,
                     weight="bold",
                 ),
@@ -98,7 +99,7 @@ class LevelArchiveWindow(ctk.CTkToplevel):
         self._empty_label = ctk.CTkLabel(
             self.list_frame,
             text="No archived levels yet. Train with a focus commit to populate.",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
             text_color="#888888",
         )
 
@@ -119,7 +120,7 @@ class LevelArchiveWindow(ctk.CTkToplevel):
         ctk.CTkLabel(
             matches_panel,
             text="Matching level saves",
-            font=ctk.CTkFont(size=14, weight="bold"),
+            font=app_font(size=14, weight="bold"),
             anchor="w",
         ).grid(row=0, column=0, padx=12, pady=(12, 4), sticky="w")
 
@@ -132,7 +133,7 @@ class LevelArchiveWindow(ctk.CTkToplevel):
         self._matches_empty = ctk.CTkLabel(
             self.matches_list,
             text="Select a level to find matching saves.",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
             text_color="#888888",
         )
         self._matches_empty.pack(anchor="w", padx=4, pady=4)
@@ -140,7 +141,7 @@ class LevelArchiveWindow(ctk.CTkToplevel):
         self._clipboard_status = ctk.CTkLabel(
             self,
             text="",
-            font=ctk.CTkFont(size=11),
+            font=app_font(size=11),
             text_color="#10b981",
         )
         self._clipboard_status.grid(
@@ -218,7 +219,7 @@ class LevelArchiveWindow(ctk.CTkToplevel):
                 row,
                 text=text,
                 anchor="w",
-                font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+                font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
             )
             label.grid(row=0, column=i, sticky="ew", padx=8, pady=4)
 
@@ -314,7 +315,7 @@ class LevelArchiveWindow(ctk.CTkToplevel):
             empty = ctk.CTkLabel(
                 self.matches_list,
                 text="No current level saves match this hash.",
-                font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+                font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
                 text_color="#888888",
             )
             empty.pack(anchor="w", padx=4, pady=4)
@@ -325,7 +326,7 @@ class LevelArchiveWindow(ctk.CTkToplevel):
                 self.matches_list,
                 text=name,
                 anchor="w",
-                font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+                font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
             )
             label.pack(anchor="w", padx=4, pady=2)
             self.matches_list.bind_scroll_events_recursively(label)

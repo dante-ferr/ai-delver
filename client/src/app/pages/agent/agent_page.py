@@ -5,6 +5,7 @@ from .train_panel import TrainPanel
 from ._server_connection_panel import ServerConnectionPanel
 from state_managers import training_state_manager
 from app.components import LoadingLogsPanel
+from app.fonts import app_font
 import customtkinter as ctk
 
 
@@ -55,7 +56,7 @@ class AgentPage(Page):
             self,
             values=list(self.ALL_SECTIONS),
             command=self._on_section_selected,
-            font=ctk.CTkFont(size=13),
+            font=app_font(size=13),
         )
         self.section_selector.set(self._active_section)
 

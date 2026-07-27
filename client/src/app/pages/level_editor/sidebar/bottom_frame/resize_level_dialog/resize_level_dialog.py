@@ -2,6 +2,7 @@ import customtkinter as ctk
 from tkinter import messagebox
 from typing import TYPE_CHECKING, List
 from app.components import Overlay, StandardButton
+from app.fonts import app_font
 from src.config import config
 
 if TYPE_CHECKING:
@@ -51,7 +52,7 @@ class ResizeLevelDialog(Overlay):
             text="Dynamic resizing (it may be too slow)",
             variable=self._dynamic_resizing_var,
             command=self._toggle_manual_controls,
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         dynamic_resize_switch.pack(anchor="w", pady=(0, 15))
 
@@ -63,7 +64,7 @@ class ResizeLevelDialog(Overlay):
         operation_label = ctk.CTkLabel(
             self._manual_frame,
             text="Operation:",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         operation_label.pack(pady=(0, 5), anchor="w")
 
@@ -76,7 +77,7 @@ class ResizeLevelDialog(Overlay):
         direction_label = ctk.CTkLabel(
             self._manual_frame,
             text="Direction:",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         direction_label.pack(pady=(0, 10), anchor="w")
 
@@ -104,7 +105,7 @@ class ResizeLevelDialog(Overlay):
         amount_label = ctk.CTkLabel(
             self._manual_frame,
             text="Amount (tiles):",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         amount_label.pack(pady=(15, 5), anchor="w")
 

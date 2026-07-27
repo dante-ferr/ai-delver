@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from app.components import SvgImage
+from app.fonts import app_font
 from app.theme import theme
 from app.utils.selection import populate_selection_manager, SelectionManager
 from ...level_editor_manager import level_editor_manager
@@ -16,7 +17,7 @@ class ToolBox(ctk.CTkFrame):
             self,
             image=icon_image,
             text="",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         label.pack(padx=4.8, pady=4.8)
 
@@ -65,7 +66,7 @@ class ToolsFrame(ctk.CTkFrame):
         size_label = ctk.CTkLabel(
             size_container,
             text="Size",
-            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         size_label.pack(padx=(0, 4), anchor="w")
 

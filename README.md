@@ -55,8 +55,8 @@ This repo encapsulates all of its internal dependencies, serving as a developmen
     - Ex: make build-ai-dev ARGS="--batch-size=48 --memory=12G --shm=2g --swap=14G"
 
 - `run-ai-dev`
-  Starts the intelligence **training server** (`serve` on `localhost:8001`) and keeps the container running so the client/GUI can connect.
-  - Args: the same as `build-ai-dev`, plus optional `--train-args=…` to override the container command (default `serve --host 0.0.0.0 --port 8001`; use `train …` for one-shot jobs).
+  Starts the intelligence **training server** (`serve` on `localhost:8001`) in the foreground so logs stay attached; Ctrl+C stops the container.
+  - Args: the same as `build-ai-dev`, plus optional `--train-args=…` to override the container command (default `serve --host 0.0.0.0 --port 8001`; use `train …` for one-shot jobs), and `--detach` to run in the background instead.
 
 - `build-client-dev`
   Builds the client side by installing its dependencies.

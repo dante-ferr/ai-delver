@@ -2,9 +2,10 @@
 set -e
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )
 
-# Defaults (tuned for ~16GB host laptops: avoid attach-pipe SIGKILL + cgroup thrash)
+# Defaults (tuned for ~16GB host laptops)
 BUILD_FLAG=""
-DETACH_FLAG="-d"
+# Attached by default so Ctrl+C stops the container. Use --detach for background.
+DETACH_FLAG=""
 BATCH_SIZE="24"
 MEMORY_LIMIT="13G"
 SHM_SIZE="4g"
@@ -21,11 +22,11 @@ for arg in "$@"; do
       shift
       ;;
     --detach|--detached)
+      # Background mode (agent/CI). Health-checks /init then exits the script.
       DETACH_FLAG="-d"
       shift
       ;;
     --attach)
-      # Foreground attach (debug only). Prefer detached so agent/CI pipes cannot SIGKILL the server.
       DETACH_FLAG=""
       shift
       ;;

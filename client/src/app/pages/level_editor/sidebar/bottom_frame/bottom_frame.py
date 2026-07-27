@@ -57,11 +57,6 @@ class BottomFrame(ctk.CTkFrame):
         )
         grid_toggle.grid(row=0, column=1, **self.GRID_CELL_SPACEMENT)
 
-        level_file_container = LevelFileContainer(self)
-        level_file_container.grid(
-            row=1, column=0, columnspan=2, sticky="w", **self.GRID_CELL_SPACEMENT
-        )
-
         resize_level_button = StandardButton(
             self,
             text="Resize Level",
@@ -69,7 +64,12 @@ class BottomFrame(ctk.CTkFrame):
             font=ctk.CTkFont(size=config.STYLE.FONT.SMALL_SIZE),
         )
         resize_level_button.grid(
-            row=2, column=0, columnspan=2, sticky="ew", **self.GRID_CELL_SPACEMENT
+            row=1, column=0, columnspan=2, sticky="ew", **self.GRID_CELL_SPACEMENT
+        )
+
+        level_file_container = LevelFileContainer(self)
+        level_file_container.grid(
+            row=2, column=0, columnspan=2, sticky="w", **self.GRID_CELL_SPACEMENT
         )
 
     def _open_resize_level_dialog(self):

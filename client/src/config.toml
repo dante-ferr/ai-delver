@@ -40,3 +40,12 @@ tile_wipe_ms = 320
 path_reveal_ms = 450
 grow_frames = 10
 debounce_ms = 80
+
+[level_archive]
+hash_display_chars = 12
+window_width = 960
+window_height = 640
+
+[shortcuts]
+level_editor = "<Alt-Key-1>"
+agent = "<Alt-Key-2>"

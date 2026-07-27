@@ -7,7 +7,13 @@ use std::{fs, path::Path};
 pub struct Config {
     pub learning_rate: f64,
     pub gamma: f32,
+    /// Discovery-band entropy (before first clear of the train session's levels).
     pub entropy_regularization: f64,
+    /// Post-clear entropy target (lower → sharper argmax / faster neat lock).
+    /// Anneals from `entropy_regularization` over `entropy_anneal_cycles`.
+    pub entropy_regularization_polish: f64,
+    /// Cycles after first clear to reach `entropy_regularization_polish`.
+    pub entropy_anneal_cycles: usize,
     pub ppo_num_epochs: usize,
     pub clip_epsilon: f64,
     pub gae_lambda: f32,
@@ -57,7 +63,9 @@ impl Default for Config {
         Self {
             learning_rate: 3e-4,
             gamma: 0.995,
-            entropy_regularization: 0.01,
+            entropy_regularization: 0.06,
+            entropy_regularization_polish: 0.025,
+            entropy_anneal_cycles: 12,
             ppo_num_epochs: 4,
             clip_epsilon: 0.2,
             gae_lambda: 0.95,
@@ -131,6 +139,17 @@ impl Config {
         self.jump_reward + t * (self.jump_reward_polish - self.jump_reward)
     }
 
+    /// Effective entropy for the session given cycles since clear (`None` = still discovering).
+    pub fn annealed_entropy(&self, cycles_since_clear: Option<usize>) -> f64 {
+        let Some(elapsed) = cycles_since_clear else {
+            return self.entropy_regularization;
+        };
+        let span = self.entropy_anneal_cycles.max(1) as f64;
+        let t = (elapsed as f64 / span).clamp(0.0, 1.0);
+        self.entropy_regularization
+            + t * (self.entropy_regularization_polish - self.entropy_regularization)
+    }
+
     /// Clone with an overridden jump reward (used for per-level post-clear anneal).
     pub fn with_jump_reward(&self, jump_reward: f32) -> Self {
         let mut clone = self.clone();
@@ -176,5 +195,27 @@ mod tests {
         assert!((mid - (-2.75)).abs() < 1e-5);
         assert!((config.annealed_jump_reward(Some(20)) - (-3.5)).abs() < 1e-6);
         assert!((config.annealed_jump_reward(Some(100)) - (-3.5)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn annealed_entropy_stays_discovery_until_clear() {
+        let mut config = Config::default();
+        config.entropy_regularization = 0.06;
+        config.entropy_regularization_polish = 0.025;
+        config.entropy_anneal_cycles = 12;
+        assert!((config.annealed_entropy(None) - 0.06).abs() < 1e-9);
+        assert!((config.annealed_entropy(Some(0)) - 0.06).abs() < 1e-9);
+    }
+
+    #[test]
+    fn annealed_entropy_interpolates_then_caps() {
+        let mut config = Config::default();
+        config.entropy_regularization = 0.06;
+        config.entropy_regularization_polish = 0.025;
+        config.entropy_anneal_cycles = 12;
+        let mid = config.annealed_entropy(Some(6));
+        assert!((mid - 0.0425).abs() < 1e-9);
+        assert!((config.annealed_entropy(Some(12)) - 0.025).abs() < 1e-9);
+        assert!((config.annealed_entropy(Some(100)) - 0.025).abs() < 1e-9);
     }
 }

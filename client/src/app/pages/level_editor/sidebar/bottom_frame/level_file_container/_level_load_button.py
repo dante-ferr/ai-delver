@@ -3,6 +3,7 @@ from level.config import LEVEL_SAVE_FOLDER_PATH
 from app.components.overlay.file_loader_overlay.file_loader_overlay_spawner import (
     FileLoaderOverlaySpawner,
 )
+from app.utils.unsaved_changes import confirm_discard_unsaved
 
 
 class _LevelLoaderOverlay(FileLoaderOverlay):
@@ -15,6 +16,7 @@ class _LevelLoaderOverlay(FileLoaderOverlay):
         if level is None:
             raise RuntimeError("Failed to load level")
         level_loader.level = level
+        level_loader.mark_saved()
         # Only reload the editor; restarting Agent would wipe the training level
         # list and zero out the progress total while training state still lives.
         app_manager.editor_app.restart_page("level_editor")
@@ -26,4 +28,7 @@ class LevelLoadButton(LoadButton):
         super().__init__(master, command=self._on_click, **kwargs)
 
     def _on_click(self):
-        FileLoaderOverlaySpawner(LEVEL_SAVE_FOLDER_PATH, "level", _LevelLoaderOverlay)
+        def _open_picker():
+            FileLoaderOverlaySpawner(LEVEL_SAVE_FOLDER_PATH, "level", _LevelLoaderOverlay)
+
+        confirm_discard_unsaved(kind="level", on_discard=_open_picker)

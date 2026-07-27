@@ -464,6 +464,16 @@ fn apply_config_overrides(config: &mut Config, overrides: Option<&Value>) {
                     config.entropy_regularization = v;
                 }
             }
+            "entropy_regularization_polish" => {
+                if let Some(v) = value.as_f64() {
+                    config.entropy_regularization_polish = v;
+                }
+            }
+            "entropy_anneal_cycles" => {
+                if let Some(v) = value.as_u64() {
+                    config.entropy_anneal_cycles = v as usize;
+                }
+            }
             "finished_reward" => {
                 if let Some(v) = value.as_f64() {
                     config.finished_reward = v as f32;

@@ -19,7 +19,9 @@ class TrajectoryHeader(ctk.CTkFrame):
     def __init__(self, master):
         super().__init__(master, fg_color="transparent")
         self.current_index = None
-        self.live_var = ctk.BooleanVar(value=True)
+        from loaders import agent_loader as _agent_loader
+
+        self.live_var = ctk.BooleanVar(value=bool(_agent_loader.live))
 
         # Row 0: controls
         self.label = ctk.CTkLabel(
@@ -94,6 +96,16 @@ class TrajectoryHeader(ctk.CTkFrame):
 
         # Initial load
         self.refresh_from_metadata()
+        agent_loader.add_prefs_listener(self._sync_live_from_loader)
+
+    def _sync_live_from_loader(self):
+        enabled = bool(agent_loader.live)
+        if bool(self.live_var.get()) != enabled:
+            self.live_var.set(enabled)
+        if enabled:
+            total = self.total_trajectories
+            if total > 0:
+                self.load_trajectory_by_index(total - 1)
 
     def set_slider_width(self, width: int):
         """Match the scrubber width to the summary/timeline column."""
@@ -148,7 +160,9 @@ class TrajectoryHeader(ctk.CTkFrame):
 
     def _on_live_toggled(self):
         """When Live is enabled, jump to the latest trajectory immediately."""
-        if not self.live_var.get():
+        enabled = bool(self.live_var.get())
+        agent_loader.set_live(enabled)
+        if not enabled:
             return
         total = self.total_trajectories
         if total > 0:
@@ -158,6 +172,7 @@ class TrajectoryHeader(ctk.CTkFrame):
         """Turns off Live follow after the user picks a specific run."""
         if self.live_var.get():
             self.live_var.set(False)
+            agent_loader.set_live(False)
 
     def _on_slider_drag(self, value):
         """Updates the text entry in real-time while dragging the slider."""

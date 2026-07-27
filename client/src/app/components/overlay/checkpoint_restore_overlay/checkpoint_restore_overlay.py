@@ -294,6 +294,9 @@ class CheckpointRestoreOverlay(Overlay):
             MessageOverlay(f"Failed to restore checkpoint: {e}", subject="Error")
             return
 
+        from loaders import agent_loader
+
+        agent_loader.mark_dirty()
         MessageOverlay(
             f'Successfully restored weights from checkpoint for level "{level}".',
             subject="Success",

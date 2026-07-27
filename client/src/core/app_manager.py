@@ -80,12 +80,17 @@ class AppManager:
 
     def _on_editor_close(self):
         """Handles the editor window closing, which shuts down everything."""
-        logging.info("Editor closing, shutting down application.")
-        self._stop_active_training()
-        self._is_running = False  # Stop the master_tick loop.
-        self.stop_viewable_runtimes()
-        if self._editor:
-            self._editor.destroy()
+        from app.utils.unsaved_changes import confirm_discard_unsaved
+
+        def _do_close():
+            logging.info("Editor closing, shutting down application.")
+            self._stop_active_training()
+            self._is_running = False  # Stop the master_tick loop.
+            self.stop_viewable_runtimes()
+            if self._editor:
+                self._editor.destroy()
+
+        confirm_discard_unsaved(kind="level", on_discard=_do_close)
 
     def _stop_active_training(self):
         """Interrupt any in-flight training so the server does not keep going."""

@@ -150,6 +150,7 @@ class CanvasClickHandler:
                 if not level_loader.level.map.position_is_valid(cell):
                     return
             canvas_object.create_element_callback(grid_pos)
+            level_loader.mark_dirty()
 
         elif self.selected_tool_name == "eraser":
             layer = level_loader.level.map.get_layer(self.selected_layer_name)
@@ -164,6 +165,7 @@ class CanvasClickHandler:
 
             if removed_element is None:
                 return
+            level_loader.mark_dirty()
 
     def _debug_inspect_tile(self, event):
         """

@@ -19,6 +19,7 @@ from .sortable_list import SortableList
 from .standard_button import StandardButton
 from .add_button import AddButton
 from .animated_gif_label import AnimatedGifLabel
+from .minimap import Minimap
 
 __all__ = [
     "IconButton",
@@ -40,4 +41,5 @@ __all__ = [
     "LoadButton",
     "DeleteButton",
     "AnimatedGifLabel",
+    "Minimap",
 ]

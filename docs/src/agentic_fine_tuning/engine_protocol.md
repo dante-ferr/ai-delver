@@ -108,7 +108,7 @@ Each trial:
 4. Optuna maximizes the **mean of the `tail_k` lowest per-level win rates** (default `tail_k=3`) so one noisy showcase does not dominate. Always log **min**, **mean**, and the full per-level table.
 5. A set is “ideal” / promotable only when **`min` per-level WR ≥ `--mastery-threshold`** (default 0.8). Diluted pack averages (e.g. 9%) are **not** success.
 
-**Stage B primary (lock + anneal):** Goal Rehearsal Lock scouts + BC, plus per-level post-clear `jump_reward` → `jump_reward_polish` anneal. Do **not** anneal `turn_reward`. Didactic overview: [Neatness](../intelligence/neatness.md). Design deep-dive: [Stage B](../engineering/jump_polish_stage_b.md).
+**Stage B primary (lock + anneal):** Goal Rehearsal Lock scouts + BC, plus per-level post-clear `jump_reward` → `jump_reward_polish` and session `entropy_regularization` → `entropy_regularization_polish`. Do **not** anneal `turn_reward`. Didactic overview: [Neatness](../intelligence/neatness.md). Design deep-dive: [Stage B](../engineering/jump_polish_stage_b.md).
 
 **Stage B stance (strict gates, exploratory discovery):**
 

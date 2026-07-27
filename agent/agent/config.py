@@ -6,3 +6,4 @@ with open(current_dir / "config.json", "r") as f:
     config = json.load(f)
 
 AGENT_SAVE_FOLDER_PATH = config["agent_save_folder_path"]
+SESSION_STORAGE_KEY = config["session_storage_key"]

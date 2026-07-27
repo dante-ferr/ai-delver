@@ -192,6 +192,7 @@ class ResizeLevelDialog(Overlay):
                 directions, abs(amount)
             )
 
+        level_loader.mark_dirty()
         self.destroy()
 
     def _on_cancel(self):

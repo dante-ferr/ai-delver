@@ -18,7 +18,7 @@ flowchart TD
   ckpt --> next["Cycle N+1"]
 ```
 
-## 1. Effective jump cost for this cycle
+## 1. Effective jump cost + entropy for this cycle
 
 For each level hash:
 
@@ -26,6 +26,8 @@ For each level hash:
 - Cleared → interpolate toward `jump_reward_polish` by `cycles_since_clear / jump_anneal_cycles`.
 
 Envs are rebuilt every cycle so collect feels the schedule. A new `/train` (coach moves to another level) resets clear/anneal state for that session.
+
+Entropy is **session-wide**: discovery `entropy_regularization` until every coach level has cleared, then anneal toward `entropy_regularization_polish` over `entropy_anneal_cycles` (using the slowest level’s clock).
 
 ## 2. Collect
 

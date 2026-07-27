@@ -147,6 +147,13 @@ Focus level A (N cycles) … may hit E mid-level
     "review_levels_per_arm": 5,
     "review_pass_queue": [],
     "review_arm_cursor": 0
+  },
+  "level_archive": {
+    "<hash>": {
+      "name_at_first_train": "L1",
+      "first_trained_at": "2026-07-27T15:00:00+00:00",
+      "last_trained_at": "2026-07-27T15:00:00+00:00"
+    }
   }
 }
 ```

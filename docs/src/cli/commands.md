@@ -109,11 +109,24 @@ poetry run python src/cli/main.py create-agent --name "Brave Delver"
 ### `save-agent`
 Saves/persists the agent state on disk under the agent's name directory.
 
+The GUI keeps a live session workspace at `data/agents/__session__/` (hidden from
+load/delete pickers). Training writes there while Auto-save is off. Save copies
+that workspace into `data/agents/<name>/`. With Auto-save on (after a bind),
+training writes directly to the bound named agent.
+
 ```bash
 poetry run python src/cli/main.py save-agent --name "Brave Delver"
+poetry run python src/cli/main.py save-agent \
+    --name "Brave Delver v2" \
+    --from "__session__" \
+    --force
 ```
 
-**GUI Trigger**: The "Save" icon button in `_agent_save_button.py`.
+* `--name <str>`: Destination agent name (required).
+* `--from <str>`: Optional source folder key to copy from before saving.
+* `--force`: Overwrite the destination folder when copying from `--from`.
+
+**GUI Trigger**: The "Save" icon button in `_agent_save_button.py` (always via this CLI). Auto-save is unmarked by default.
 
 ---
 
@@ -125,6 +138,22 @@ poetry run python src/cli/main.py load-agent --path "data/agents/Brave Delver"
 ```
 
 **GUI Trigger**: The "Load" folder button in `_agent_load_button.py` via `_AgentLoaderOverlay`.
+
+---
+
+### `reset-agent-session`
+Wipes the live GUI session workspace at `data/agents/__session__/`.
+
+Without `--from`, recreates a blank session (`Brave Delver`). With `--from <name>`,
+copies that named agent into the session when it exists; if the source folder is
+missing, falls back to a blank session.
+
+```bash
+poetry run python src/cli/main.py reset-agent-session
+poetry run python src/cli/main.py reset-agent-session --from "Brave Delver"
+```
+
+**GUI Trigger**: The "New Delver" button in `_agent_new_session_button.py` (always a blank session).
 
 ---
 
@@ -236,6 +265,7 @@ for line in iter(self.train_process.stdout.readline, ""):
 | `agent_created` | `create-agent` | Emitted when a new agent is successfully created |
 | `agent_saved` | `save-agent` | Emitted when an agent's state is successfully saved |
 | `agent_loaded` | `load-agent` | Emitted when an agent is successfully loaded |
+| `agent_session_reset` | `reset-agent-session` | Emitted when the live `__session__` workspace is wiped/re-seeded |
 | `level_imported` | `import-level-sketch` | Sketch converted and saved as a full level |
 | `platforming_limits` | `platforming-limits` | Physics-derived jump/gap authoring limits |
 | `error` | any | An unrecoverable error occurred |

@@ -20,9 +20,9 @@ Handles physics simulation, Pymunk coordinates, and collision loops.
 * `EntityNotFoundError`: Raised when looking up or interacting with a non-existent entity.
 
 ### Agent Module (`agent`)
-Handles agent state initialization, dill deserialization, and model network states.
+Handles agent state initialization, JSON deserialization, and model network states.
 * `AgentError`: Base exception class.
-* `AgentLoadError`: Raised when loading a Dill-serialized agent file fails.
+* `AgentLoadError`: Raised when loading an agent JSON file fails.
 * `ModelLoadError`: Raised when tf-agents saved-model variables fail to unpack or apply.
 * `ModelSerializationError`: Raised when saving the policy network weights fails.
 

@@ -229,6 +229,14 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
         )
         self.all_stats_button.pack(anchor="w", pady=(12, 0))
 
+        self.level_archive_button = StandardButton(
+            self,
+            text="Level Archive",
+            command=self._open_level_archive,
+            width=120,
+        )
+        self.level_archive_button.pack(anchor="w", pady=(8, 0))
+
         # Register callbacks to refresh stats automatically
         trajectory_stats_state_manager.add_on_refresh_stats_callback(
             self._start_stats_job
@@ -252,7 +260,7 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
 
     def _run_stats_subprocess(self):
         """Executes the CLI stats command and updates the UI with the output."""
-        agent_name = agent_loader.agent.name
+        agent_name = agent_loader.storage_key
         client_dir = os.path.abspath(os.path.join(PROJECT_ROOT, ".."))
 
         cmd = [
@@ -384,6 +392,16 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
             self._all_stats_win.focus_set()
             return
         self._all_stats_win = AllStatsWindow(self)
+
+    def _open_level_archive(self):
+        """Opens the Level Archive window, reusing an existing one if still open."""
+        if hasattr(self, "_level_archive_win") and self._level_archive_win.winfo_exists():
+            self._level_archive_win.lift()
+            self._level_archive_win.focus_set()
+            return
+        from ..level_archive_window import LevelArchiveWindow
+
+        self._level_archive_win = LevelArchiveWindow(self)
 
 
 class AllStatsWindow(ctk.CTkToplevel):

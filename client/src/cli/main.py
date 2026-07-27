@@ -104,10 +104,33 @@ def main():
     # Subcommand: save-agent
     save_p = subparsers.add_parser("save-agent", help="Saves an agent on disk")
     save_p.add_argument("--name", required=True, help="Agent name")
+    save_p.add_argument(
+        "--from",
+        dest="from_name",
+        default=None,
+        help="Optional source agent name whose folder is copied into --name before saving",
+    )
+    save_p.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite the destination agent folder when copying from --from",
+    )
 
     # Subcommand: load-agent
     load_p = subparsers.add_parser("load-agent", help="Loads an agent from a path")
     load_p.add_argument("--path", required=True, help="Path to the agent directory")
+
+    # Subcommand: reset-agent-session
+    reset_session_p = subparsers.add_parser(
+        "reset-agent-session",
+        help="Wipes the live __session__ workspace (optionally re-seeds from a named agent)",
+    )
+    reset_session_p.add_argument(
+        "--from",
+        dest="from_name",
+        default=None,
+        help="Optional named agent to copy into the wiped session",
+    )
 
     # Subcommand: tune
     tune_p = subparsers.add_parser("tune", help="Runs automated hyperparameter tuning using Optuna")
@@ -243,10 +266,13 @@ def main():
         run_create_agent(args.name)
     elif args.command == "save-agent":
         from cli.commands.agent_save import run_save_agent
-        run_save_agent(args.name)
+        run_save_agent(args.name, from_name=args.from_name, force=args.force)
     elif args.command == "load-agent":
         from cli.commands.agent_load import run_load_agent
         run_load_agent(args.path)
+    elif args.command == "reset-agent-session":
+        from cli.commands.agent_reset_session import run_reset_agent_session
+        run_reset_agent_session(from_name=args.from_name)
     elif args.command == "tune":
         from cli.commands.tune import run_tune
         run_tune(args)

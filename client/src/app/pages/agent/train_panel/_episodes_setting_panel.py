@@ -61,7 +61,7 @@ class EpisodesSettingPanel(ctk.CTkFrame):
         self.checkpoint_interval_input.pack(pady=(0, 12), fill="x")
         training_state_manager.checkpoint_interval = init_checkpoint
 
-        self.early_stop_var = ctk.BooleanVar(value=False)
+        self.early_stop_var = ctk.BooleanVar(value=bool(training_state_manager.early_stop))
         self.early_stop_checkbox = ctk.CTkCheckBox(
             self,
             text="Early stop on convergence",
@@ -72,8 +72,11 @@ class EpisodesSettingPanel(ctk.CTkFrame):
             font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
         )
         self.early_stop_checkbox.pack(anchor="w", pady=(0, 0))
-        training_state_manager.early_stop = False
         training_state_manager.add_disable_on_train_element(self.early_stop_checkbox)
+
+        from loaders import agent_loader
+
+        agent_loader.add_prefs_listener(self._sync_early_stop_from_loader)
 
     def _set_training_cycles(self, value):
         training_state_manager.amount_of_cycles = value
@@ -87,4 +90,16 @@ class EpisodesSettingPanel(ctk.CTkFrame):
         training_state_manager.checkpoint_interval = int(value)
 
     def _set_early_stop(self):
-        training_state_manager.early_stop = bool(self.early_stop_var.get())
+        from loaders import agent_loader
+
+        enabled = bool(self.early_stop_var.get())
+        training_state_manager.early_stop = enabled
+        agent_loader.set_early_stop(enabled)
+
+    def _sync_early_stop_from_loader(self):
+        from loaders import agent_loader
+
+        enabled = bool(agent_loader.early_stop)
+        training_state_manager.early_stop = enabled
+        if bool(self.early_stop_var.get()) != enabled:
+            self.early_stop_var.set(enabled)

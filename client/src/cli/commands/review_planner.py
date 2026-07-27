@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 from copy import deepcopy
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 from src.config import config
@@ -23,7 +24,11 @@ DEFAULT_FOCUS_EPISODES_BETWEEN_PASSES = int(
 DEFAULT_REVIEW_EPISODES_PER_LEVEL = int(config.REVIEW.REVIEW_EPISODES_PER_LEVEL)
 DEFAULT_REVIEW_LEVELS_PER_ARM = int(config.REVIEW.REVIEW_LEVELS_PER_ARM)
 
-CURRICULUM_KEYS = ("trained_levels", "level_hashes", "review_state")
+CURRICULUM_KEYS = ("trained_levels", "level_hashes", "review_state", "level_archive")
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 @dataclass
@@ -101,6 +106,8 @@ def ensure_review_state(metadata: dict[str, Any]) -> dict[str, Any]:
         metadata["trained_levels"] = []
     if not isinstance(metadata.get("level_hashes"), dict):
         metadata["level_hashes"] = {}
+    if not isinstance(metadata.get("level_archive"), dict):
+        metadata["level_archive"] = {}
 
     state = metadata.get("review_state")
     if not isinstance(state, dict):
@@ -152,6 +159,7 @@ def curriculum_snapshot(metadata: dict[str, Any]) -> dict[str, Any]:
         "trained_levels": list(metadata.get("trained_levels", [])),
         "level_hashes": dict(metadata.get("level_hashes", {})),
         "review_state": deepcopy(metadata.get("review_state", default_review_state())),
+        "level_archive": deepcopy(metadata.get("level_archive", {})),
     }
 
 
@@ -162,6 +170,9 @@ def apply_curriculum_snapshot(metadata: dict[str, Any], snapshot: dict[str, Any]
     for key in CURRICULUM_KEYS:
         if key in snapshot:
             metadata[key] = deepcopy(snapshot[key])
+        elif key == "level_archive":
+            # Older bundles omit this key; clear so restore stays aligned.
+            metadata["level_archive"] = {}
     return ensure_review_state(metadata)
 
 
@@ -370,6 +381,37 @@ def _append_trained_levels(metadata: dict[str, Any], levels: list[str]) -> None:
             trained.append(lvl)
 
 
+def _upsert_level_archive(
+    metadata: dict[str, Any],
+    session_levels: list[str],
+    level_hashes: dict[str, str] | None,
+) -> None:
+    """Record first/last trained timestamps keyed by level hash (focus commits only)."""
+    if not level_hashes:
+        return
+    archive = metadata.setdefault("level_archive", {})
+    if not isinstance(archive, dict):
+        metadata["level_archive"] = {}
+        archive = metadata["level_archive"]
+    now = _utc_now_iso()
+    for name in session_levels:
+        if not name:
+            continue
+        digest = level_hashes.get(name)
+        if not digest:
+            continue
+        digest = str(digest)
+        existing = archive.get(digest)
+        if isinstance(existing, dict):
+            existing["last_trained_at"] = now
+        else:
+            archive[digest] = {
+                "name_at_first_train": str(name),
+                "first_trained_at": now,
+                "last_trained_at": now,
+            }
+
+
 def commit_after_model_weights(
     metadata: dict[str, Any],
     plan: ReviewPlan,
@@ -394,6 +436,7 @@ def commit_after_model_weights(
     else:
         # Only levels that were in this focus mix (sequential: one level per session)
         _append_trained_levels(metadata, plan.session_levels)
+        _upsert_level_archive(metadata, plan.session_levels, level_hashes)
         state["focus_episodes_since_pass"] = int(state["focus_episodes_since_pass"]) + episodes
         if state["focus_episodes_since_pass"] >= between and metadata.get("trained_levels"):
             state["focus_episodes_since_pass"] = 0

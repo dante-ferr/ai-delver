@@ -66,6 +66,11 @@ impl Ppo {
         })
     }
 
+    /// Update entropy coefficient (post-clear anneal from the trainer loop).
+    pub fn set_entropy_regularization(&mut self, entropy_regularization: f64) {
+        self.config.entropy_regularization = entropy_regularization;
+    }
+
     pub fn update(&mut self, rollout: Rollout) -> UpdateMetrics {
         let rewards = tensor_to_vec(&rollout.rewards);
         let dones = tensor_to_vec(&rollout.dones);

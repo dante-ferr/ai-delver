@@ -81,11 +81,21 @@ Config:
 - `jump_reward_polish` — harsher target after clear (e.g. `-3.5`).
 - `jump_anneal_cycles` — cycles after first clear to interpolate discovery → polish.
 
-Rules:
+### Lever C — Post-clear entropy anneal
+
+Config:
+
+- `entropy_regularization` — discovery band (e.g. `0.06`) so blank agents escape idle/left spawn collapse.
+- `entropy_regularization_polish` — lower target after clear (e.g. `0.025`) so neat argmax converges faster.
+- `entropy_anneal_cycles` — often shorter than jump anneal (e.g. `12`).
+
+Session rule: entropy stays at discovery until **every** coach level in the `/train` call has cleared, then anneals using the slowest level’s cycles-since-clear.
+
+Rules (jump + entropy):
 
 1. Track whether each coach level has ever produced a victorious showcase this train call.
-2. Before first clear: use discovery `jump_reward`.
-3. After first clear: interpolate toward `jump_reward_polish` over `jump_anneal_cycles`.
+2. Before first clear: use discovery `jump_reward` / `entropy_regularization`.
+3. After first clear: interpolate toward polish targets over the anneal cycle spans.
 4. New `/train` call (coach level change) starts discovery band again.
 5. **Do not** anneal `turn_reward`.
 
@@ -156,7 +166,7 @@ Jump takeoffs are Stage B’s metric because flat hop spam is the observed bug a
 1. Anneal too fast / polish too harsh → pit-fear on rises / `platforming-9` — keep consolidate + reviews; widen discovery band if first clears stall.
 2. Confusing train jumps with play takeoffs — Optuna uses play mastery only.
 3. Rehearsal overfitting to one neat path — still require full-pack mastery before promote; monitor lock churn / confidence.
-4. Scouts never see a cleaner win → lock sticks on “clear +1 hop”; escalate later (SIL / entropy anneal) only after a fair local try.
+4. Scouts never see a cleaner win → lock sticks on “clear +1 hop”; escalate later (SIL / stronger ranking) only after a fair local try.
 
 ---
 

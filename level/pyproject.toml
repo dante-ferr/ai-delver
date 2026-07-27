@@ -9,7 +9,6 @@ packages = [{ include = "level" }]
 python = ">=3.10.0"
 pytiling = { path = "../pytiling-lib", develop = true }
 customtkinter = "*"
-dill = "*"
 
 [build-system]
 requires = ["poetry-core>=2.0.0"]

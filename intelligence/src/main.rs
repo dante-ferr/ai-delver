@@ -200,6 +200,8 @@ fn apply_overrides(config: &mut Config, args: &TrainArgs) {
     override_value!(learning_rate);
     override_value!(gamma);
     override_value!(entropy_regularization);
+    override_value!(entropy_regularization_polish);
+    override_value!(entropy_anneal_cycles);
     override_value!(finished_reward);
     override_value!(not_finished_reward);
     override_value!(turn_reward);

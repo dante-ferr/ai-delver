@@ -29,7 +29,7 @@ class StateSyncReplay(Replay):
     """
 
     def __init__(self, trajectory: "EpisodeTrajectory"):
-        level_dir = f"data/agents/{agent_loader.agent.name}/level_saves"
+        level_dir = f"data/agents/{agent_loader.storage_key}/level_saves"
         try:
             trajectory_level = level_loader.load_level(
                 level_dir,

@@ -59,6 +59,10 @@ pub struct TrainArgs {
     #[arg(long)]
     pub entropy_regularization: Option<f64>,
     #[arg(long)]
+    pub entropy_regularization_polish: Option<f64>,
+    #[arg(long)]
+    pub entropy_anneal_cycles: Option<usize>,
+    #[arg(long)]
     pub finished_reward: Option<f32>,
     #[arg(long)]
     pub not_finished_reward: Option<f32>,

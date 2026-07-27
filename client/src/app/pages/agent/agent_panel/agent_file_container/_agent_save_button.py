@@ -1,15 +1,13 @@
 from pathlib import Path
 from app.components import SaveButton
 from loaders import agent_loader
-from agent.config import AGENT_SAVE_FOLDER_PATH
-from state_managers import training_state_manager
+from agent.config import AGENT_SAVE_FOLDER_PATH, SESSION_STORAGE_KEY
 
 
 class AgentSaveButton(SaveButton):
 
     def __init__(self, master):
         super().__init__(master, AGENT_SAVE_FOLDER_PATH, "agent")
-        training_state_manager.add_disable_on_train_element(self)
 
     def _save(self):
         import subprocess
@@ -20,8 +18,18 @@ class AgentSaveButton(SaveButton):
         from app.components.overlay.message_overlay import MessageOverlay
 
         agent_name = agent_loader.agent.name.strip()
-        source_name = agent_loader.persisted_name
-        renamed = bool(source_name) and source_name != agent_name
+        if not agent_name or agent_name == SESSION_STORAGE_KEY:
+            MessageOverlay(
+                "Choose a valid agent name before saving.",
+                subject="Error",
+            )
+            return
+
+        # Flush UI prefs into the live workspace before the CLI copies it.
+        agent_loader._persist_ui_prefs()
+
+        # Always snapshot from the live workspace (session unless autosave is bound).
+        source_name = agent_loader.storage_key
         dest_exists = (Path(AGENT_SAVE_FOLDER_PATH) / agent_name).is_dir()
         client_dir = os.path.abspath(os.path.join(PROJECT_ROOT, ".."))
 
@@ -30,9 +38,9 @@ class AgentSaveButton(SaveButton):
             "save-agent",
             "--name", agent_name,
         ]
-        if source_name:
+        if source_name and source_name != agent_name:
             cmd.extend(["--from", source_name])
-        if renamed and dest_exists:
+        if dest_exists:
             cmd.append("--force")
 
         try:
@@ -46,7 +54,6 @@ class AgentSaveButton(SaveButton):
             stdout_out, stderr_out = process.communicate()
 
             if process.returncode != 0:
-                # Prefer JSON error events from the CLI when present.
                 error_message = stderr_out.strip()
                 for line in stdout_out.splitlines():
                     if line.strip().startswith("{"):
@@ -69,11 +76,10 @@ class AgentSaveButton(SaveButton):
                         continue
 
             if event_data.get("event") == "agent_saved":
-                agent_loader.load_agent(Path(AGENT_SAVE_FOLDER_PATH) / agent_name)
+                agent_loader.bind_after_save(agent_name)
+                from app_manager import app_manager
+                app_manager.editor_app.restart_all_pages()
                 super()._save()
-                if renamed:
-                    from app_manager import app_manager
-                    app_manager.editor_app.restart_all_pages()
             else:
                 raise RuntimeError(event_data.get("message", "Failed to save agent via CLI."))
 

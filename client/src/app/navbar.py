@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .pages.page import Page
+    from app.utils.selection import SelectionElementGroup
 
 
 class SelectorFrame(ctk.CTkFrame):
@@ -19,6 +20,8 @@ class Navbar(ctk.CTkFrame):
     def __init__(self, master):
         super().__init__(master, fg_color="transparent", height=32)
         self.master = master
+        self._selection_manager: SelectionManager | None = None
+        self._page_groups: dict[str, "SelectionElementGroup"] = {}
 
     def create_page_selectors(self, pages: dict[str, "Page"], default_page_name: str):
         selector_frames: list[ctk.CTkFrame] = []
@@ -45,9 +48,26 @@ class Navbar(ctk.CTkFrame):
         if default_frame is None:
             raise ValueError("The default page doesn't exist")
 
+        self._selection_manager = SelectionManager()
         populate_selection_manager(
-            SelectionManager(),
+            self._selection_manager,
             frames=selector_frames,
             default_frame=default_frame,
             on_select=lambda frame: self.master.select_page(frame.page_name),
         )
+        self._page_groups = {
+            group.frame.page_name: group
+            for group in self._selection_manager.selection_element_groups
+        }
+
+    def select_page(self, page_name: str) -> None:
+        """Select a page via the navbar so the highlight stays in sync."""
+        if self._selection_manager is None:
+            self.master.select_page(page_name)
+            return
+        group = self._page_groups.get(page_name)
+        if group is None:
+            raise ValueError(f"Unknown page '{page_name}'")
+        if self._selection_manager.selected_element_group is group:
+            return
+        self._selection_manager.selected_element_group = group

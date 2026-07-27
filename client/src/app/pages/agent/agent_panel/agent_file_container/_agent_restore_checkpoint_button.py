@@ -25,7 +25,7 @@ class AgentRestoreCheckpointButton(StandardButton):
     def _on_click(self):
         from cli.commands.checkpoint_store import list_checkpoints
 
-        agent_name = agent_loader.agent.name
+        agent_name = agent_loader.storage_key
         try:
             checkpoints = list_checkpoints(agent_name)
         except Exception as e:

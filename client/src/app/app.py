@@ -45,8 +45,24 @@ class App(ctk.CTk):
         self._create_pages()
 
         self.bind("<Button-1>", self.clear_focus)
+        self._bind_page_shortcuts()
 
         self._try_to_connect_to_server()
+
+    def _bind_page_shortcuts(self):
+        """Alt+1 / Alt+2 (configurable) switch Level Editor / Agent pages."""
+        from src.config import config
+
+        shortcuts = {
+            "level_editor": config.SHORTCUTS.LEVEL_EDITOR,
+            "agent": config.SHORTCUTS.AGENT,
+        }
+        for page_name, sequence in shortcuts.items():
+            self.bind_all(
+                sequence,
+                lambda _event, name=page_name: self.navbar.select_page(name),
+                add="+",
+            )
 
     def _try_to_connect_to_server(self):
         from client_requests.gui_training_client import gui_training_client

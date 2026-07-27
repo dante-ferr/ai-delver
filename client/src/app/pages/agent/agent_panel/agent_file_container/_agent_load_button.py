@@ -1,9 +1,11 @@
+import customtkinter as ctk
 from app.components import FileLoaderOverlay, LoadButton
-from agent.config import AGENT_SAVE_FOLDER_PATH
+from agent.config import AGENT_SAVE_FOLDER_PATH, SESSION_STORAGE_KEY
 from app.components.overlay.file_loader_overlay.file_loader_overlay_spawner import (
     FileLoaderOverlaySpawner,
 )
 from state_managers import training_state_manager
+from src.config import config
 
 
 class _AgentLoaderOverlay(FileLoaderOverlay):
@@ -70,4 +72,48 @@ class AgentLoadButton(LoadButton):
         training_state_manager.add_disable_on_train_element(self)
 
     def _on_click(self):
-        FileLoaderOverlaySpawner(AGENT_SAVE_FOLDER_PATH, "agent", _AgentLoaderOverlay)
+        FileLoaderOverlaySpawner(
+            AGENT_SAVE_FOLDER_PATH,
+            "agent",
+            _AgentLoaderOverlay,
+            exclude_files=[SESSION_STORAGE_KEY],
+        )
+
+
+class AgentAutosaveCheckbox(ctk.CTkCheckBox):
+    """When enabled, training writes directly into the bound named agent."""
+
+    def __init__(self, master, **kwargs):
+        from loaders import agent_loader
+
+        self._var = ctk.BooleanVar(value=agent_loader.autosave)
+        super().__init__(
+            master,
+            text="Auto-save",
+            variable=self._var,
+            command=self._on_toggle,
+            checkbox_width=20,
+            checkbox_height=20,
+            font=ctk.CTkFont(size=config.STYLE.FONT.STANDARD_SIZE),
+            **kwargs,
+        )
+        training_state_manager.add_disable_on_train_element(self)
+        agent_loader.add_prefs_listener(self._sync_from_loader)
+
+    def _sync_from_loader(self):
+        from loaders import agent_loader
+
+        enabled = bool(agent_loader.autosave)
+        if bool(self._var.get()) != enabled:
+            self._var.set(enabled)
+
+    def _on_toggle(self):
+        from loaders import agent_loader
+        from app.components.overlay.message_overlay import MessageOverlay
+
+        enabled = bool(self._var.get())
+        try:
+            agent_loader.set_autosave(enabled)
+        except Exception as e:
+            self._var.set(agent_loader.autosave)
+            MessageOverlay(str(e), subject="Error")

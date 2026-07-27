@@ -149,7 +149,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
 
         levels_str = ",".join(training_state_manager.training_levels)
         mode = "static"
-        agent_name = agent_loader.agent.name
+        agent_name = agent_loader.storage_key
 
         client_dir = os.path.abspath(os.path.join(PROJECT_ROOT, ".."))
 
@@ -219,9 +219,11 @@ class TrainButtonsContainer(ctk.CTkFrame):
                 # Review showcases are not persisted; only refresh the list for saved ones.
                 if data.get("persisted", True) and not data.get("is_review", False):
                     trajectory_stats_state_manager.notify_trajectory_added()
+                    agent_loader.mark_dirty()
             elif event == "showcase":
                 if data.get("persisted", True) and not data.get("is_review", False):
                     trajectory_stats_state_manager.notify_trajectory_added()
+                    agent_loader.mark_dirty()
             elif event == "level_transition":
                 levels_trained = data.get("levels_trained", 0)
                 training_state_manager.set_value("levels_trained", levels_trained)
@@ -235,10 +237,12 @@ class TrainButtonsContainer(ctk.CTkFrame):
                 )
                 training_state_manager.reset_states()
                 trajectory_stats_state_manager.refresh_stats()
+                agent_loader.mark_dirty()
                 MessageOverlay(f"Play session completed in {time_str}.", subject="Success")
             elif event == "interrupted":
                 training_state_manager.reset_states()
                 trajectory_stats_state_manager.refresh_stats()
+                agent_loader.mark_dirty()
                 MessageOverlay("Play session interrupted.", subject="Success")
 
         self.train_process.wait()
@@ -264,7 +268,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
         runs_per_cycle = str(int(float(training_state_manager.runs_per_cycle)))
         checkpoint_interval = str(int(float(training_state_manager.checkpoint_interval)))
         mode = "static"
-        agent_name = agent_loader.agent.name
+        agent_name = agent_loader.storage_key
 
         client_dir = os.path.abspath(os.path.join(PROJECT_ROOT, ".."))
 
@@ -364,6 +368,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
                 # Review showcases are not persisted; only refresh the list for saved ones.
                 if data.get("persisted", True) and not data.get("is_review", False):
                     trajectory_stats_state_manager.notify_trajectory_added()
+                    agent_loader.mark_dirty()
             elif event == "level_transition":
                 levels_trained = data.get("levels_trained", 0)
                 training_state_manager.set_value("levels_trained", levels_trained)
@@ -380,11 +385,13 @@ class TrainButtonsContainer(ctk.CTkFrame):
                 # Drop review bar before reset in case the session ended on a review phase.
                 training_state_manager.remove_review_process_log()
                 training_state_manager.reset_states()
+                agent_loader.mark_dirty()
                 trajectory_stats_state_manager.refresh_stats()
                 MessageOverlay(f"Training session completed in {time_str}.", subject="Success")
             elif event == "interrupted":
                 training_state_manager.remove_review_process_log()
                 training_state_manager.reset_states()
+                agent_loader.mark_dirty()
                 trajectory_stats_state_manager.refresh_stats()
                 MessageOverlay("Training session interrupted.", subject="Success")
 

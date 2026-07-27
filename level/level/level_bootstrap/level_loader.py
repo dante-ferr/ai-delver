@@ -1,9 +1,7 @@
 from ._level_factory import LevelFactory
-from ._level_factory import LevelFactory
 from pathlib import Path
 from level import config as level_config
-from typing import cast, TYPE_CHECKING
-import logging
+from typing import Callable, cast, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..level import Level
@@ -13,6 +11,8 @@ class LevelLoader:
 
     def __init__(self):
         self.factory = LevelFactory()
+        self._dirty: bool = False
+        self._dirty_listeners: list[Callable[[bool], None]] = []
         self._create_new_level()
 
     def load_level(
@@ -46,5 +46,31 @@ class LevelLoader:
         """Sets the level to the given level."""
         self._level = value
 
+    @property
+    def dirty(self) -> bool:
+        return self._dirty
+
+    def mark_dirty(self) -> None:
+        self._set_dirty(True)
+
+    def mark_saved(self) -> None:
+        self._set_dirty(False)
+
+    def add_dirty_listener(self, callback: Callable[[bool], None]) -> None:
+        self._dirty_listeners.append(callback)
+
+    def remove_dirty_listener(self, callback: Callable[[bool], None]) -> None:
+        if callback in self._dirty_listeners:
+            self._dirty_listeners.remove(callback)
+
     def _create_new_level(self):
         self._level: "Level" = self.factory.create_level()
+        self._set_dirty(False)
+
+    def _set_dirty(self, dirty: bool) -> None:
+        dirty = bool(dirty)
+        if dirty == self._dirty:
+            return
+        self._dirty = dirty
+        for listener in list(self._dirty_listeners):
+            listener(dirty)

@@ -11,6 +11,7 @@ class LevelSaveButton(SaveButton):
     def _save(self):
         super()._save()
         level_loader.level.save()
+        level_loader.mark_saved()
 
     @property
     def file_name(self) -> str:

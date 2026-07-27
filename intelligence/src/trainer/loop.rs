@@ -89,6 +89,14 @@ pub fn train(
 
         // Rebuild envs so each level uses its annealed jump_reward for this cycle.
         let mut envs = build_envs(&levels, level_hashes, &base_config, &clear_progress);
+        // Entropy is session-wide: discovery until every coach level has cleared, then polish.
+        let entropy = base_config.annealed_entropy(session_cycles_since_clear(
+            level_hashes,
+            &clear_progress,
+        ));
+        if !base_config.no_learning {
+            ppo.set_entropy_regularization(entropy);
+        }
 
         let mut completed_episodes = 0usize;
         let mut victories = 0usize;
@@ -497,6 +505,26 @@ fn annealed_config_for_hash(
     let cycles_since = clear_progress.get(level_hash).copied();
     let jump = base_config.annealed_jump_reward(cycles_since);
     Arc::new(base_config.with_jump_reward(jump))
+}
+
+/// `None` while any coach level is still uncleared; otherwise min cycles-since-clear.
+fn session_cycles_since_clear(
+    level_hashes: &[String],
+    clear_progress: &ClearProgress,
+) -> Option<usize> {
+    let mut min_elapsed: Option<usize> = None;
+    for hash in level_hashes {
+        match clear_progress.get(hash) {
+            None => return None,
+            Some(&elapsed) => {
+                min_elapsed = Some(match min_elapsed {
+                    None => elapsed,
+                    Some(current) => current.min(elapsed),
+                });
+            }
+        }
+    }
+    min_elapsed
 }
 
 fn mark_level_cleared(clear_progress: &mut ClearProgress, level_hash: &str) {

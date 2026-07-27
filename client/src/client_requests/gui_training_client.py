@@ -37,7 +37,7 @@ class GuiTrainingClient(TrainingClient):
             if len(training_state_manager.training_levels) == 0:
                 raise ValueError("No levels selected for training.")
                 
-            self.ensure_levels_saved(training_state_manager.training_levels, agent_loader.agent.name)
+            self.ensure_levels_saved(training_state_manager.training_levels, agent_loader.storage_key)
             
             payload = self.create_training_payload(
                 levels=training_state_manager.training_levels,
@@ -60,7 +60,8 @@ class GuiTrainingClient(TrainingClient):
             
             async def on_trajectory(trajectory, level_episode_count):
                 if trajectory:
-                    await trajectory.save(agent_loader.agent.name)
+                    await trajectory.save(agent_loader.storage_key)
+                    agent_loader.mark_dirty()
                 training_state_manager.set_value("level_episode_count", level_episode_count)
                 self._current_cycle += 1
                 training_state_manager.update_training_process_log(self._current_cycle)

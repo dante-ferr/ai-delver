@@ -17,9 +17,9 @@ Usually leave defaults alone. Coaching changes **weights**, not engine constants
 
 ## Discovery band (invent)
 
-- `tile_exploration_reward`
+- `tile_exploration_reward` — keep strong enough to beat the **idle/left spawn local min** (standing still is free; weak explore + low entropy collapses argmax). Do not drop back to Trial-5 `0.0165` without a compensating entropy bump.
 - `jump_reward` (mild)
-- `entropy_regularization`
+- `entropy_regularization` — discovery band (e.g. `~0.06`); anneals to `entropy_regularization_polish` after clear. Static `0.2` historically blocked convergence.
 - `goal_distance_reward_scale`
 - `learning_rate`
 
@@ -28,6 +28,7 @@ Lean **exploratory** here now that polish is scheduled — see [Engine Protocol]
 ## Polish band (after clear)
 
 - `jump_reward_polish`, `jump_anneal_cycles`
+- `entropy_regularization_polish`, `entropy_anneal_cycles`
 - `goal_rehearsal_*`
 
 ## Mastery / finish

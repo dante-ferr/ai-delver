@@ -3,7 +3,7 @@ import json
 from typing import TYPE_CHECKING
 from ._header import TrajectoryHeader
 from ._summary_panel import TrajectorySummaryPanel
-from ._minimap import TrajectoryMinimap
+from ._trajectory_minimap import TrajectoryMinimap
 
 if TYPE_CHECKING:
     from runtime.episode_trajectory import EpisodeTrajectory
@@ -121,38 +121,24 @@ class TrajectoryViewer(ctk.CTkFrame):
         try:
             level_hash = self.trajectory.level_hash
             from loaders import agent_loader
+            from src.app.utils.level_minimap_geometry import parse_level_minimap_geometry
+
             trajectory_loader = agent_loader.agent.trajectory_loader
-            level_path = trajectory_loader.trajectory_dir.parent / "level_saves" / f"{level_hash}.json"
-            
+            level_path = (
+                trajectory_loader.trajectory_dir.parent
+                / "level_saves"
+                / f"{level_hash}.json"
+            )
+
             if level_path.is_file():
                 with open(level_path, "r") as f:
                     level_data = json.load(f)
-                    map_data = level_data.get("map", {})
-                    grid_size = map_data.get("grid_size", [27, 27])
-                    tile_size = map_data.get("tile_size", [16, 16])
-                    
-                    # Load walls (platforms layer)
-                    tilemap = map_data.get("tilemap", {})
-                    for layer in tilemap.get("layers", []):
-                        if layer.get("name") == "platforms":
-                            for elem in layer.get("elements", []):
-                                if elem.get("name") == "platform":
-                                    pos = elem.get("position")
-                                    if pos:
-                                        walls.append((pos[0], pos[1]))
-                    
-                    # Load essentials (delver start, goal position)
-                    world_objects_map = map_data.get("world_objects_map", {})
-                    for layer in world_objects_map.get("layers", []):
-                        if layer.get("name") == "essentials":
-                            for elem in layer.get("elements", []):
-                                name = elem.get("name")
-                                pos = elem.get("position")
-                                if pos:
-                                    if name == "delver":
-                                        start_pos = (pos[0], pos[1])
-                                    elif name == "goal":
-                                        goal_pos = (pos[0], pos[1])
+                geom = parse_level_minimap_geometry(level_data)
+                grid_size = geom.grid_size
+                tile_size = geom.tile_size
+                walls = geom.walls
+                start_pos = geom.start_pos
+                goal_pos = geom.goal_pos
         except Exception as e:
             print(f"[Visualizer Error] Failed to parse level file: {e}")
 
@@ -160,7 +146,9 @@ class TrajectoryViewer(ctk.CTkFrame):
         self.summary_panel.update_summary(self.trajectory)
 
         # Update right minimap panel
-        self.minimap_panel.update_minimap(self.trajectory, grid_size, tile_size, walls, start_pos, goal_pos)
+        self.minimap_panel.update_minimap(
+            self.trajectory, grid_size, tile_size, walls, start_pos, goal_pos
+        )
 
     def _set_data_display_to_default(self):
         self.summary_panel.reset_to_default()

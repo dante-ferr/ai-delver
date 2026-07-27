@@ -9,7 +9,12 @@
 # (15 showcases/level). See intelligence/logs/pass1_p9_consolidation_tune.log.
 learning_rate = 0.000158            # Sequential-mastery Optuna Trial 1
 gamma = 0.995                     # Discount factor for future rewards (balancing short-term vs long-term goals)
-entropy_regularization = 0.0321    # Sequential-mastery Optuna Trial 1 (lower than prior organic default)
+# Raised from Trial-1 0.0321: low entropy + weak explore let argmax collapse to idle/left
+# at spawn. Discovery band stays exploratory; after first clear, anneal toward polish so
+# neat/jumpless argmax locks faster (static 0.06 alone delayed neat convergence).
+entropy_regularization = 0.06
+entropy_regularization_polish = 0.025
+entropy_anneal_cycles = 12          # Faster sharpen than jump anneal (20) once inventing is done
 ppo_num_epochs = 4                # Number of optimization epochs per gradient update step
 clip_epsilon = 0.2                # PPO policy-ratio clipping range
 gae_lambda = 0.95                 # Bias/variance tradeoff for generalized advantage estimation
@@ -24,7 +29,7 @@ device = "auto"                   # auto (CUDA if available), cpu, cuda, cuda:N,
 # ==============================================================================
 # Local view is a fixed 25×25 (radius 12) occupancy grid = 625 inputs — sized so
 # 8-tile pits on platforming-9/10 are visible before the jump commitment.
-local_feature_dim = 256           # Local-view encoder width (625 → this)
+local_feature_dim = 256           # Local-view encoder width (625 → 256)
 lstm_hidden_size = 128            # LSTM hidden / recurrent state size
 mlp_hidden_dim = 256              # Fused MLP hidden width before the LSTM
 
@@ -37,9 +42,10 @@ turn_reward = -0.28               # Sequential-mastery Optuna Trial 1 (matches p
 
 frame_step_reward = -0.01         # Time penalty per step to encourage faster execution
 # Per newly marked tile (air + floor). Boolean step bonus removed.
-# Discovery-safe explore/jump band: neatness comes from Goal Rehearsal Lock + post-clear
-# jump anneal (not a single static harsh jump_reward).
-tile_exploration_reward = 0.0165
+# Discovery explore: Stage-B Trial 5 used 0.0165 (too weak for blank agents — spawn idle
+# local min). Raised toward discovery while lock+anneal keep jump neatness (not a return
+# to Phase-5 0.1495 jump-farm band).
+tile_exploration_reward = 0.06
 jump_reward = -2.0                # Discovery-band takeoff cost (before first clear)
 jump_reward_polish = -3.5         # Post-clear anneal target (more negative = neater pressure)
 jump_anneal_cycles = 20           # Cycles after first clear to reach jump_reward_polish

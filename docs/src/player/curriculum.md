@@ -37,13 +37,13 @@ After enough focus training (measured in episodes), the client inserts review-pa
 
 To make the coaching experience smooth and prevent accidental skill wipes, the client CLI automatically manages forgetting prevention:
 
-1. **Curriculum Tracking**: The client tracks the agent's training history in `data/agents/<agent_name>/trajectories/metadata.json` under the `trained_levels` list (plus `level_hashes` and `review_state`).
+1. **Curriculum Tracking**: The client tracks the agent's training history in `data/agents/<agent_name>/trajectories/metadata.json` under the `trained_levels` list (plus `level_hashes`, `review_state`, and `level_archive`).
 2. **Challenge Detection**: When starting a focus training session, the CLI compares the coach-selected levels with the historical `trained_levels` list.
 3. **Automatic Scaling**:
    * If the agent is warm-starting AND facing a new level (not in the trained history):
      * The system automatically scales the default learning rate down to `0.000075` (1/4 of the default `0.0003` value).
      * If the user has explicitly overridden the learning rate in their arguments, the CLI respects their override and logs the choice.
-4. **History Consolidation**: When new model weights are written from the server (`model_weights` WebSocket event), the session levels are merged into `trained_levels` and review state is updated ([Automatic Reviews](automatic_reviews.md)). Interrupted sessions that still deliver weights commit the same way.
+4. **History Consolidation**: When new model weights are written from the server (`model_weights` WebSocket event), the session levels are merged into `trained_levels` and review state is updated ([Automatic Reviews](automatic_reviews.md)). Focus commits also upsert `level_archive` (hash-keyed first/last trained timestamps and the name at first train). Interrupted sessions that still deliver weights commit the same way.
 
 ---
 
@@ -86,7 +86,7 @@ checkpoints/<uuid>/
 manifest.json
 ```
 
-`curriculum.json` snapshots `trained_levels`, `level_hashes`, and `review_state` from the **committed** curriculum at save time (pre-session for `pre_level` / mid-run `interval` checkpoints). Restoring a checkpoint copies weights onto `model_weights.zip` **and** restores those curriculum fields so policy and review state stay aligned.
+`curriculum.json` snapshots `trained_levels`, `level_hashes`, `review_state`, and `level_archive` from the **committed** curriculum at save time (pre-session for `pre_level` / mid-run `interval` checkpoints). Restoring a checkpoint copies weights onto `model_weights.zip` **and** restores those curriculum fields so policy and review state stay aligned.
 
 Legacy single-file `cycle_*.zip` / flat `{uuid}.zip` checkpoints still resolve for weights-only restore (curriculum left unchanged, with no bundle metadata).
 

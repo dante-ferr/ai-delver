@@ -31,6 +31,8 @@ height = 42
 pad_x = 12
 pad_y = 6
 brand = "Ai Delver"
+favicon_size = 22
+favicon_gap = 8
 brand_gap = 28
 tab_font_size = 14
 tab_height = 30
@@ -63,6 +65,10 @@ debounce_ms = 80
 hash_display_chars = 12
 window_width = 960
 window_height = 640
+
+# Delver sprite animation shown next to the training log.
+[delver_gif]
+target_height = 140
 
 [shortcuts]
 level_editor = "<Alt-Key-1>"

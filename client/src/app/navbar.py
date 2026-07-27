@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from PIL import Image
 from loaders import level_loader, agent_loader
 from state_managers import training_state_manager
 from src.config import config
@@ -35,6 +36,20 @@ class Navbar(ctk.CTkFrame):
 
         self._left = ctk.CTkFrame(self, fg_color="transparent")
         self._left.grid(row=0, column=0, sticky="w", padx=(pad_x, 0), pady=pad_y)
+
+        favicon_size = int(nav.FAVICON_SIZE)
+        favicon_image = Image.open(config.ASSETS_PATH / "img" / "favicon.png")
+        self._favicon = ctk.CTkImage(
+            light_image=favicon_image,
+            dark_image=favicon_image,
+            size=(favicon_size, favicon_size),
+        )
+        self._favicon_label = ctk.CTkLabel(
+            self._left,
+            text="",
+            image=self._favicon,
+        )
+        self._favicon_label.pack(side="left", padx=(0, nav.FAVICON_GAP))
 
         self._brand = ctk.CTkLabel(
             self._left,

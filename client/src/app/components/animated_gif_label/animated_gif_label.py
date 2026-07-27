@@ -19,11 +19,14 @@ class AnimatedGifLabel(ctk.CTkLabel):
         self.after_id = None
         self._current_gif_path = None
 
-    def load_gif_by_name(self, animation_name: str, target_height: int = 100):
+    def load_gif_by_name(self, animation_name: str, target_height: int | None = None):
         """
         Loads a GIF by animation name ('idle' or 'run').
         If the GIF is not found, it is automatically generated.
         """
+        if target_height is None:
+            target_height = int(config.DELVER_GIF.TARGET_HEIGHT)
+
         gif_dir = config.ASSETS_PATH / "img" / "sprites" / "delver"
         gif_path = gif_dir / f"delver_{animation_name}.gif"
         

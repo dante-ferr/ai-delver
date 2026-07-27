@@ -8,6 +8,13 @@ Never hardcode tunable constants (timing, sizes, counts, thresholds, feature kno
 
 Prefer extending an existing config section over inventing a parallel source of truth. Magic numbers that only make sense as local implementation details of an algorithm (e.g. a one-off loop bound tied to nearby math) may stay inline; anything an operator might want to tweak must live in config.
 
+## Image assets (sprites vs representations)
+
+- `assets/img/sprites/` — canonical in-game art; runtime loads from here.
+- `assets/img/representations/` — editor-only overrides when the canvas icon must differ from the sprite.
+- Editor image lookup: `level.resolve_editor_object_image` (representation if present, else sprite). Do not duplicate identical PNGs in both folders.
+- See `.cursor/rules/sprites-and-representations.mdc` and `docs/src/engineering/assets_sprites_representations.md`.
+
 ## Commits
 
 The commit message should be structured as follows:

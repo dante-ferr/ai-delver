@@ -1,8 +1,7 @@
 from ._canvas_objects_layer import CanvasObjectsLayer
 from src.config import config
 from .canvas_object import CanvasObject
-from typing import Any
-from level import world_object_size
+from level import resolve_editor_object_image, world_object_size
 
 
 class CanvasObjectsFactory:
@@ -39,8 +38,11 @@ class CanvasObjectsFactory:
             canvas_object = self._create_canvas_object(
                 variation,
                 path=str(
-                    config.ASSETS_PATH
-                    / f"img/nxt/{world_object_name}/{variation}.png"
+                    resolve_editor_object_image(
+                        config.ASSETS_PATH,
+                        world_object_name,
+                        variation=variation,
+                    )
                 ),
                 name=world_object_name,
                 tags=[f"variation_{variation}"],
@@ -63,7 +65,7 @@ class CanvasObjectsFactory:
 
         if path is None:
             path = str(
-                config.ASSETS_PATH / f"img/nxt/{canvas_object_name}.png"
+                resolve_editor_object_image(config.ASSETS_PATH, canvas_object_name)
             )
 
         return CanvasObject(

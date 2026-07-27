@@ -14,6 +14,7 @@ from .sketch import (
     parse_level_sketch,
 )
 
+from .utils.resolve_editor_object_image import resolve_editor_object_image
 from .world_object_sizes import delver_size_tiles, world_object_size
 
 serialization.initialize_level_deserializers()
@@ -34,6 +35,7 @@ __all__ = [
     "ensure_surrounding_walls",
     "parse_level_sketch",
     "delver_size_tiles",
+    "resolve_editor_object_image",
     "world_object_size",
 ]
 

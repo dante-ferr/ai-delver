@@ -23,6 +23,7 @@
 - [Player Curriculum & Forgetting](player/curriculum.md)
   - [Automatic Reviews](player/automatic_reviews.md)
 - [Engineering](engineering/index.md)
+  - [Sprites & Representations](engineering/assets_sprites_representations.md)
   - [Fine-Tuning History](engineering/fine_tuning_history.md)
   - [Stage B: Jump Cleanliness Polish](engineering/jump_polish_stage_b.md)
   - [Run Types & Policy Modes](engineering/run_types.md)

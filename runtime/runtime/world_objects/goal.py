@@ -107,7 +107,8 @@ class Goal(Item):
             self.sprite.update(x=x, y=y)
 
 
-GOAL_SPRITES_DIR = ASSETS_PATH / "img/nxt/goal"
+# Runtime always loads game art from sprites/ (never editor representations/).
+GOAL_SPRITES_DIR = ASSETS_PATH / "img/sprites/goal"
 GOAL_VARIATION_ALIASES = {"default": "uranium_cake", "goal": "uranium_cake"}
 
 

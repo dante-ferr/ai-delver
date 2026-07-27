@@ -69,3 +69,7 @@ This repo encapsulates all of its internal dependencies, serving as a developmen
 
 ## Tweaks
 You can tweak the ai training settings at intelligence/config.toml. Be careful, because some of them might break the app if changed.
+
+## License
+
+This project is licensed under the **PolyForm Noncommercial License 1.0.0**. Commercial use, commercial distribution, or monetized exploitation of this software is strictly prohibited. See the [LICENSE](file:///home/dante/Code/projects/ai-delver/LICENSE) file for details.

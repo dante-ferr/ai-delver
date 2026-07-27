@@ -1,19 +1,18 @@
 """Configurable UI fonts — swap family via ``[style.font] family`` in config.toml.
 
-Font files live under ``assets/fonts/<Family>/`` (OFL TTF). Call ``init_fonts()``
-once after the CustomTkinter color theme is loaded and before widgets are built.
+Font files live under ``assets/fonts/<Family>/`` (OFL TTF), or any system family
+(e.g. waybar's ``FiraCode Nerd Font``). Call ``init_fonts()`` once after the
+CustomTkinter color theme is loaded and before widgets are built.
 
-On Linux, ``bootstrap`` registers those folders with fontconfig before Tk starts.
-Windows / macOS register TTFs into the session / user font directory here.
-
-``vertical_scale`` (>1) stretches glyph height without widening advances, so the
-face reads taller / less squat.
+``vertical_scale`` stretches glyph height. ``tracking`` < 1.0 tightens advances
+(shorter letter spacing). Tuned copies are cached under ``client/data/fonts_cache/``.
 """
 
 from __future__ import annotations
 
 import logging
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Literal, Optional, Tuple, Union
@@ -22,10 +21,10 @@ import customtkinter as ctk
 from customtkinter.windows.widgets.font import FontManager
 from customtkinter.windows.widgets.theme import ThemeManager
 
-from bundled_fonts import refresh_fontconfig
+from bundled_fonts import fonts_cache_root, refresh_fontconfig
 from src.config import config
 
-from .font_stretch import scale_font_vertically
+from .font_stretch import transform_font
 
 _initialized = False
 
@@ -43,41 +42,113 @@ def vertical_scale() -> float:
         return 1.0
 
 
+def tracking() -> float:
+    try:
+        return float(config.STYLE.FONT.TRACKING)
+    except AttributeError:
+        return 1.0
+
+
 def fonts_dir() -> Path:
     return config.ASSETS_PATH / "fonts" / family_name()
 
 
-def _scaled_family_dir() -> Path:
-    from bundled_fonts import fonts_cache_root
-
-    scale = vertical_scale()
-    scale_key = f"{scale:.3f}".rstrip("0").rstrip(".")
-    return fonts_cache_root() / family_name() / f"v{scale_key}"
+def _needs_transform() -> bool:
+    return abs(vertical_scale() - 1.0) >= 1e-6 or abs(tracking() - 1.0) >= 1e-6
 
 
-def _prepare_family_ttfs() -> Path:
-    """Return directory of TTFs to register (source, or vertically stretched cache)."""
-    source_dir = fonts_dir()
-    scale = vertical_scale()
-    if abs(scale - 1.0) < 1e-6:
-        return source_dir
+def _cache_key() -> str:
+    v = f"{vertical_scale():.3f}".rstrip("0").rstrip(".")
+    t = f"{tracking():.3f}".rstrip("0").rstrip(".")
+    return f"v{v}_t{t}"
 
-    dest_dir = _scaled_family_dir()
+
+def _cache_family_dir() -> Path:
+    # Sanitize family for filesystem (spaces ok on Linux; keep readable).
+    safe = family_name().replace("/", "_")
+    return fonts_cache_root() / safe / _cache_key()
+
+
+def _system_font_files(family: str) -> list[Path]:
+    """Locate installed TTF/OTF files for a fontconfig family."""
+    if not sys.platform.startswith("linux"):
+        return []
+    try:
+        result = subprocess.run(
+            ["fc-list", f":family={family}", "file"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return []
+
+    paths: list[Path] = []
+    seen: set[Path] = set()
+    for line in result.stdout.splitlines():
+        raw = line.split(":", 1)[0].strip()
+        if not raw:
+            continue
+        path = Path(raw)
+        if path.suffix.lower() not in {".ttf", ".otf"}:
+            continue
+        # Prefer the proportional UI face; skip Mono/Propo duplicates when
+        # the requested family is the plain Nerd Font.
+        name_l = path.name.lower()
+        if "mono" in name_l or "propo" in name_l:
+            if "mono" not in family.lower() and "propo" not in family.lower():
+                continue
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        paths.append(resolved)
+    return sorted(paths)
+
+
+def _source_ttfs() -> tuple[list[Path], list[Path]]:
+    """Return (source files to tune, reject_files for fontconfig)."""
+    bundled = fonts_dir()
+    if bundled.is_dir():
+        files = sorted(bundled.glob("*.ttf"))
+        return files, files
+
+    system_files = _system_font_files(family_name())
+    return system_files, system_files
+
+
+def _prepare_family_ttfs() -> tuple[Path | None, list[Path]]:
+    """Build tuned cache if needed. Returns (active_dir, reject_files)."""
+    sources, reject_files = _source_ttfs()
+    if not sources:
+        return None, []
+
+    if not _needs_transform():
+        # Bundled unmodified: use assets dir. System unmodified: no cache.
+        bundled = fonts_dir()
+        if bundled.is_dir():
+            return bundled, []
+        return None, []
+
+    dest_dir = _cache_family_dir()
     dest_dir.mkdir(parents=True, exist_ok=True)
-    for src in sorted(source_dir.glob("*.ttf")):
+    y_scale = vertical_scale()
+    track = tracking()
+
+    for src in sources:
         dest = dest_dir / src.name
-        # Rebuild when source is newer or cache missing.
         if (
             not dest.exists()
             or dest.stat().st_mtime < src.stat().st_mtime
             or dest.stat().st_size == 0
         ):
             try:
-                scale_font_vertically(src, dest, scale)
+                transform_font(src, dest, y_scale=y_scale, tracking=track)
             except Exception:
-                logging.exception("Failed to stretch font %s; using source", src.name)
+                logging.exception("Failed to transform font %s; copying source", src.name)
                 shutil.copy2(src, dest)
-    return dest_dir
+
+    return dest_dir, reject_files
 
 
 def _install_font_file(font_path: Path) -> bool:
@@ -97,7 +168,6 @@ def _install_font_file(font_path: Path) -> bool:
             logging.warning("Font install failed for %s: %s", font_path.name, err)
             return False
 
-    # Linux: fontconfig is prepared in bootstrap / refreshed below.
     if sys.platform.startswith("linux"):
         return font_path.is_file()
 
@@ -112,21 +182,22 @@ def init_fonts() -> None:
         return
 
     FontManager.init_font_manager()
-    source_dir = fonts_dir()
     family = family_name()
+    active_dir, reject_files = _prepare_family_ttfs()
 
-    if not source_dir.is_dir():
-        # System-installed family (e.g. FiraCode Nerd Font from waybar) — no bundle needed.
-        logging.info("Using system font family %r (no assets/fonts/%s/)", family, family)
+    if active_dir is None:
+        logging.info("Using system font family %r as-is", family)
         if "CTkFont" in ThemeManager.theme:
             ThemeManager.theme["CTkFont"]["family"] = family
         _initialized = True
         return
 
-    active_dir = _prepare_family_ttfs()
     if sys.platform.startswith("linux"):
-        # Prefer stretched cache over the stock assets copy of the same family.
-        refresh_fontconfig(active_family=family, active_dir=active_dir)
+        refresh_fontconfig(
+            active_family=family,
+            active_dir=active_dir,
+            reject_files=reject_files or None,
+        )
 
     loaded_any = False
     for path in sorted(active_dir.glob("*.ttf")):
@@ -136,6 +207,8 @@ def init_fonts() -> None:
             logging.warning("Failed to load font file: %s", path)
 
     if loaded_any and "CTkFont" in ThemeManager.theme:
+        ThemeManager.theme["CTkFont"]["family"] = family
+    elif "CTkFont" in ThemeManager.theme:
         ThemeManager.theme["CTkFont"]["family"] = family
 
     _initialized = True

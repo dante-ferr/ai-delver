@@ -59,7 +59,7 @@ class EpisodesSettingPanel(ctk.CTkFrame):
             on_update=self._set_checkpoint_interval,
             fg_color="transparent",
         )
-        self.checkpoint_interval_input.pack(pady=(0, 12), fill="x")
+        self.checkpoint_interval_input.pack(pady=(0, 24), fill="x")
         training_state_manager.checkpoint_interval = init_checkpoint
 
         self.early_stop_var = ctk.BooleanVar(value=bool(training_state_manager.early_stop))

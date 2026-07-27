@@ -253,7 +253,7 @@ class TrajectorySummaryPanel(ctk.CTkFrame):
     def update_summary(self, trajectory):
         """Updates the text statistics and action timeline from the trajectory."""
         self.status_label.pack_forget()
-        self.details_grid.pack(fill="x", padx=0, pady=2)
+        self.details_grid.pack(fill="x", padx=0, pady=(2, 12))
 
         outcome_str = "🏆 VICTORIOUS" if trajectory.victorious else "💀 DEFEATED"
         outcome_color = "#10b981" if trajectory.victorious else "#ef4444"

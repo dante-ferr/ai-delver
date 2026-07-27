@@ -357,12 +357,14 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
                     # Avoid showing raw list histories as simple text labels
                     if isinstance(stat_value, (list, dict)):
                         continue
+                    display_name = stat_name.replace("_", " ").capitalize()
+                    pady_val = (0, 8) if stat_name == "processed_count" else (0, 0)
                     label = ctk.CTkLabel(
                         self.stats_container,
-                        text=f"{stat_name.capitalize()}: {stat_value}",
+                        text=f"{display_name}: {stat_value}",
                         font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
                     )
-                    label.pack(anchor="w", padx=4, pady=0)
+                    label.pack(anchor="w", padx=4, pady=pady_val)
 
                 trajectory_stats_state_manager.victories_history = list(
                     stats.get("victories_history", []) or []

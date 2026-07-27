@@ -33,7 +33,7 @@ class TrainPanel(ctk.CTkFrame):
         self.episodes_setting_panel.pack(pady=(0, 12), fill="x")
 
         self.info_frame = ctk.CTkFrame(self, fg_color="transparent", width=0, height=0)
-        self.info_frame.pack(fill="x")
+        self.info_frame.pack(fill="x", pady=(0, 12))
 
         self.cycles_label = ctk.CTkLabel(
             self.info_frame,

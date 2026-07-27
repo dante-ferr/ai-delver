@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from app.components import DeleteButton, FileDeleterOverlay
 from agent.config import AGENT_SAVE_FOLDER_PATH, SESSION_STORAGE_KEY
+from agent.session_workspace import reset_session_workspace
 from app.components.overlay.file_loader_overlay.file_loader_overlay_spawner import (
     FileLoaderOverlaySpawner,
 )
@@ -17,8 +20,16 @@ class _AgentDeleterOverlay(FileDeleterOverlay):
         )
         super()._delete(selected_name)
 
-        if was_current:
+        # Only reset the live session if the named save actually went away.
+        deleted = not (Path(AGENT_SAVE_FOLDER_PATH) / selected_name).exists()
+        if was_current and deleted:
+            # Named save is gone; wipe live session so the UI is a blank Delver.
+            reset_session_workspace()
             agent_loader._create_new_agent()
+            training_state_manager.clear_nerd_metrics()
+            training_state_manager.all_time_loss_history = []
+            training_state_manager.all_time_return_history = []
+            training_state_manager.all_time_step_history = []
             app_manager.editor_app.restart_all_pages()
 
 

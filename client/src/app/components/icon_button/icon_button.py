@@ -19,9 +19,11 @@ class IconButton(ctk.CTkButton):
         if kwargs.get("image"):
             raise ValueError("IconButton cannot have image")
 
+        kwargs.setdefault("cursor", "hand2")
         kwargs.setdefault("fg_color", "transparent")
         kwargs.setdefault("width", 24)
         kwargs.setdefault("height", 24)
         kwargs.setdefault("hover_color", "#555")
 
         super().__init__(master, text="", image=icon.get_ctk_image(), **kwargs)
+

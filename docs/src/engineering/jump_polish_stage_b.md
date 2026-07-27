@@ -54,7 +54,7 @@ Showcase = **current** weights’ argmax, not “best trajectory ever.” Clean-
 
 ---
 
-## 4. Primary levers (landed): Rehearsal Lock + Post-Clear Jump Anneal
+## 4. Primary levers (landed): Lock + post-clear anneals
 
 ### Lever A — Goal Rehearsal Lock (scouts + BC)
 
@@ -62,11 +62,12 @@ Config (`intelligence/config.toml`):
 
 - `goal_rehearsal_lock = true`
 - `goal_rehearsal_epochs = 8`
-- `goal_rehearsal_scout_episodes = 4`
+- `goal_rehearsal_scout_episodes = 4` (pre-clear)
+- `goal_rehearsal_scout_episodes_polish = 8` (after clear)
 
 Behavior:
 
-1. After each cycle: greedy showcase + `K` stochastic scouts.
+1. After each cycle: greedy showcase + `K` stochastic scouts (`K` rises after clear).
 2. Lock the fewest-takeoff **victory** among them (strictly fewer takeoffs, or equal takeoffs with higher `policy_confidence`).
 3. Each cycle, behavioral-clone (`Ppo::rehearse`) locked trajectories for `goal_rehearsal_epochs`.
 4. Training collect stays stochastic; rehearsal sticks argmax to the clean win even when return near-ties.
@@ -75,44 +76,41 @@ No flat-floor ban — only observed clean wins are reinforced.
 
 ### Lever B — Per-level post-clear jump anneal
 
-Config:
-
-- `jump_reward` — discovery-band takeoff cost (e.g. `-2.0`) until a level’s first victorious showcase this train session.
-- `jump_reward_polish` — harsher target after clear (e.g. `-3.5`).
-- `jump_anneal_cycles` — cycles after first clear to interpolate discovery → polish.
+- `jump_reward` / `jump_reward_polish` / `jump_anneal_cycles` (default polish span **12**)
 
 ### Lever C — Post-clear entropy anneal
 
-Config:
+- `entropy_regularization` / `entropy_regularization_polish` / `entropy_anneal_cycles` (default polish **0.02** over **8** cycles)
+- Session-wide: discovery until every coach level cleared, then slowest clock. **Greedy showcase fail resets** that level to discovery (avoids idle trap after unlearn).
 
-- `entropy_regularization` — discovery band (e.g. `0.06`) so blank agents escape idle/left spawn collapse.
-- `entropy_regularization_polish` — lower target after clear (e.g. `0.025`) so neat argmax converges faster.
-- `entropy_anneal_cycles` — often shorter than jump anneal (e.g. `12`).
+### Lever D — Post-clear explore anneal (neatness speed)
 
-Session rule: entropy stays at discovery until **every** coach level in the `/train` call has cleared, then anneals using the slowest level’s cycles-since-clear.
+- `tile_exploration_reward` / `tile_exploration_reward_polish` / `explore_anneal_cycles` (default polish **0.02** over **8** cycles)
+- Discovery `0.075` escapes spawn-idle; polish `0.02` reduces hop-into-air farming after clear.
+- Leaving explore hot after clear was a main neatness delay; snap-cooling too hard recreated spawn-idle when anneal did not reset on fail.
 
-Rules (jump + entropy):
+Rules:
 
 1. Track whether each coach level has ever produced a victorious showcase this train call.
-2. Before first clear: use discovery `jump_reward` / `entropy_regularization`.
-3. After first clear: interpolate toward polish targets over the anneal cycle spans.
-4. New `/train` call (coach level change) starts discovery band again.
+2. Before first clear: discovery jump / explore / entropy.
+3. After first clear: interpolate toward polish targets; boost scout budget.
+4. New `/train` call starts discovery band again.
 5. **Do not** anneal `turn_reward`.
-
-This is “mild until win, then schedule pressure” — compatible with pure vision and future mazes.
 
 ```mermaid
 flowchart TD
   train["Train on level"] --> firstWin["First victorious showcase"]
-  firstWin --> anneal["Anneal jump_reward toward polish"]
-  firstWin --> scout["Stochastic scouts find cleaner wins"]
+  firstWin --> annealJ["Anneal jump"]
+  firstWin --> annealE["Anneal entropy"]
+  firstWin --> annealX["Anneal explore"]
+  firstWin --> scout["Polish scouts find cleaner wins"]
   scout --> lock["Lock fewest-takeoff traj"]
-  anneal --> ppo["PPO collect prefers fewer takeoffs"]
+  annealJ --> ppo["PPO collect prefers fewer takeoffs"]
+  annealX --> ppo
   lock --> bc["BC rehearse locked traj"]
   ppo --> sticky["Greedy showcase stays neat"]
   bc --> sticky
 ```
-
 ---
 
 ## 5. Secondary / demoted: static harsh J via Optuna

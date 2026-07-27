@@ -207,6 +207,8 @@ fn apply_overrides(config: &mut Config, args: &TrainArgs) {
     override_value!(turn_reward);
     override_value!(frame_step_reward);
     override_value!(tile_exploration_reward);
+    override_value!(tile_exploration_reward_polish);
+    override_value!(explore_anneal_cycles);
     override_value!(jump_reward);
     override_value!(jump_reward_polish);
     override_value!(jump_anneal_cycles);
@@ -214,6 +216,7 @@ fn apply_overrides(config: &mut Config, args: &TrainArgs) {
     override_value!(goal_distance_reward_scale);
     override_value!(goal_rehearsal_epochs);
     override_value!(goal_rehearsal_scout_episodes);
+    override_value!(goal_rehearsal_scout_episodes_polish);
     override_value!(ppo_num_epochs);
     override_value!(value_coefficient);
     override_value!(minibatch_size);

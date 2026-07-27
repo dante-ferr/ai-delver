@@ -17,9 +17,9 @@ Usually leave defaults alone. Coaching changes **weights**, not engine constants
 
 ## Discovery band (invent)
 
-- `tile_exploration_reward` — keep strong enough to beat the **idle/left spawn local min** (standing still is free; weak explore + low entropy collapses argmax). Do not drop back to Trial-5 `0.0165` without a compensating entropy bump.
+- `tile_exploration_reward` — strong enough to beat **idle/left spawn local min**. Do not drop discovery back to Trial-5 `0.0165` without compensating entropy. **Anneal** explore after clear (`tile_exploration_reward_polish`) — leaving it hot is the main neatness delay.
 - `jump_reward` (mild)
-- `entropy_regularization` — discovery band (e.g. `~0.06`); anneals to `entropy_regularization_polish` after clear. Static `0.2` historically blocked convergence.
+- `entropy_regularization` — discovery band (e.g. `~0.06`); anneals to polish after clear. Static `0.2` historically blocked convergence.
 - `goal_distance_reward_scale`
 - `learning_rate`
 
@@ -27,9 +27,11 @@ Lean **exploratory** here now that polish is scheduled — see [Engine Protocol]
 
 ## Polish band (after clear)
 
+- `tile_exploration_reward_polish`, `explore_anneal_cycles`
 - `jump_reward_polish`, `jump_anneal_cycles`
 - `entropy_regularization_polish`, `entropy_anneal_cycles`
-- `goal_rehearsal_*`
+- `goal_rehearsal_scout_episodes_polish` (more scouts after clear)
+- `goal_rehearsal_epochs` / lock enable
 
 ## Mastery / finish
 

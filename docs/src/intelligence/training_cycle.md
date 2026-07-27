@@ -4,7 +4,7 @@ Everything important happens in `trainer::train` (`trainer/loop.rs`). One **cycl
 
 ```mermaid
 flowchart TD
-  start["Cycle N begins"] --> annealCfg["Build envs with annealed jump_reward per level"]
+  start["Cycle N begins"] --> annealCfg["Build envs with annealed jump+explore"]
   annealCfg --> collect["Collect rollouts: stochastic acts × env_batch"]
   collect --> ppo["PPO update"]
   ppo --> metrics["Emit metrics / progress"]
@@ -18,16 +18,18 @@ flowchart TD
   ckpt --> next["Cycle N+1"]
 ```
 
-## 1. Effective jump cost + entropy for this cycle
+## 1. Effective jump + explore + entropy for this cycle
 
 For each level hash:
 
-- Never cleared this `/train` call → discovery `jump_reward`.
-- Cleared → interpolate toward `jump_reward_polish` by `cycles_since_clear / jump_anneal_cycles`.
+- Never cleared this `/train` call → discovery `jump_reward` / `tile_exploration_reward`.
+- Cleared → interpolate toward polish targets over the matching anneal cycle spans.
 
 Envs are rebuilt every cycle so collect feels the schedule. A new `/train` (coach moves to another level) resets clear/anneal state for that session.
 
-Entropy is **session-wide**: discovery `entropy_regularization` until every coach level has cleared, then anneal toward `entropy_regularization_polish` over `entropy_anneal_cycles` (using the slowest level’s clock).
+Entropy is **session-wide**: discovery until every coach level has cleared, then anneal toward polish (slowest level’s clock). Scout budget switches to `goal_rehearsal_scout_episodes_polish` per level once that level has cleared.
+
+If the **greedy** showcase fails after a clear, that level’s clear/anneal state is **reset** to discovery — otherwise cold polish recreates the idle/left spawn local min after an unlearn.
 
 ## 2. Collect
 
@@ -48,7 +50,7 @@ First victory → `clear_progress` entry (anneal starts after this cycle’s tic
 
 ## 5. Stochastic scouts
 
-If `goal_rehearsal_lock` and `goal_rehearsal_scout_episodes > 0`, run **K** `run_scout` episodes (multinomial). Scouts can find rarer cleaner wins that greedy has not stuck on yet.
+If `goal_rehearsal_lock`, run **K** `run_scout` episodes (multinomial). Pre-clear `K = goal_rehearsal_scout_episodes`; after that level clears, `K = goal_rehearsal_scout_episodes_polish` (hunt cleaner 0-hop locks harder).
 
 ## 6. Lock update
 

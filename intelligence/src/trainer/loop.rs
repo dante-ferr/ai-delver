@@ -311,6 +311,19 @@ pub fn train(
                         *streak = streak.saturating_add(1);
                     } else {
                         victory_streaks.insert(showcase_hash.clone(), 0);
+                        // Polish anneal is one-way unless we reset: after an unlearn,
+                        // cold explore + low entropy recreates the idle/left spawn local min.
+                        if clear_progress.remove(showcase_hash).is_some() {
+                            on_event(
+                                "info",
+                                json!({
+                                    "message": format!(
+                                        "Greedy showcase failed for {}; returning to discovery jump/explore/entropy band",
+                                        showcase_hash
+                                    )
+                                }),
+                            );
+                        }
                     }
                     maybe_update_lock(
                         &mut rehearsal_locks,
@@ -333,6 +346,7 @@ pub fn train(
                 }
                 Err(error) => {
                     victory_streaks.insert(showcase_hash.clone(), 0);
+                    clear_progress.remove(showcase_hash);
                     on_event(
                         "showcase",
                         json!({
@@ -346,9 +360,10 @@ pub fn train(
 
             if base_config.goal_rehearsal_lock
                 && !base_config.no_learning
-                && base_config.goal_rehearsal_scout_episodes > 0
             {
-                for scout_idx in 0..base_config.goal_rehearsal_scout_episodes {
+                let cycles_since = clear_progress.get(showcase_hash.as_str()).copied();
+                let scout_budget = base_config.scout_episodes_for_level(cycles_since);
+                for scout_idx in 0..scout_budget {
                     let scout_cfg = annealed_config_for_hash(
                         &base_config,
                         showcase_hash,
@@ -504,7 +519,8 @@ fn annealed_config_for_hash(
 ) -> Arc<Config> {
     let cycles_since = clear_progress.get(level_hash).copied();
     let jump = base_config.annealed_jump_reward(cycles_since);
-    Arc::new(base_config.with_jump_reward(jump))
+    let explore = base_config.annealed_explore_reward(cycles_since);
+    Arc::new(base_config.with_annealed_rewards(jump, explore))
 }
 
 /// `None` while any coach level is still uncleared; otherwise min cycles-since-clear.

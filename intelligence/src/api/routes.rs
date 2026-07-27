@@ -499,6 +499,16 @@ fn apply_config_overrides(config: &mut Config, overrides: Option<&Value>) {
                     config.tile_exploration_reward = v as f32;
                 }
             }
+            "tile_exploration_reward_polish" => {
+                if let Some(v) = value.as_f64() {
+                    config.tile_exploration_reward_polish = v as f32;
+                }
+            }
+            "explore_anneal_cycles" => {
+                if let Some(v) = value.as_u64() {
+                    config.explore_anneal_cycles = v as usize;
+                }
+            }
             "jump_reward" => {
                 if let Some(v) = value.as_f64() {
                     config.jump_reward = v as f32;
@@ -527,6 +537,11 @@ fn apply_config_overrides(config: &mut Config, overrides: Option<&Value>) {
             "goal_rehearsal_scout_episodes" => {
                 if let Some(v) = value.as_u64() {
                     config.goal_rehearsal_scout_episodes = v as usize;
+                }
+            }
+            "goal_rehearsal_scout_episodes_polish" => {
+                if let Some(v) = value.as_u64() {
+                    config.goal_rehearsal_scout_episodes_polish = v as usize;
                 }
             }
             "goal_distance_reward_scale" => {

@@ -9,12 +9,12 @@
 # (15 showcases/level). See intelligence/logs/pass1_p9_consolidation_tune.log.
 learning_rate = 0.000158            # Sequential-mastery Optuna Trial 1
 gamma = 0.995                     # Discount factor for future rewards (balancing short-term vs long-term goals)
-# Raised from Trial-1 0.0321: low entropy + weak explore let argmax collapse to idle/left
-# at spawn. Discovery band stays exploratory; after first clear, anneal toward polish so
-# neat/jumpless argmax locks faster (static 0.06 alone delayed neat convergence).
-entropy_regularization = 0.06
-entropy_regularization_polish = 0.025
-entropy_anneal_cycles = 12          # Faster sharpen than jump anneal (20) once inventing is done
+# Discovery entropy escapes idle/left spawn collapse. Polish is milder than the
+# snap schedule that unlearned clears (cold explore + entropy 0.01 → idle again).
+# Greedy showcase fail resets clear/anneal back to discovery.
+entropy_regularization = 0.075
+entropy_regularization_polish = 0.02
+entropy_anneal_cycles = 8
 ppo_num_epochs = 4                # Number of optimization epochs per gradient update step
 clip_epsilon = 0.2                # PPO policy-ratio clipping range
 gae_lambda = 0.95                 # Bias/variance tradeoff for generalized advantage estimation
@@ -41,14 +41,14 @@ finished_reward = 235.19          # Sequential-mastery Optuna Trial 1
 turn_reward = -0.28               # Sequential-mastery Optuna Trial 1 (matches prior organic turn weight)
 
 frame_step_reward = -0.01         # Time penalty per step to encourage faster execution
-# Per newly marked tile (air + floor). Boolean step bonus removed.
-# Discovery explore: Stage-B Trial 5 used 0.0165 (too weak for blank agents — spawn idle
-# local min). Raised toward discovery while lock+anneal keep jump neatness (not a return
-# to Phase-5 0.1495 jump-farm band).
-tile_exploration_reward = 0.06
+# Discovery explore escapes spawn-idle; polish cools hop-farming without starving invent
+# if the agent unlearns (anneal resets on greedy fail).
+tile_exploration_reward = 0.075
+tile_exploration_reward_polish = 0.02
+explore_anneal_cycles = 8
 jump_reward = -2.0                # Discovery-band takeoff cost (before first clear)
-jump_reward_polish = -3.5         # Post-clear anneal target (more negative = neater pressure)
-jump_anneal_cycles = 20           # Cycles after first clear to reach jump_reward_polish
+jump_reward_polish = -3.5         # Post-clear neat pressure (avoid pit-fear from -4.5)
+jump_anneal_cycles = 10
 wall_hugging_reward = -0.0325     # Sequential-mastery Optuna Trial 1 (10-frame grace period unchanged)
 
 goal_distance_reward_scale = 0.0169 # Sequential-mastery Optuna Trial 1
@@ -69,5 +69,6 @@ no_learning = false               # Execute random actions only without gradient
 max_training_levels = 10          # Cap on concurrent curriculum levels (surfaced via GET /init)
 # Goal Rehearsal Lock: scout stochastic wins, lock fewest takeoffs, BC into PPO.
 goal_rehearsal_lock = true
-goal_rehearsal_epochs = 8         # BC epochs per locked trajectory each cycle
-goal_rehearsal_scout_episodes = 4 # Stochastic scouts per level per cycle (find cleaner than greedy)
+goal_rehearsal_epochs = 8
+goal_rehearsal_scout_episodes = 4
+goal_rehearsal_scout_episodes_polish = 8

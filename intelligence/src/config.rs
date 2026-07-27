@@ -32,7 +32,12 @@ pub struct Config {
     pub finished_reward: f32,
     pub turn_reward: f32,
     pub frame_step_reward: f32,
+    /// Discovery-band explore pay (before first clear).
     pub tile_exploration_reward: f32,
+    /// Post-clear explore target (lower → less hop-into-air farming after invent).
+    pub tile_exploration_reward_polish: f32,
+    /// Cycles after first clear to reach `tile_exploration_reward_polish`.
+    pub explore_anneal_cycles: usize,
     pub jump_reward: f32,
     /// Post-clear jump cost target (typically more negative than `jump_reward`).
     /// After a level's first victory, `jump_reward` anneals toward this over
@@ -53,8 +58,10 @@ pub struct Config {
     pub goal_rehearsal_lock: bool,
     /// Behavioral-cloning epochs over each locked trajectory each cycle.
     pub goal_rehearsal_epochs: usize,
-    /// Stochastic scout episodes per level per cycle (find cleaner wins than greedy).
+    /// Stochastic scout episodes per level per cycle before first clear.
     pub goal_rehearsal_scout_episodes: usize,
+    /// Scout episodes per level per cycle after that level has cleared.
+    pub goal_rehearsal_scout_episodes_polish: usize,
 }
 
 #[cfg(test)]
@@ -63,9 +70,9 @@ impl Default for Config {
         Self {
             learning_rate: 3e-4,
             gamma: 0.995,
-            entropy_regularization: 0.06,
-            entropy_regularization_polish: 0.025,
-            entropy_anneal_cycles: 12,
+            entropy_regularization: 0.075,
+            entropy_regularization_polish: 0.02,
+            entropy_anneal_cycles: 8,
             ppo_num_epochs: 4,
             clip_epsilon: 0.2,
             gae_lambda: 0.95,
@@ -81,10 +88,12 @@ impl Default for Config {
             finished_reward: 100.0,
             turn_reward: 0.0,
             frame_step_reward: -0.01,
-            tile_exploration_reward: 0.025,
+            tile_exploration_reward: 0.075,
+            tile_exploration_reward_polish: 0.02,
+            explore_anneal_cycles: 8,
             jump_reward: -0.15,
             jump_reward_polish: -0.5,
-            jump_anneal_cycles: 20,
+            jump_anneal_cycles: 10,
             wall_hugging_reward: -0.2,
             goal_distance_reward_scale: 0.005,
             actions_per_second: 10,
@@ -97,6 +106,7 @@ impl Default for Config {
             goal_rehearsal_lock: true,
             goal_rehearsal_epochs: 8,
             goal_rehearsal_scout_episodes: 4,
+            goal_rehearsal_scout_episodes_polish: 8,
         }
     }
 }
@@ -118,6 +128,7 @@ impl Config {
             self.turn_reward,
             self.frame_step_reward,
             self.tile_exploration_reward * MAX_EXPLORE_TILES_PER_STEP,
+            self.tile_exploration_reward_polish * MAX_EXPLORE_TILES_PER_STEP,
             self.jump_reward,
             self.jump_reward_polish,
             self.wall_hugging_reward,
@@ -131,12 +142,22 @@ impl Config {
 
     /// Effective jump cost for a level given cycles since its first clear (`None` = uncleared).
     pub fn annealed_jump_reward(&self, cycles_since_clear: Option<usize>) -> f32 {
-        let Some(elapsed) = cycles_since_clear else {
-            return self.jump_reward;
-        };
-        let span = self.jump_anneal_cycles.max(1) as f32;
-        let t = (elapsed as f32 / span).clamp(0.0, 1.0);
-        self.jump_reward + t * (self.jump_reward_polish - self.jump_reward)
+        Self::anneal_f32(
+            self.jump_reward,
+            self.jump_reward_polish,
+            self.jump_anneal_cycles,
+            cycles_since_clear,
+        )
+    }
+
+    /// Effective explore pay for a level given cycles since its first clear.
+    pub fn annealed_explore_reward(&self, cycles_since_clear: Option<usize>) -> f32 {
+        Self::anneal_f32(
+            self.tile_exploration_reward,
+            self.tile_exploration_reward_polish,
+            self.explore_anneal_cycles,
+            cycles_since_clear,
+        )
     }
 
     /// Effective entropy for the session given cycles since clear (`None` = still discovering).
@@ -150,10 +171,34 @@ impl Config {
             + t * (self.entropy_regularization_polish - self.entropy_regularization)
     }
 
-    /// Clone with an overridden jump reward (used for per-level post-clear anneal).
-    pub fn with_jump_reward(&self, jump_reward: f32) -> Self {
+    /// Scout budget for a level: polish count after clear, discovery count before.
+    pub fn scout_episodes_for_level(&self, cycles_since_clear: Option<usize>) -> usize {
+        if cycles_since_clear.is_some() {
+            self.goal_rehearsal_scout_episodes_polish
+        } else {
+            self.goal_rehearsal_scout_episodes
+        }
+    }
+
+    fn anneal_f32(
+        discovery: f32,
+        polish: f32,
+        cycles: usize,
+        cycles_since_clear: Option<usize>,
+    ) -> f32 {
+        let Some(elapsed) = cycles_since_clear else {
+            return discovery;
+        };
+        let span = cycles.max(1) as f32;
+        let t = (elapsed as f32 / span).clamp(0.0, 1.0);
+        discovery + t * (polish - discovery)
+    }
+
+    /// Clone with per-level annealed jump + explore (post-clear polish).
+    pub fn with_annealed_rewards(&self, jump_reward: f32, tile_exploration_reward: f32) -> Self {
         let mut clone = self.clone();
         clone.jump_reward = jump_reward;
+        clone.tile_exploration_reward = tile_exploration_reward;
         clone
     }
 
@@ -200,22 +245,44 @@ mod tests {
     #[test]
     fn annealed_entropy_stays_discovery_until_clear() {
         let mut config = Config::default();
-        config.entropy_regularization = 0.06;
-        config.entropy_regularization_polish = 0.025;
-        config.entropy_anneal_cycles = 12;
-        assert!((config.annealed_entropy(None) - 0.06).abs() < 1e-9);
-        assert!((config.annealed_entropy(Some(0)) - 0.06).abs() < 1e-9);
+        config.entropy_regularization = 0.075;
+        config.entropy_regularization_polish = 0.02;
+        config.entropy_anneal_cycles = 8;
+        assert!((config.annealed_entropy(None) - 0.075).abs() < 1e-9);
+        assert!((config.annealed_entropy(Some(0)) - 0.075).abs() < 1e-9);
     }
 
     #[test]
     fn annealed_entropy_interpolates_then_caps() {
         let mut config = Config::default();
-        config.entropy_regularization = 0.06;
-        config.entropy_regularization_polish = 0.025;
-        config.entropy_anneal_cycles = 12;
-        let mid = config.annealed_entropy(Some(6));
-        assert!((mid - 0.0425).abs() < 1e-9);
-        assert!((config.annealed_entropy(Some(12)) - 0.025).abs() < 1e-9);
-        assert!((config.annealed_entropy(Some(100)) - 0.025).abs() < 1e-9);
+        config.entropy_regularization = 0.075;
+        config.entropy_regularization_polish = 0.02;
+        config.entropy_anneal_cycles = 8;
+        let mid = config.annealed_entropy(Some(4));
+        assert!((mid - 0.0475).abs() < 1e-9);
+        assert!((config.annealed_entropy(Some(8)) - 0.02).abs() < 1e-9);
+        assert!((config.annealed_entropy(Some(100)) - 0.02).abs() < 1e-9);
+    }
+
+    #[test]
+    fn annealed_explore_interpolates_then_caps() {
+        let mut config = Config::default();
+        config.tile_exploration_reward = 0.075;
+        config.tile_exploration_reward_polish = 0.02;
+        config.explore_anneal_cycles = 8;
+        assert!((config.annealed_explore_reward(None) - 0.075).abs() < 1e-6);
+        let mid = config.annealed_explore_reward(Some(4));
+        assert!((mid - 0.0475).abs() < 1e-5);
+        assert!((config.annealed_explore_reward(Some(8)) - 0.02).abs() < 1e-6);
+    }
+
+    #[test]
+    fn scout_budget_switches_after_clear() {
+        let mut config = Config::default();
+        config.goal_rehearsal_scout_episodes = 4;
+        config.goal_rehearsal_scout_episodes_polish = 8;
+        assert_eq!(config.scout_episodes_for_level(None), 4);
+        assert_eq!(config.scout_episodes_for_level(Some(0)), 8);
+        assert_eq!(config.scout_episodes_for_level(Some(3)), 8);
     }
 }

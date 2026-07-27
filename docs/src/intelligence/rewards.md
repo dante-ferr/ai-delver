@@ -30,7 +30,7 @@ flowchart LR
 
 `jump_reward` in config is the **discovery band** (mild enough to invent gap commits).
 
-After a level’s first victorious showcase in a train session, the trainer substitutes an **annealed** effective jump cost that slides toward `jump_reward_polish` over `jump_anneal_cycles`. Collect envs rebuild each cycle with that effective value (`config.annealed_jump_reward`).
+After a level’s first victorious showcase in a train session, the trainer substitutes **annealed** effective jump and explore costs that slide toward polish targets over their anneal cycle spans. Collect envs rebuild each cycle with those effective values.
 
 **`turn_reward` is never annealed the same way.** Labyrinths need many intentional turns; a post-clear turn tax would punish future maze skills.
 

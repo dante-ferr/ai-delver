@@ -157,21 +157,24 @@ Current promoted defaults in `intelligence/config.toml` from **Phase 7 sequentia
 
 | Parameter | Promoted Value | Purpose |
 | :--- | :--- | :--- |
-| **`tile_exploration_reward`** | **`0.06`** | Discovery explore (raised from Trial-5 `0.0165` after spawn-idle local mins) |
+| **`tile_exploration_reward`** | **`0.075`** | Discovery explore (spawn-idle escape) |
+| **`tile_exploration_reward_polish`** | **`0.02`** | Post-clear explore |
+| **`explore_anneal_cycles`** | **`8`** | Cycles after clear to reach explore polish |
 | **`wall_hugging_reward`** | **`-0.0325`** | Wall scrape tax with 10-frame grace period |
 | **`goal_distance_reward_scale`** | **`0.0169`** | Continuous step progress guidance |
 | **`turn_reward`** | **`-0.28`** | Anti-hesitation at pit edges |
 | **`jump_reward`** | **`-2.0`** | Discovery-band takeoff cost (before first clear) |
 | **`jump_reward_polish`** | **`-3.5`** | Post-clear anneal target |
-| **`jump_anneal_cycles`** | **`20`** | Cycles after clear to reach polish |
+| **`jump_anneal_cycles`** | **`10`** | Cycles after clear to reach jump polish |
 | **`finished_reward`** | **`235.19`** | Strong goal-completion dominance |
-| **`entropy_regularization`** | **`0.06`** | Discovery entropy (avoids idle/left spawn collapse) |
-| **`entropy_regularization_polish`** | **`0.025`** | Post-clear entropy target (faster neat lock) |
-| **`entropy_anneal_cycles`** | **`12`** | Cycles after clear to reach polish entropy |
+| **`entropy_regularization`** | **`0.075`** | Discovery entropy (avoids idle/left spawn collapse) |
+| **`entropy_regularization_polish`** | **`0.02`** | Post-clear entropy target |
+| **`entropy_anneal_cycles`** | **`8`** | Cycles after clear to reach polish entropy |
 | **`learning_rate`** | **`0.000158`** | Sequential-mastery PPO step size |
 | **`goal_rehearsal_lock`** | **`true`** | Scout + lock fewest-takeoff victories |
 | **`goal_rehearsal_epochs`** | **`8`** | BC epochs per cycle over locked traj |
-| **`goal_rehearsal_scout_episodes`** | **`4`** | Stochastic scouts per level per cycle |
+| **`goal_rehearsal_scout_episodes`** | **`4`** | Pre-clear scouts per level per cycle |
+| **`goal_rehearsal_scout_episodes_polish`** | **`8`** | After clear: hunt cleaner locks harder |
 | **Exploration Engine** | **3-Tile Vertical Span** | Feet-to-head height profile tile tracking |
 | **`local_view`** | **25×25 (radius 12)** | Occupancy grid covering 8-tile pits on platforming-9/10 |
 | **`local_feature_dim`** | **`256`** | Local-view encoder width (625 → 256) |
@@ -182,7 +185,7 @@ Current promoted defaults in `intelligence/config.toml` from **Phase 7 sequentia
 > [!NOTE]
 > Discovery-safe jump band + lock/anneal supersedes relying on a single static harsh `jump_reward`. Jump-aware Trial 5 remains historical evidence that takeoff metrics work (`pack_mean_jumps` 1.0 vs Trial-6 baseline 3.0). Judge neatness by takeoffs, not UI reward ≈1.00.
 >
-> **Spawn-idle local min (2026-07-27):** blank/`Brave Delver` on `platforming-1` collapsed to high-confidence idle or run-left at spawn (0 victories). Not a step/takeoff regression — Phase 4 tax-haven pattern amplified by Trial-5-weak explore (`0.0165`) + low entropy (`0.0321`). Defaults moved to explore `0.06` / discovery entropy `0.06`. Static high entropy delayed neat/jumpless convergence, so **post-clear entropy anneal** (`→ 0.025` over 12 cycles) pairs with jump anneal. Already-collapsed agents may need a blank restart or many cycles after server reload.
+> **Spawn-idle / unlearn trap (2026-07-27):** snap polish (`entropy→0.01`, explore→`0.012`, jump→`-4.5`) could clear then collapse back to high-confidence idle/left — and **anneal stayed in polish forever** after the first clear. Fix: greedy showcase fail **resets** clear/anneal to discovery; milder polish (`explore/entropy discovery 0.075`, polish `0.02` / 8 cycles, jump polish `-3.5` / 10). Prefer a blank agent if weights already collapsed.
 ---
 
 ## 9. Phase 8: True Stage B (lock + post-clear jump anneal)

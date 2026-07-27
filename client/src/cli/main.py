@@ -197,7 +197,7 @@ def main():
     )
     tune_p.add_argument(
         "--consolidate-levels",
-        default="platforming-6,platforming-7,platforming-9",
+        default="",
         help=(
             "After sequential curriculum, re-focus these levels (comma-separated) before "
             "play eval; filtered to levels present in --levels. Empty string disables."

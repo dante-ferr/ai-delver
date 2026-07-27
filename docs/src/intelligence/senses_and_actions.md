@@ -8,7 +8,7 @@ Defined in `intelligence/src/environments/observation.rs`:
 
 - **Radius 12** → side length `2×12+1 = 25` → **`LOCAL_VIEW_CELLS = 625`**.
 - Each cell is occupancy (solid vs empty) in a window centered on the Delver.
-- Sized so **8-tile pits** on `platforming-9` / `10` are visible *before* the jump commit.
+- Sized so **8-tile pits** are visible *before* the jump commit.
 - **Goals are not painted into the grid** — that would leak “where to go” as a painted beacon. Relative goal lives in `global_state`.
 
 Think of it as a coarse “fog of war” occupancy map: enough geometry to invent gap jumps, not a full-level cheat sheet.

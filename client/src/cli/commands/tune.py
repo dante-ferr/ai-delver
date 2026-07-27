@@ -244,7 +244,7 @@ def run_tune(args):
     eval_runs = max(1, int(getattr(args, "eval_runs", 15)))
     tail_k = max(1, int(getattr(args, "tail_k", 3)))
     consolidate_csv = str(
-        getattr(args, "consolidate_levels", "platforming-6,platforming-7,platforming-9")
+        getattr(args, "consolidate_levels", "")
         or ""
     )
     consolidate_names = _consolidation_levels(level_names, consolidate_csv)

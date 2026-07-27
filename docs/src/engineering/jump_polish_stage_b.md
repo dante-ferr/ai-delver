@@ -1,6 +1,6 @@
 # Stage B: Jump Cleanliness Polish
 
-Design deep-dive for post-mastery jump frugality on `platforming-1`…`platforming-10`.
+Design deep-dive for post-mastery jump frugality on evaluation levels.
 
 > For the didactic path (recommended first read): [Neatness](../intelligence/neatness.md) and [How the Intelligence Learns](../intelligence/index.md).
 
@@ -126,12 +126,12 @@ If you re-run E/J Optuna:
 ```bash
 poetry run python src/cli/main.py tune \
   --tune-ej-only \
-  --levels "platforming-1,...,platforming-10" \
+  --levels "level-1,...,level-10" \
   --cycles 20 \
   --episodes-per-cycle 24 \
   --trials 8 \
   --eval-runs 15 \
-  --consolidate-levels "platforming-6,platforming-7,platforming-9" \
+  --consolidate-levels "level-6,level-7,level-9" \
   --focus-episodes-between-passes 1500 \
   --agent engine_eval_agent \
   --server localhost:8001
@@ -161,7 +161,7 @@ Jump takeoffs are Stage B’s metric because flat hop spam is the observed bug a
 
 ## 8. Risks
 
-1. Anneal too fast / polish too harsh → pit-fear on rises / `platforming-9` — keep consolidate + reviews; widen discovery band if first clears stall.
+1. Anneal too fast / polish too harsh → pit-fear on rises / complex levels — keep consolidate + reviews; widen discovery band if first clears stall.
 2. Confusing train jumps with play takeoffs — Optuna uses play mastery only.
 3. Rehearsal overfitting to one neat path — still require full-pack mastery before promote; monitor lock churn / confidence.
 4. Scouts never see a cleaner win → lock sticks on “clear +1 hop”; escalate later (SIL / stronger ranking) only after a fair local try.

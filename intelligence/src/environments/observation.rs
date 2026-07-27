@@ -1,7 +1,7 @@
 //! Shared observation geometry for the Delver's local visual window.
 //!
 //! Radius 12 yields a 25×25 occupancy grid (625 cells), enough to see across
-//! 8-tile pits on `platforming-9` / `platforming-10` before jumping, without
+//! 8-tile pits before jumping, without
 //! the full noise cost of a radius-14 window.
 
 /// Tiles from the Delver's cell to each edge of the local view (inclusive span).

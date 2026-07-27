@@ -5,7 +5,7 @@
 # RL Hyperparameters
 # ==============================================================================
 # Promoted from Pass 1 sequential-mastery Optuna (Trial 1): reviews E=1500,
-# consolidate platforming-6,7,9; play min/mean WR = 1.0 on platforming-1..10
+# play min/mean WR = 1.0 on evaluation levels
 # (15 showcases/level). See intelligence/logs/pass1_p9_consolidation_tune.log.
 learning_rate = 0.000158            # Sequential-mastery Optuna Trial 1
 gamma = 0.995                     # Discount factor for future rewards (balancing short-term vs long-term goals)
@@ -28,7 +28,7 @@ device = "auto"                   # auto (CUDA if available), cpu, cuda, cuda:N,
 # Network Architecture
 # ==============================================================================
 # Local view is a fixed 25×25 (radius 12) occupancy grid = 625 inputs — sized so
-# 8-tile pits on platforming-9/10 are visible before the jump commitment.
+# 8-tile pits are visible before the jump commitment.
 local_feature_dim = 256           # Local-view encoder width (625 → 256)
 lstm_hidden_size = 128            # LSTM hidden / recurrent state size
 mlp_hidden_dim = 256              # Fused MLP hidden width before the LSTM

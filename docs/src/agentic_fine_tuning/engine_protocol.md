@@ -66,7 +66,7 @@ For platforming bootstrap, the agent may paste the [platforming instance table](
 
 Comment non-obvious default changes in `config.toml`.
 
-**Vision note:** binary solid/empty occupancy with radius 12 is sized so 8-tile pits (`platforming-9` / `10`) are visible before the jump, without the full noise of radius 14. Goals are **not** painted into `local_view`; relative goal position lives in `global_state`. A tiny 2D conv over the grid (instead of a dense bag-of-tiles encoder) is a later experiment if geometry learning stalls.
+**Vision note:** binary solid/empty occupancy with radius 12 is sized so 8-tile pits are visible before the jump, without the full noise of radius 14. Goals are **not** painted into `local_view`; relative goal position lives in `global_state`. A tiny 2D conv over the grid (instead of a dense bag-of-tiles encoder) is a later experiment if geometry learning stalls.
 
 ---
 
@@ -82,14 +82,14 @@ Follow [Skill Ladder §3](skill_ladder.md#3-formula-for-each-new-major-skill-s):
 
 When P is empty, Pass A on ISO+COM is the whole story; skip Pass B warm-start.
 
-For **platforming bootstrap mastery**, `tune` may also run sequential curriculum on `platforming-1` → `platforming-10` (weight inheritance within each trial) and score **final** argmax clear rates after the full curriculum.
+For **platforming bootstrap mastery**, `tune` may also run sequential curriculum across evaluation levels (weight inheritance within each trial) and score **final** argmax clear rates after the full curriculum.
 
 ### `tune`
 
 ```bash
 cd client
 poetry run python src/cli/main.py tune \
-    --levels "platforming-1,platforming-2,platforming-3,platforming-4,platforming-5,platforming-6,platforming-7,platforming-8,platforming-9,platforming-10" \
+    --levels "level-1,level-2,level-3,level-4,level-5,level-6,level-7,level-8,level-9,level-10" \
     --cycles 15 \
     --episodes-per-cycle 38 \
     --agent engine_eval_agent \

@@ -209,7 +209,7 @@ With **`--tune-ej-only`** (optional Stage B Optuna): search only E/J; after mast
 
 ```bash
 poetry run python src/cli/main.py tune \
-    --levels "platforming-1,platforming-2,platforming-3,platforming-4,platforming-5,platforming-6,platforming-7,platforming-8,platforming-9,platforming-10" \
+    --levels "level-1,level-2,level-3,level-4,level-5,level-6,level-7,level-8,level-9,level-10" \
     --cycles 15 \
     --episodes-per-cycle 38 \
     --agent engine_eval_agent \

@@ -30,13 +30,18 @@ Lean **exploratory** here now that polish is scheduled — see [Engine Protocol]
 - `tile_exploration_reward_polish`, `explore_anneal_cycles`
 - `jump_reward_polish`, `jump_anneal_cycles`
 - `entropy_regularization_polish`, `entropy_anneal_cycles`
+- `polish_fail_grace` (hold polish through N greedy misses before discovery reset)
 - `goal_rehearsal_scout_episodes_polish` (more scouts after clear)
-- `goal_rehearsal_epochs` / lock enable
+- `goal_rehearsal_epochs` / lock enable / `goal_rehearsal_mirror_clone`
+- Post-clear: mirror at `mirror_augmentation_prob_polish`; jitter/dropout off (not full augs-off)
 
 ## Mastery / finish
 
 - `finished_reward`, `not_finished_reward`
 - `frame_step_reward`
+- Early-stop (`--early-stop`): `early_stop_victory_streak`, `early_stop_min_cycles`,
+  `early_stop_plateau_window`, `early_stop_plateau_eps` — raise streak / min cycles / window
+  (or lower eps) if focus levels stop before teachings are strong enough.
 
 ## Maze-safe
 

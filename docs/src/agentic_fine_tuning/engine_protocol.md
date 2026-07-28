@@ -108,7 +108,7 @@ Each trial:
 4. Optuna maximizes the **mean of the `tail_k` lowest per-level win rates** (default `tail_k=3`) so one noisy showcase does not dominate. Always log **min**, **mean**, and the full per-level table.
 5. A set is “ideal” / promotable only when **`min` per-level WR ≥ `--mastery-threshold`** (default 0.8). Diluted pack averages (e.g. 9%) are **not** success.
 
-**Stage B primary (lock + anneal):** Goal Rehearsal Lock (discovery + polish scout budgets) + post-clear anneals for jump, explore, and entropy. Do **not** anneal `turn_reward`. Neat delay after raising discovery explore was mainly **explore staying hot**, not entropy alone. Didactic overview: [Neatness](../intelligence/neatness.md). Design deep-dive: [Stage B](../engineering/jump_polish_stage_b.md).
+**Stage B primary (lock + anneal):** Goal Rehearsal Lock (discovery + polish scout budgets; lock after greedy+scouts that cycle; optional mirrored lock clone) + post-clear anneals for jump, explore, and entropy + `polish_fail_grace` + mirror-only polish augs after clear. Do **not** anneal `turn_reward`. Didactic overview: [Neatness](../intelligence/neatness.md). Design deep-dive: [Stage B](../engineering/jump_polish_stage_b.md).
 
 **Stage B stance (strict gates, exploratory discovery):**
 
@@ -123,7 +123,7 @@ Now that lock+anneal is alive, Optuna should **not** hunt a single forever-harsh
 
 **Stage B secondary (`--tune-ej-only`, demoted):** search only `tile_exploration_reward` and `jump_reward`. After the mastery lock, Optuna minimizes **pack mean takeoffs**. Prefer discovery-safe J plus lock+anneal over forever-harsh static J. Promote only if mastery holds **and** jumps beat the prior baseline.
 
-**Goal Rehearsal Lock** (`goal_rehearsal_lock`, `goal_rehearsal_scout_episodes`, `goal_rehearsal_epochs`): greedy + stochastic scouts lock fewest-takeoff victories; BC each cycle. Independent of Optuna; primary Stage B neatness lever alongside jump anneal.
+**Goal Rehearsal Lock** (`goal_rehearsal_lock`, scout budgets, `goal_rehearsal_epochs`): greedy then scouts; lock fewest-takeoff victory among that cycle; BC each cycle. Independent of Optuna; primary Stage B neatness lever alongside jump anneal.
 
 Optuna prunes if `abs(loss) > 20` during train.
 

@@ -29,6 +29,48 @@ pub struct RehearsalTrajectory {
     pub steps: usize,
 }
 
+impl RehearsalTrajectory {
+    /// Horizontally mirrored clone matching train-time mirror augmentation.
+    ///
+    /// Flips each local_view row, negates goal-dx / vx in global_state, remaps run 0↔2.
+    pub fn horizontally_flipped(&self) -> Self {
+        use crate::environments::observation::{GLOBAL_STATE_SIZE, LOCAL_VIEW_CELLS, LOCAL_VIEW_SIDE};
+
+        let mut local = vec![0.0; self.local.len()];
+        for step in 0..self.steps {
+            let base = step * LOCAL_VIEW_CELLS;
+            for r in 0..LOCAL_VIEW_SIDE {
+                for c in 0..LOCAL_VIEW_SIDE {
+                    let src = base + r * LOCAL_VIEW_SIDE + c;
+                    let dst = base + r * LOCAL_VIEW_SIDE + (LOCAL_VIEW_SIDE - 1 - c);
+                    local[dst] = self.local[src];
+                }
+            }
+        }
+
+        let mut global = self.global.clone();
+        for step in 0..self.steps {
+            let base = step * GLOBAL_STATE_SIZE;
+            // Indices 0=dx, 2=vx — same channels negated by env mirror augs.
+            if base + 2 < global.len() {
+                global[base] = -global[base];
+                global[base + 2] = -global[base + 2];
+            }
+        }
+
+        let runs: Vec<i64> = self.runs.iter().map(|&run| 2 - run).collect();
+
+        Self {
+            local,
+            global,
+            episode_starts: self.episode_starts.clone(),
+            runs,
+            jumps: self.jumps.clone(),
+            steps: self.steps,
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct UpdateMetrics {
     pub loss: f64,
@@ -263,6 +305,7 @@ pub fn compute_gae(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::environments::observation::{GLOBAL_STATE_SIZE, LOCAL_VIEW_CELLS, LOCAL_VIEW_SIDE};
 
     #[test]
     fn gae_stops_at_terminal() {
@@ -277,5 +320,34 @@ mod tests {
             1.0,
         );
         assert_eq!(advantages, vec![1.0, 10.0]);
+    }
+
+    #[test]
+    fn rehearsal_trajectory_horizontal_flip() {
+        let mut local = vec![0.0; LOCAL_VIEW_CELLS];
+        // Mark left column so flip moves it to the right edge.
+        for r in 0..LOCAL_VIEW_SIDE {
+            local[r * LOCAL_VIEW_SIDE] = 1.0;
+        }
+        let mut global = vec![0.0; GLOBAL_STATE_SIZE];
+        global[0] = 0.5; // dx
+        global[2] = 0.25; // vx
+        let traj = RehearsalTrajectory {
+            local,
+            global,
+            episode_starts: vec![1.0],
+            runs: vec![2], // right
+            jumps: vec![1],
+            steps: 1,
+        };
+        let flipped = traj.horizontally_flipped();
+        for r in 0..LOCAL_VIEW_SIDE {
+            assert_eq!(flipped.local[r * LOCAL_VIEW_SIDE + (LOCAL_VIEW_SIDE - 1)], 1.0);
+            assert_eq!(flipped.local[r * LOCAL_VIEW_SIDE], 0.0);
+        }
+        assert!((flipped.global[0] - (-0.5)).abs() < 1e-6);
+        assert!((flipped.global[2] - (-0.25)).abs() < 1e-6);
+        assert_eq!(flipped.runs, vec![0]); // left
+        assert_eq!(flipped.jumps, vec![1]);
     }
 }

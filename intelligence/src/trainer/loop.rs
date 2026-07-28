@@ -34,19 +34,6 @@ struct RehearsalLock {
 /// Cycles since first clear for a level (`None` = never cleared this session).
 type ClearProgress = HashMap<String, usize>;
 
-/// Consecutive victorious greedy showcases required per level before early-stop.
-/// Treats reliable clears as convergence to a local (potentially global) policy minimum.
-const EARLY_STOP_VICTORY_STREAK: usize = 3;
-
-/// Minimum cycles before return-plateau early-stop can fire (avoids aborting cold starts).
-const EARLY_STOP_MIN_CYCLES: usize = 8;
-
-/// Rolling window of `average_return` samples used for plateau detection.
-const EARLY_STOP_PLATEAU_WINDOW: usize = 5;
-
-/// Relative range (`(max-min) / (1+|mean|)`) below which returns count as flat.
-const EARLY_STOP_PLATEAU_EPS: f32 = 0.02;
-
 pub fn train(
     levels: Vec<Arc<Level>>,
     level_hashes: &[String],
@@ -74,7 +61,10 @@ pub fn train(
     let mut rehearsal_locks: HashMap<String, RehearsalLock> = HashMap::new();
     // Consecutive victorious greedy showcases per level hash (early-stop mastery signal).
     let mut victory_streaks: HashMap<String, usize> = HashMap::new();
-    let mut recent_returns: Vec<f32> = Vec::with_capacity(EARLY_STOP_PLATEAU_WINDOW);
+    // Consecutive greedy showcase fails while in polish (reset anneal after grace).
+    let mut polish_fail_streaks: HashMap<String, usize> = HashMap::new();
+    let mut recent_returns: Vec<f32> =
+        Vec::with_capacity(base_config.early_stop_plateau_window);
     let mut finished_cycles = cycles;
 
     for cycle in 1..=cycles {
@@ -292,6 +282,8 @@ pub fn train(
         );
 
         for (showcase_level, showcase_hash) in levels.iter().zip(level_hashes.iter()) {
+            // Collect victorious greedy+scout candidates; lock updates once after scouts.
+            let mut lock_candidates: Vec<(ShowcaseResult, String)> = Vec::new();
             let level_cfg = annealed_config_for_hash(
                 &base_config,
                 showcase_hash,
@@ -307,32 +299,45 @@ pub fn train(
                 Ok(result) => {
                     if result.victorious {
                         mark_level_cleared(&mut clear_progress, showcase_hash);
+                        polish_fail_streaks.insert(showcase_hash.clone(), 0);
                         let streak = victory_streaks.entry(showcase_hash.clone()).or_insert(0);
                         *streak = streak.saturating_add(1);
+                        lock_candidates.push((result.clone(), "greedy".to_string()));
                     } else {
                         victory_streaks.insert(showcase_hash.clone(), 0);
-                        // Polish anneal is one-way unless we reset: after an unlearn,
-                        // cold explore + low entropy recreates the idle/left spawn local min.
-                        if clear_progress.remove(showcase_hash).is_some() {
-                            on_event(
-                                "info",
-                                json!({
-                                    "message": format!(
-                                        "Greedy showcase failed for {}; returning to discovery jump/explore/entropy band",
-                                        showcase_hash
-                                    )
-                                }),
-                            );
+                        // Hold polish through polish_fail_grace consecutive greedy misses
+                        // so a brittle hard clear is not immediately reheated into discovery.
+                        if clear_progress.contains_key(showcase_hash) {
+                            let fails = polish_fail_streaks
+                                .entry(showcase_hash.clone())
+                                .or_insert(0);
+                            *fails = fails.saturating_add(1);
+                            let grace = base_config.polish_fail_grace.max(1);
+                            if *fails >= grace {
+                                clear_progress.remove(showcase_hash);
+                                polish_fail_streaks.insert(showcase_hash.clone(), 0);
+                                on_event(
+                                    "info",
+                                    json!({
+                                        "message": format!(
+                                            "Greedy showcase failed {grace}× for {}; returning to discovery jump/explore/entropy band",
+                                            showcase_hash
+                                        )
+                                    }),
+                                );
+                            } else {
+                                on_event(
+                                    "info",
+                                    json!({
+                                        "message": format!(
+                                            "Greedy showcase failed for {} ({fails}/{grace}); holding polish anneal + Goal Rehearsal Lock",
+                                            showcase_hash
+                                        )
+                                    }),
+                                );
+                            }
                         }
                     }
-                    maybe_update_lock(
-                        &mut rehearsal_locks,
-                        &mut on_event,
-                        base_config.as_ref(),
-                        showcase_hash,
-                        &result,
-                        "greedy",
-                    );
                     on_event(
                         "showcase",
                         json!({
@@ -346,6 +351,7 @@ pub fn train(
                 }
                 Err(error) => {
                     victory_streaks.insert(showcase_hash.clone(), 0);
+                    polish_fail_streaks.insert(showcase_hash.clone(), 0);
                     clear_progress.remove(showcase_hash);
                     on_event(
                         "showcase",
@@ -358,9 +364,7 @@ pub fn train(
                 }
             }
 
-            if base_config.goal_rehearsal_lock
-                && !base_config.no_learning
-            {
+            if base_config.goal_rehearsal_lock && !base_config.no_learning {
                 let cycles_since = clear_progress.get(showcase_hash.as_str()).copied();
                 let scout_budget = base_config.scout_episodes_for_level(cycles_since);
                 for scout_idx in 0..scout_budget {
@@ -379,15 +383,10 @@ pub fn train(
                         Ok(scout) => {
                             if scout.victorious {
                                 mark_level_cleared(&mut clear_progress, showcase_hash);
+                                polish_fail_streaks.insert(showcase_hash.clone(), 0);
+                                lock_candidates
+                                    .push((scout, format!("scout-{scout_idx}")));
                             }
-                            maybe_update_lock(
-                                &mut rehearsal_locks,
-                                &mut on_event,
-                                base_config.as_ref(),
-                                showcase_hash,
-                                &scout,
-                                &format!("scout-{scout_idx}"),
-                            );
                         }
                         Err(error) => {
                             on_event(
@@ -403,6 +402,29 @@ pub fn train(
                     }
                 }
             }
+
+            // Prefer fewest takeoffs among this cycle's victorious greedy+scouts.
+            if let Some((best, source)) = lock_candidates
+                .into_iter()
+                .min_by(|(a, _), (b, _)| {
+                    a.jump_takeoffs
+                        .cmp(&b.jump_takeoffs)
+                        .then_with(|| {
+                            b.policy_confidence
+                                .partial_cmp(&a.policy_confidence)
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                        })
+                })
+            {
+                maybe_update_lock(
+                    &mut rehearsal_locks,
+                    &mut on_event,
+                    base_config.as_ref(),
+                    showcase_hash,
+                    &best,
+                    &source,
+                );
+            }
         }
 
         // Advance anneal clocks for levels that have already cleared.
@@ -416,6 +438,10 @@ pub fn train(
         {
             for (_hash, lock) in rehearsal_locks.iter() {
                 ppo.rehearse(&lock.trajectory, base_config.goal_rehearsal_epochs);
+                if base_config.goal_rehearsal_mirror_clone {
+                    let mirrored = lock.trajectory.horizontally_flipped();
+                    ppo.rehearse(&mirrored, base_config.goal_rehearsal_epochs);
+                }
             }
         }
         if checkpoint_interval > 0 && cycle % checkpoint_interval == 0 {
@@ -424,25 +450,28 @@ pub fn train(
         }
 
         if early_stop {
+            let streak_need = base_config.early_stop_victory_streak;
+            let plateau_window = base_config.early_stop_plateau_window;
+            let plateau_eps = base_config.early_stop_plateau_eps;
             recent_returns.push(reward_mean);
-            if recent_returns.len() > EARLY_STOP_PLATEAU_WINDOW {
+            if recent_returns.len() > plateau_window {
                 recent_returns.remove(0);
             }
 
             let mastery = level_hashes.iter().all(|hash| {
-                victory_streaks.get(hash).copied().unwrap_or(0) >= EARLY_STOP_VICTORY_STREAK
+                victory_streaks.get(hash).copied().unwrap_or(0) >= streak_need
             });
             let all_cleared = level_hashes
                 .iter()
                 .all(|hash| clear_progress.contains_key(hash));
-            let plateau = cycle >= EARLY_STOP_MIN_CYCLES
+            let plateau = cycle >= base_config.early_stop_min_cycles
                 && all_cleared
-                && returns_have_plateaued(&recent_returns);
+                && returns_have_plateaued(&recent_returns, plateau_window, plateau_eps);
 
             if mastery || plateau {
                 let reason = if mastery {
                     format!(
-                        "Early-stop: greedy showcase mastery (≥{EARLY_STOP_VICTORY_STREAK} consecutive clears per level)."
+                        "Early-stop: greedy showcase mastery (≥{streak_need} consecutive clears per level)."
                     )
                 } else {
                     format!(
@@ -476,8 +505,8 @@ pub fn train(
     Ok(())
 }
 
-fn returns_have_plateaued(recent_returns: &[f32]) -> bool {
-    if recent_returns.len() < EARLY_STOP_PLATEAU_WINDOW {
+fn returns_have_plateaued(recent_returns: &[f32], window: usize, eps: f32) -> bool {
+    if recent_returns.len() < window {
         return false;
     }
     let min = recent_returns
@@ -490,7 +519,7 @@ fn returns_have_plateaued(recent_returns: &[f32]) -> bool {
         .fold(f32::NEG_INFINITY, f32::max);
     let mean = recent_returns.iter().sum::<f32>() / recent_returns.len() as f32;
     let range = max - min;
-    range <= EARLY_STOP_PLATEAU_EPS * (1.0 + mean.abs())
+    range <= eps * (1.0 + mean.abs())
 }
 
 fn build_envs(
@@ -520,7 +549,12 @@ fn annealed_config_for_hash(
     let cycles_since = clear_progress.get(level_hash).copied();
     let jump = base_config.annealed_jump_reward(cycles_since);
     let explore = base_config.annealed_explore_reward(cycles_since);
-    Arc::new(base_config.with_annealed_rewards(jump, explore))
+    let mut cfg = base_config.with_annealed_rewards(jump, explore);
+    // Cleared levels: mirror-only polish augs (jitter/dropout off, lock-aligned).
+    if cycles_since.is_some() {
+        cfg = cfg.with_polish_train_augmentations();
+    }
+    Arc::new(cfg)
 }
 
 /// `None` while any coach level is still uncleared; otherwise min cycles-since-clear.

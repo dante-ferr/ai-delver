@@ -11,10 +11,10 @@ learning_rate = 0.000158            # Sequential-mastery Optuna Trial 1
 gamma = 0.995                     # Discount factor for future rewards (balancing short-term vs long-term goals)
 # Discovery entropy escapes idle/left spawn collapse. Polish is milder than the
 # snap schedule that unlearned clears (cold explore + entropy 0.01 → idle again).
-# Greedy showcase fail resets clear/anneal back to discovery.
+# Anneal resets only after polish_fail_grace consecutive greedy fails.
 entropy_regularization = 0.075
 entropy_regularization_polish = 0.02
-entropy_anneal_cycles = 8
+entropy_anneal_cycles = 6
 ppo_num_epochs = 4                # Number of optimization epochs per gradient update step
 clip_epsilon = 0.2                # PPO policy-ratio clipping range
 gae_lambda = 0.95                 # Bias/variance tradeoff for generalized advantage estimation
@@ -42,13 +42,15 @@ turn_reward = -0.28               # Sequential-mastery Optuna Trial 1 (matches p
 
 frame_step_reward = -0.01         # Time penalty per step to encourage faster execution
 # Discovery explore escapes spawn-idle; polish cools hop-farming without starving invent
-# if the agent unlearns (anneal resets on greedy fail).
+# if the agent unlearns (anneal resets after polish_fail_grace greedy fails).
 tile_exploration_reward = 0.075
 tile_exploration_reward_polish = 0.02
-explore_anneal_cycles = 8
+explore_anneal_cycles = 6
 jump_reward = -2.0                # Discovery-band takeoff cost (before first clear)
 jump_reward_polish = -3.5         # Post-clear neat pressure (avoid pit-fear from -4.5)
 jump_anneal_cycles = 10
+# Consecutive greedy fails before clearing polish anneal (avoids clear→fail thrash).
+polish_fail_grace = 3
 wall_hugging_reward = -0.0325     # Sequential-mastery Optuna Trial 1 (10-frame grace period unchanged)
 
 goal_distance_reward_scale = 0.0169 # Sequential-mastery Optuna Trial 1
@@ -68,7 +70,31 @@ checkpoint_interval = 0           # Frequency (in cycles) to save intermediate c
 no_learning = false               # Execute random actions only without gradient updates for profiling/testing
 max_training_levels = 10          # Cap on concurrent curriculum levels (surfaced via GET /init)
 # Goal Rehearsal Lock: scout stochastic wins, lock fewest takeoffs, BC into PPO.
+# Lock updates after greedy+scouts that cycle (not mid-cycle).
 goal_rehearsal_lock = true
 goal_rehearsal_epochs = 8
 goal_rehearsal_scout_episodes = 4
-goal_rehearsal_scout_episodes_polish = 8
+goal_rehearsal_scout_episodes_polish = 10
+# Also BC a horizontally flipped clone of each lock (reduces rightward prior).
+goal_rehearsal_mirror_clone = true
+# Early-stop (--early-stop / GUI): stop a focus level once policy looks converged.
+# Higher streak / min cycles / window and lower eps → later stop, stronger teachings.
+early_stop_victory_streak = 5     # Consecutive greedy showcase clears per level
+early_stop_min_cycles = 15        # Min cycles before return-plateau stop can fire
+early_stop_plateau_window = 8     # Rolling average_return samples for plateau check
+early_stop_plateau_eps = 0.01     # Relative return range below which returns count as flat
+
+
+# ==============================================================================
+# Data Augmentations
+# ==============================================================================
+# Train-only; showcase/scouts always unaugmented.
+# Cleared levels keep mirror at polish rate (fight rightward prior) but zero
+# spawn/goal jitter and view dropout so collect stays lock-aligned.
+enable_augmentations = true
+mirror_augmentation_prob = 0.5
+mirror_augmentation_prob_polish = 0.5
+spawn_jitter_px = 2.0
+goal_jitter_norm = 0.02
+local_view_dropout_prob = 0.01
+

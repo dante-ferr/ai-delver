@@ -63,12 +63,12 @@ Config (`intelligence/config.toml`):
 - `goal_rehearsal_lock = true`
 - `goal_rehearsal_epochs = 8`
 - `goal_rehearsal_scout_episodes = 4` (pre-clear)
-- `goal_rehearsal_scout_episodes_polish = 8` (after clear)
+- `goal_rehearsal_scout_episodes_polish = 10` (after clear)
 
 Behavior:
 
-1. After each cycle: greedy showcase + `K` stochastic scouts (`K` rises after clear).
-2. Lock the fewest-takeoff **victory** among them (strictly fewer takeoffs, or equal takeoffs with higher `policy_confidence`).
+1. After each cycle: greedy showcase, then `K` stochastic scouts (`K` rises after clear).
+2. **Then** lock the fewest-takeoff **victory** among that cycle’s greedy+scouts (confidence tie-break vs prior lock).
 3. Each cycle, behavioral-clone (`Ppo::rehearse`) locked trajectories for `goal_rehearsal_epochs`.
 4. Training collect stays stochastic; rehearsal sticks argmax to the clean win even when return near-ties.
 
@@ -76,24 +76,32 @@ No flat-floor ban — only observed clean wins are reinforced.
 
 ### Lever B — Per-level post-clear jump anneal
 
-- `jump_reward` / `jump_reward_polish` / `jump_anneal_cycles` (default polish span **12**)
+- `jump_reward` / `jump_reward_polish` / `jump_anneal_cycles` (default polish span **10**)
 
 ### Lever C — Post-clear entropy anneal
 
-- `entropy_regularization` / `entropy_regularization_polish` / `entropy_anneal_cycles` (default polish **0.02** over **8** cycles)
-- Session-wide: discovery until every coach level cleared, then slowest clock. **Greedy showcase fail resets** that level to discovery (avoids idle trap after unlearn).
+- `entropy_regularization` / `entropy_regularization_polish` / `entropy_anneal_cycles` (default polish **0.02** over **6** cycles)
+- Session-wide: discovery until every coach level cleared, then slowest clock.
+- `polish_fail_grace = 3`: anneal resets to discovery only after **N consecutive** greedy fails (hold polish + lock through 1–2 misses).
 
 ### Lever D — Post-clear explore anneal (neatness speed)
 
-- `tile_exploration_reward` / `tile_exploration_reward_polish` / `explore_anneal_cycles` (default polish **0.02** over **8** cycles)
+- `tile_exploration_reward` / `tile_exploration_reward_polish` / `explore_anneal_cycles` (default polish **0.02** over **6** cycles)
 - Discovery `0.075` escapes spawn-idle; polish `0.02` reduces hop-into-air farming after clear.
-- Leaving explore hot after clear was a main neatness delay; snap-cooling too hard recreated spawn-idle when anneal did not reset on fail.
+- Leaving explore hot after clear was a main neatness delay; snap-cooling too hard recreated spawn-idle when anneal reset on the first miss.
+
+### Lever E — Post-clear mirror-only augs + mirrored lock
+
+- Showcase/scouts are always unaugmented.
+- Cleared levels keep train **mirror** at `mirror_augmentation_prob_polish` (default **0.5**) but zero spawn/goal jitter and view dropout so collect stays lock-aligned.
+- When `goal_rehearsal_mirror_clone` is on, each locked traj is also BC’d as a horizontal flip (fights rightward prior; not a generalist guarantee).
+- Uncleared levels keep full discovery augs.
 
 Rules:
 
 1. Track whether each coach level has ever produced a victorious showcase this train call.
-2. Before first clear: discovery jump / explore / entropy.
-3. After first clear: interpolate toward polish targets; boost scout budget.
+2. Before first clear: discovery jump / explore / entropy + full augs.
+3. After first clear: interpolate toward polish targets; boost scout budget; mirror-only polish augs; lock + optional mirror clone.
 4. New `/train` call starts discovery band again.
 5. **Do not** anneal `turn_reward`.
 
@@ -103,11 +111,13 @@ flowchart TD
   firstWin --> annealJ["Anneal jump"]
   firstWin --> annealE["Anneal entropy"]
   firstWin --> annealX["Anneal explore"]
+  firstWin --> polishAug["Mirror-only polish augs"]
   firstWin --> scout["Polish scouts find cleaner wins"]
   scout --> lock["Lock fewest-takeoff traj"]
   annealJ --> ppo["PPO collect prefers fewer takeoffs"]
   annealX --> ppo
-  lock --> bc["BC rehearse locked traj"]
+  polishAug --> ppo
+  lock --> bc["BC rehearse + mirror clone"]
   ppo --> sticky["Greedy showcase stays neat"]
   bc --> sticky
 ```

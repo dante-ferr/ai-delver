@@ -30,7 +30,7 @@ flowchart LR
 
 `jump_reward` in config is the **discovery band** (mild enough to invent gap commits).
 
-After a level’s first victorious showcase in a train session, the trainer substitutes **annealed** effective jump and explore costs that slide toward polish targets over their anneal cycle spans. Collect envs rebuild each cycle with those effective values.
+After a level’s first victorious showcase in a train session, the trainer substitutes **annealed** effective jump and explore costs that slide toward polish targets over their anneal cycle spans. Collect envs rebuild each cycle with those effective values, and **cleared levels keep mirror-only polish augs** (jitter/dropout off) so PPO stays lock-aligned without erasing L↔R equivariance. Polish holds through `polish_fail_grace` consecutive greedy misses before resetting to discovery.
 
 **`turn_reward` is never annealed the same way.** Labyrinths need many intentional turns; a post-clear turn tax would punish future maze skills.
 

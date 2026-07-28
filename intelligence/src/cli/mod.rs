@@ -83,6 +83,8 @@ pub struct TrainArgs {
     #[arg(long)]
     pub jump_anneal_cycles: Option<usize>,
     #[arg(long)]
+    pub polish_fail_grace: Option<usize>,
+    #[arg(long)]
     pub wall_hugging_reward: Option<f32>,
     #[arg(long)]
     pub goal_rehearsal_epochs: Option<usize>,
@@ -90,6 +92,8 @@ pub struct TrainArgs {
     pub goal_rehearsal_scout_episodes: Option<usize>,
     #[arg(long)]
     pub goal_rehearsal_scout_episodes_polish: Option<usize>,
+    #[arg(long)]
+    pub goal_rehearsal_mirror_clone: Option<bool>,
     #[arg(long)]
     pub goal_distance_reward_scale: Option<f32>,
     #[arg(long)]
@@ -110,6 +114,21 @@ pub struct TrainArgs {
     pub device: Option<String>,
     #[arg(long)]
     pub seed: Option<u64>,
+    #[arg(long)]
+    pub enable_augmentations: Option<bool>,
+    /// Disable spatial and sensory data augmentations during training rollouts.
+    #[arg(long, action = ArgAction::SetTrue)]
+    pub no_augmentations: bool,
+    #[arg(long)]
+    pub mirror_augmentation_prob: Option<f32>,
+    #[arg(long)]
+    pub mirror_augmentation_prob_polish: Option<f32>,
+    #[arg(long)]
+    pub spawn_jitter_px: Option<f32>,
+    #[arg(long)]
+    pub goal_jitter_norm: Option<f32>,
+    #[arg(long)]
+    pub local_view_dropout_prob: Option<f32>,
     /// Skip policy inference and PPO updates (random actions) for physics profiling.
     #[arg(long, action = ArgAction::SetTrue)]
     pub no_learning: bool,

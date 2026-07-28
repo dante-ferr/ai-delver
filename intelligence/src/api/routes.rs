@@ -524,6 +524,11 @@ fn apply_config_overrides(config: &mut Config, overrides: Option<&Value>) {
                     config.jump_anneal_cycles = v as usize;
                 }
             }
+            "polish_fail_grace" => {
+                if let Some(v) = value.as_u64() {
+                    config.polish_fail_grace = v as usize;
+                }
+            }
             "wall_hugging_reward" => {
                 if let Some(v) = value.as_f64() {
                     config.wall_hugging_reward = v as f32;
@@ -542,6 +547,11 @@ fn apply_config_overrides(config: &mut Config, overrides: Option<&Value>) {
             "goal_rehearsal_scout_episodes_polish" => {
                 if let Some(v) = value.as_u64() {
                     config.goal_rehearsal_scout_episodes_polish = v as usize;
+                }
+            }
+            "goal_rehearsal_mirror_clone" => {
+                if let Some(v) = value.as_bool() {
+                    config.goal_rehearsal_mirror_clone = v;
                 }
             }
             "goal_distance_reward_scale" => {

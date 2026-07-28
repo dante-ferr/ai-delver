@@ -159,22 +159,26 @@ Current promoted defaults in `intelligence/config.toml` from **Phase 7 sequentia
 | :--- | :--- | :--- |
 | **`tile_exploration_reward`** | **`0.075`** | Discovery explore (spawn-idle escape) |
 | **`tile_exploration_reward_polish`** | **`0.02`** | Post-clear explore |
-| **`explore_anneal_cycles`** | **`8`** | Cycles after clear to reach explore polish |
+| **`explore_anneal_cycles`** | **`6`** | Cycles after clear to reach explore polish |
 | **`wall_hugging_reward`** | **`-0.0325`** | Wall scrape tax with 10-frame grace period |
 | **`goal_distance_reward_scale`** | **`0.0169`** | Continuous step progress guidance |
 | **`turn_reward`** | **`-0.28`** | Anti-hesitation at pit edges |
 | **`jump_reward`** | **`-2.0`** | Discovery-band takeoff cost (before first clear) |
 | **`jump_reward_polish`** | **`-3.5`** | Post-clear anneal target |
 | **`jump_anneal_cycles`** | **`10`** | Cycles after clear to reach jump polish |
+| **`polish_fail_grace`** | **`3`** | Consecutive greedy fails before anneal→discovery |
 | **`finished_reward`** | **`235.19`** | Strong goal-completion dominance |
 | **`entropy_regularization`** | **`0.075`** | Discovery entropy (avoids idle/left spawn collapse) |
 | **`entropy_regularization_polish`** | **`0.02`** | Post-clear entropy target |
-| **`entropy_anneal_cycles`** | **`8`** | Cycles after clear to reach polish entropy |
+| **`entropy_anneal_cycles`** | **`6`** | Cycles after clear to reach polish entropy |
 | **`learning_rate`** | **`0.000158`** | Sequential-mastery PPO step size |
 | **`goal_rehearsal_lock`** | **`true`** | Scout + lock fewest-takeoff victories |
 | **`goal_rehearsal_epochs`** | **`8`** | BC epochs per cycle over locked traj |
 | **`goal_rehearsal_scout_episodes`** | **`4`** | Pre-clear scouts per level per cycle |
-| **`goal_rehearsal_scout_episodes_polish`** | **`8`** | After clear: hunt cleaner locks harder |
+| **`goal_rehearsal_scout_episodes_polish`** | **`10`** | After clear: hunt cleaner locks harder |
+| **`goal_rehearsal_mirror_clone`** | **`true`** | BC horizontal flip of each lock (L↔R equivariance) |
+| **`mirror_augmentation_prob`** | **`0.5`** | Discovery mirror rate |
+| **`mirror_augmentation_prob_polish`** | **`0.5`** | Post-clear mirror rate (jitter/dropout still off) |
 | **Exploration Engine** | **3-Tile Vertical Span** | Feet-to-head height profile tile tracking |
 | **`local_view`** | **25×25 (radius 12)** | Occupancy grid covering 8-tile pits on platforming-9/10 |
 | **`local_feature_dim`** | **`256`** | Local-view encoder width (625 → 256) |
@@ -185,7 +189,9 @@ Current promoted defaults in `intelligence/config.toml` from **Phase 7 sequentia
 > [!NOTE]
 > Discovery-safe jump band + lock/anneal supersedes relying on a single static harsh `jump_reward`. Jump-aware Trial 5 remains historical evidence that takeoff metrics work (`pack_mean_jumps` 1.0 vs Trial-6 baseline 3.0). Judge neatness by takeoffs, not UI reward ≈1.00.
 >
-> **Spawn-idle / unlearn trap (2026-07-27):** snap polish (`entropy→0.01`, explore→`0.012`, jump→`-4.5`) could clear then collapse back to high-confidence idle/left — and **anneal stayed in polish forever** after the first clear. Fix: greedy showcase fail **resets** clear/anneal to discovery; milder polish (`explore/entropy discovery 0.075`, polish `0.02` / 8 cycles, jump polish `-3.5` / 10). Prefer a blank agent if weights already collapsed.
+> **Spawn-idle / unlearn trap (2026-07-27):** snap polish (`entropy→0.01`, explore→`0.012`, jump→`-4.5`) could clear then collapse back to high-confidence idle/left — and **anneal stayed in polish forever** after the first clear. First fix: greedy fail reset + milder polish. Prefer a blank agent if weights already collapsed.
+>
+> **Clear→fail / jump-spam (2026-07-28):** with augs fully landed, hard maps held wins then one greedy miss → takeoff spikes (e.g. j=176) and fail streaks. Hold polish through `polish_fail_grace`; after clear keep mirror-only polish augs (jitter/dropout off) + mirrored lock clone; defer lock until after that cycle’s scouts; mild anneal spans (explore/entropy **6**) and polish scouts **10**.
 ---
 
 ## 9. Phase 8: True Stage B (lock + post-clear jump anneal)
@@ -193,9 +199,10 @@ Current promoted defaults in `intelligence/config.toml` from **Phase 7 sequentia
 ### Landed
 
 1. **Takeoff metrics**: showcase trajectories emit `jump_takeoffs`; `level_mastery` emits `mean_jumps` / `max_jumps` (victorious-only when possible).
-2. **Goal Rehearsal Lock (stronger)**: greedy showcase + stochastic scouts; lock fewest-takeoff victory (confidence tie-break); BC each cycle (`goal_rehearsal_epochs=8`).
+2. **Goal Rehearsal Lock (stronger)**: greedy then scouts; lock fewest-takeoff victory among that cycle (confidence tie-break); BC each cycle (`goal_rehearsal_epochs=8`).
 3. **Post-clear jump anneal**: per-level discovery `jump_reward` until first clear, then anneal toward `jump_reward_polish` over `jump_anneal_cycles`. **Do not** anneal `turn_reward`.
-4. **`--tune-ej-only`**: still available; demoted vs lock+anneal — future E/J tune must keep a discovery smoke on early pits.
+4. **Fail grace + post-clear mirror-only augs**: `polish_fail_grace` holds polish through consecutive greedy misses; cleared levels keep mirror at `mirror_augmentation_prob_polish` (jitter/dropout off) and BC a mirrored lock clone when enabled.
+5. **`--tune-ej-only`**: still available; demoted vs lock+anneal — future E/J tune must keep a discovery smoke on early pits.
 
 ### Protocol
 
@@ -208,3 +215,32 @@ Current promoted defaults in `intelligence/config.toml` from **Phase 7 sequentia
 **Play-test win (local):** with discovery-safe J + scouts/lock + post-clear anneal, levels clear quickly; hard maps can lock a victory on the **first cycle**. Treat that as validation of the Stage B success check (discover under mild J, hold clean greedy after clear).
 
 Didactic walkthrough: [How the Intelligence Learns](../intelligence/index.md). Design detail remains this page + [Neatness](../intelligence/neatness.md). Escalate (SIL / entropy anneal / architecture) only if mastery or neatness regresses on a fair pack try.
+---
+
+## 10. Phase 9: Rightward prior vs near-symmetric reverse
+
+### Symptom
+
+After mastering `platforming-1`…`10`, a Delver (Brave Delver) on `platforming-10-reversed` (spawn/goal swapped on the same near-symmetric stepped pit) wall-hugged **right** into the spawn-side wall — goal and open course were left. Fine-tuning reverse looked like jump-spam / pit flailing. Near-symmetry made “this should act like a mirror” feel obvious; it did not.
+
+### Root cause
+
+1. **Pack is all left→right**, so mastery overfits a Right motor prior.
+2. **Post-clear augs were fully off** + Goal Rehearsal Lock BC’d only the unaugmented forward traj → polish actively erased discovery-time mirror equivariance.
+3. Mirror augs flip obs/actions at the **left** spawn; they do not relocate physics. A non-equivariant argmax still emits Right on reverse.
+
+Near-symmetric reverse is a sharp probe: sensors say go left; Right wall-hug means observation-insensitive bias, not “confused geometry.”
+
+### Fix landed
+
+- Cleared levels: **mirror-only** polish augs (`mirror_augmentation_prob_polish`, default `0.5`); spawn/goal jitter and view dropout stay zero.
+- Each lock also BC’s a **horizontal mirror clone** (`goal_rehearsal_mirror_clone`).
+- Showcase/scouts remain unaugmented.
+
+### Validation (local, 2026-07-28)
+
+After retrain under the new defaults, the Delver **almost got a clean clear** on `platforming-10-reversed`. Treat as strong evidence the Right prior is reduced, not as a generalist guarantee (asymmetric climb-vs-drop and residual L→R curriculum bias can still bite).
+
+### Docs
+
+[Neatness](../intelligence/neatness.md) Lever E, [Stage B](jump_polish_stage_b.md) Lever E, [Config knobs](../intelligence/config_knobs.md), [Training cycle](../intelligence/training_cycle.md).

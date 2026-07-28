@@ -22,6 +22,7 @@ pub enum ActionMode {
 }
 
 /// Result of one episode (trajectory JSON + lock metadata).
+#[derive(Clone)]
 pub struct ShowcaseResult {
     pub trajectory_json: String,
     pub victorious: bool,
@@ -68,6 +69,7 @@ fn run_episode(
     mode: ActionMode,
 ) -> Result<ShowcaseResult> {
     let mut env = LevelEnvironment::new(Arc::clone(&level), Arc::new(config.clone()));
+    env.set_augmentations_enabled(false);
     let mut observation = env.reset();
     let mut recurrent = ppo.model.initial_state(1);
     let mut episode_start = 1.0_f32;

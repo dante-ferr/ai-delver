@@ -4,16 +4,16 @@ Everything important happens in `trainer::train` (`trainer/loop.rs`). One **cycl
 
 ```mermaid
 flowchart TD
-  start["Cycle N begins"] --> annealCfg["Build envs with annealed jump+explore"]
+  start["Cycle N begins"] --> annealCfg["Build envs with annealed jump+explore; mirror-only augs if cleared"]
   annealCfg --> collect["Collect rollouts: stochastic acts × env_batch"]
   collect --> ppo["PPO update"]
   ppo --> metrics["Emit metrics / progress"]
   metrics --> greedy["Greedy showcase per level"]
-  greedy --> clear["If victory → mark level cleared"]
+  greedy --> clear["Victory → mark cleared; miss → fail grace"]
   clear --> scouts["K stochastic scouts"]
-  scouts --> lock["Maybe update Goal Rehearsal Lock"]
+  scouts --> lock["Lock best of this cycle's victories"]
   lock --> tick["Advance anneal clocks for cleared levels"]
-  tick --> bc["BC rehearse all locked trajs"]
+  tick --> bc["BC rehearse locked trajs + mirror clones"]
   bc --> ckpt["Optional checkpoint"]
   ckpt --> next["Cycle N+1"]
 ```
@@ -22,14 +22,14 @@ flowchart TD
 
 For each level hash:
 
-- Never cleared this `/train` call → discovery `jump_reward` / `tile_exploration_reward`.
-- Cleared → interpolate toward polish targets over the matching anneal cycle spans.
+- Never cleared this `/train` call → discovery `jump_reward` / `tile_exploration_reward` + full train augs.
+- Cleared → interpolate toward polish targets over the matching anneal cycle spans; **mirror-only** polish augs (`mirror_augmentation_prob_polish`; jitter/dropout zeroed) so collect stays lock-aligned without killing L↔R equivariance.
 
 Envs are rebuilt every cycle so collect feels the schedule. A new `/train` (coach moves to another level) resets clear/anneal state for that session.
 
 Entropy is **session-wide**: discovery until every coach level has cleared, then anneal toward polish (slowest level’s clock). Scout budget switches to `goal_rehearsal_scout_episodes_polish` per level once that level has cleared.
 
-If the **greedy** showcase fails after a clear, that level’s clear/anneal state is **reset** to discovery — otherwise cold polish recreates the idle/left spawn local min after an unlearn.
+If the **greedy** showcase fails after a clear, polish holds for `polish_fail_grace` consecutive misses (default **3**); Goal Rehearsal Lock stays. Only after grace trips is clear/anneal reset to discovery — otherwise a single miss on a hard map reheats jump-spam discovery.
 
 ## 2. Collect
 
@@ -46,27 +46,23 @@ One `ppo.update(rollout)` (or more rollouts if `episodes_per_cycle` needs severa
 
 For each level in the train set, `run_showcase` (argmax) builds a GUI trajectory and reports `jump_takeoffs`, `victorious`, `policy_confidence`.
 
-First victory → `clear_progress` entry (anneal starts after this cycle’s tick).
+First victory → `clear_progress` entry (anneal starts after this cycle’s tick); polish fail streak cleared.
 
 ## 5. Stochastic scouts
 
 If `goal_rehearsal_lock`, run **K** `run_scout` episodes (multinomial). Pre-clear `K = goal_rehearsal_scout_episodes`; after that level clears, `K = goal_rehearsal_scout_episodes_polish` (hunt cleaner 0-hop locks harder).
 
-## 6. Lock update
+## 6. Lock update (end of level’s greedy+scouts)
 
-Among victorious greedy + scout trajectories, keep the one with:
-
-1. Strictly fewer takeoffs, or
-2. Equal takeoffs and higher `policy_confidence`.
-
-Store obs/action tensors as `RehearsalTrajectory`.
+Among **this cycle’s** victorious greedy + scout trajectories, pick fewest takeoffs (confidence tie-break), then update the session lock if that candidate beats the prior lock. Avoids mid-cycle “greedy locks high hops → BC → scout finds cleaner” thrash. Misses keep the prior lock.
 
 ## 7. Anneal clock + BC
 
 - Every cleared level’s “cycles since clear” increments once per cycle.
 - Each locked traj is `ppo.rehearse(..., goal_rehearsal_epochs)`.
+- When `goal_rehearsal_mirror_clone` is on, the same epochs also run on a horizontally flipped clone (flip local_view, negate dx/vx, remap run 0↔2).
 
-Then the next cycle collects again — now under a slightly harsher jump cost if the level has cleared, and with a policy already tugged toward the locked path.
+Then the next cycle collects again — now under a slightly harsher jump cost if the level has cleared, and with a policy already tugged toward the locked path (and its mirror).
 
 ## Intuition for “learned on cycle 1”
 

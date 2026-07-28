@@ -145,8 +145,8 @@ mod tests {
                   {"name": "Terrain", "position": [0, 0], "size": [8, 1]}
                 ]}] },
                 "world_objects_map": { "layers": [{ "elements": [
-                  {"name": "Delver", "position": [1, 1], "size": [1, 3]},
-                  {"name": "Goal", "position": [6, 1], "size": [1, 1]}
+                  {"name": "delver", "position": [1, 5], "size": [1, 3]},
+                  {"name": "goal", "position": [6, 5], "size": [1, 1]}
                 ]}] }
               }
             }"#,

@@ -212,11 +212,13 @@ fn apply_overrides(config: &mut Config, args: &TrainArgs) {
     override_value!(jump_reward);
     override_value!(jump_reward_polish);
     override_value!(jump_anneal_cycles);
+    override_value!(polish_fail_grace);
     override_value!(wall_hugging_reward);
     override_value!(goal_distance_reward_scale);
     override_value!(goal_rehearsal_epochs);
     override_value!(goal_rehearsal_scout_episodes);
     override_value!(goal_rehearsal_scout_episodes_polish);
+    override_value!(goal_rehearsal_mirror_clone);
     override_value!(ppo_num_epochs);
     override_value!(value_coefficient);
     override_value!(minibatch_size);
@@ -225,6 +227,15 @@ fn apply_overrides(config: &mut Config, args: &TrainArgs) {
     override_value!(mlp_hidden_dim);
     override_value!(env_batch_size);
     override_value!(seed);
+    override_value!(enable_augmentations);
+    override_value!(mirror_augmentation_prob);
+    override_value!(mirror_augmentation_prob_polish);
+    override_value!(spawn_jitter_px);
+    override_value!(goal_jitter_norm);
+    override_value!(local_view_dropout_prob);
+    if args.no_augmentations {
+        config.enable_augmentations = false;
+    }
     if let Some(value) = &args.device {
         config.device.clone_from(value);
     }

@@ -45,6 +45,9 @@ pub struct Config {
     pub jump_reward_polish: f32,
     /// Cycles after first clear to fully reach `jump_reward_polish`.
     pub jump_anneal_cycles: usize,
+    /// Consecutive greedy showcase fails before resetting polish anneal to discovery.
+    /// Misses inside the grace keep polish + Goal Rehearsal Lock.
+    pub polish_fail_grace: usize,
     pub wall_hugging_reward: f32,
     pub goal_distance_reward_scale: f32,
     pub actions_per_second: usize,
@@ -62,6 +65,28 @@ pub struct Config {
     pub goal_rehearsal_scout_episodes: usize,
     /// Scout episodes per level per cycle after that level has cleared.
     pub goal_rehearsal_scout_episodes_polish: usize,
+    /// When true, each locked traj is also rehearsed as a horizontal mirror clone.
+    pub goal_rehearsal_mirror_clone: bool,
+    /// Consecutive victorious greedy showcases per level before early-stop mastery.
+    pub early_stop_victory_streak: usize,
+    /// Minimum cycles before return-plateau early-stop can fire.
+    pub early_stop_min_cycles: usize,
+    /// Rolling window of `average_return` samples used for plateau detection.
+    pub early_stop_plateau_window: usize,
+    /// Relative range (`(max-min) / (1+|mean|)`) below which returns count as flat.
+    pub early_stop_plateau_eps: f32,
+    /// Enable spatial & sensory data augmentations during training.
+    pub enable_augmentations: bool,
+    /// Probability of horizontally flipping rollouts during discovery training.
+    pub mirror_augmentation_prob: f32,
+    /// Mirror probability for cleared-level (polish) train collect.
+    pub mirror_augmentation_prob_polish: f32,
+    /// Spawn position jitter radius in pixels.
+    pub spawn_jitter_px: f32,
+    /// Goal offset target noise magnitude in normalized units.
+    pub goal_jitter_norm: f32,
+    /// Probability of masking individual local_view occupancy cells.
+    pub local_view_dropout_prob: f32,
 }
 
 #[cfg(test)]
@@ -72,7 +97,7 @@ impl Default for Config {
             gamma: 0.995,
             entropy_regularization: 0.075,
             entropy_regularization_polish: 0.02,
-            entropy_anneal_cycles: 8,
+            entropy_anneal_cycles: 6,
             ppo_num_epochs: 4,
             clip_epsilon: 0.2,
             gae_lambda: 0.95,
@@ -90,10 +115,11 @@ impl Default for Config {
             frame_step_reward: -0.01,
             tile_exploration_reward: 0.075,
             tile_exploration_reward_polish: 0.02,
-            explore_anneal_cycles: 8,
+            explore_anneal_cycles: 6,
             jump_reward: -0.15,
             jump_reward_polish: -0.5,
             jump_anneal_cycles: 10,
+            polish_fail_grace: 3,
             wall_hugging_reward: -0.2,
             goal_distance_reward_scale: 0.005,
             actions_per_second: 10,
@@ -106,7 +132,18 @@ impl Default for Config {
             goal_rehearsal_lock: true,
             goal_rehearsal_epochs: 8,
             goal_rehearsal_scout_episodes: 4,
-            goal_rehearsal_scout_episodes_polish: 8,
+            goal_rehearsal_scout_episodes_polish: 10,
+            goal_rehearsal_mirror_clone: true,
+            early_stop_victory_streak: 5,
+            early_stop_min_cycles: 15,
+            early_stop_plateau_window: 8,
+            early_stop_plateau_eps: 0.01,
+            enable_augmentations: true,
+            mirror_augmentation_prob: 0.5,
+            mirror_augmentation_prob_polish: 0.5,
+            spawn_jitter_px: 2.0,
+            goal_jitter_norm: 0.02,
+            local_view_dropout_prob: 0.01,
         }
     }
 }
@@ -202,6 +239,17 @@ impl Config {
         clone
     }
 
+    /// Post-clear train collect: keep mirror, zero jitter/dropout (lock-aligned).
+    pub fn with_polish_train_augmentations(&self) -> Self {
+        let mut clone = self.clone();
+        clone.enable_augmentations = true;
+        clone.mirror_augmentation_prob = self.mirror_augmentation_prob_polish;
+        clone.spawn_jitter_px = 0.0;
+        clone.goal_jitter_norm = 0.0;
+        clone.local_view_dropout_prob = 0.0;
+        clone
+    }
+
     /// How many collect-window training slots equal one full-length run.
     ///
     /// A run lasts up to `max_seconds_per_episode`; each training collect window
@@ -280,9 +328,25 @@ mod tests {
     fn scout_budget_switches_after_clear() {
         let mut config = Config::default();
         config.goal_rehearsal_scout_episodes = 4;
-        config.goal_rehearsal_scout_episodes_polish = 8;
+        config.goal_rehearsal_scout_episodes_polish = 10;
         assert_eq!(config.scout_episodes_for_level(None), 4);
-        assert_eq!(config.scout_episodes_for_level(Some(0)), 8);
-        assert_eq!(config.scout_episodes_for_level(Some(3)), 8);
+        assert_eq!(config.scout_episodes_for_level(Some(0)), 10);
+        assert_eq!(config.scout_episodes_for_level(Some(3)), 10);
+    }
+
+    #[test]
+    fn polish_train_augs_keep_mirror_zero_jitter() {
+        let mut config = Config::default();
+        config.mirror_augmentation_prob = 0.5;
+        config.mirror_augmentation_prob_polish = 0.5;
+        config.spawn_jitter_px = 2.0;
+        config.goal_jitter_norm = 0.02;
+        config.local_view_dropout_prob = 0.01;
+        let polish = config.with_polish_train_augmentations();
+        assert!(polish.enable_augmentations);
+        assert!((polish.mirror_augmentation_prob - 0.5).abs() < 1e-6);
+        assert_eq!(polish.spawn_jitter_px, 0.0);
+        assert_eq!(polish.goal_jitter_norm, 0.0);
+        assert_eq!(polish.local_view_dropout_prob, 0.0);
     }
 }

@@ -1,10 +1,11 @@
 use super::{
     exploration::ExplorationGrid,
-    observation::{GLOBAL_STATE_SIZE, LOCAL_VIEW_CELLS, LOCAL_VIEW_RADIUS},
+    observation::{GLOBAL_STATE_SIZE, LOCAL_VIEW_CELLS, LOCAL_VIEW_RADIUS, LOCAL_VIEW_SIDE},
     reward::{RewardInput, RewardState},
 };
 use crate::config::Config;
 use ai_delver_level::{Level, DEFAULT_TILE_SIZE, MAX_GRID_SIZE};
+use rand::Rng;
 use runtime_core::RustPhysicsEngine;
 use std::sync::Arc;
 
@@ -42,11 +43,18 @@ pub struct LevelEnvironment {
     rewards: RewardState,
     frame: usize,
     previous_run: Option<i64>,
+    augmentations_enabled: bool,
+    is_mirrored: bool,
+    spawn_jitter_x: f32,
+    spawn_jitter_y: f32,
+    goal_jitter_x: f32,
+    goal_jitter_y: f32,
+    dropout_mask: [bool; LOCAL_VIEW_CELLS],
 }
 
 impl LevelEnvironment {
     pub fn new(level: Arc<Level>, config: Arc<Config>) -> Self {
-        let physics = create_physics(&level);
+        let physics = create_physics(&level, (0.0, 0.0));
         let exploration = ExplorationGrid::new(level.width, level.height);
         let rewards = RewardState::new(&level);
         Self {
@@ -57,11 +65,75 @@ impl LevelEnvironment {
             rewards,
             frame: 0,
             previous_run: None,
+            augmentations_enabled: true,
+            is_mirrored: false,
+            spawn_jitter_x: 0.0,
+            spawn_jitter_y: 0.0,
+            goal_jitter_x: 0.0,
+            goal_jitter_y: 0.0,
+            dropout_mask: [false; LOCAL_VIEW_CELLS],
         }
     }
 
+    pub fn set_augmentations_enabled(&mut self, enabled: bool) {
+        self.augmentations_enabled = enabled;
+        if !enabled {
+            self.is_mirrored = false;
+            self.spawn_jitter_x = 0.0;
+            self.spawn_jitter_y = 0.0;
+            self.goal_jitter_x = 0.0;
+            self.goal_jitter_y = 0.0;
+            self.dropout_mask = [false; LOCAL_VIEW_CELLS];
+        }
+    }
+
+    #[cfg(test)]
+    pub fn is_mirrored(&self) -> bool {
+        self.is_mirrored
+    }
+
     pub fn reset(&mut self) -> Observation {
-        self.physics = create_physics(&self.level);
+        let mut rng = rand::rng();
+        if self.augmentations_enabled && self.config.enable_augmentations {
+            self.is_mirrored = rng.random::<f32>() < self.config.mirror_augmentation_prob;
+
+            if self.config.spawn_jitter_px > 0.0 {
+                self.spawn_jitter_x =
+                    (rng.random::<f32>() * 2.0 - 1.0) * self.config.spawn_jitter_px;
+                self.spawn_jitter_y =
+                    (rng.random::<f32>() * 2.0 - 1.0) * self.config.spawn_jitter_px;
+            } else {
+                self.spawn_jitter_x = 0.0;
+                self.spawn_jitter_y = 0.0;
+            }
+
+            if self.config.goal_jitter_norm > 0.0 {
+                self.goal_jitter_x =
+                    (rng.random::<f32>() * 2.0 - 1.0) * self.config.goal_jitter_norm;
+                self.goal_jitter_y =
+                    (rng.random::<f32>() * 2.0 - 1.0) * self.config.goal_jitter_norm;
+            } else {
+                self.goal_jitter_x = 0.0;
+                self.goal_jitter_y = 0.0;
+            }
+
+            if self.config.local_view_dropout_prob > 0.0 {
+                for cell in self.dropout_mask.iter_mut() {
+                    *cell = rng.random::<f32>() < self.config.local_view_dropout_prob;
+                }
+            } else {
+                self.dropout_mask = [false; LOCAL_VIEW_CELLS];
+            }
+        } else {
+            self.is_mirrored = false;
+            self.spawn_jitter_x = 0.0;
+            self.spawn_jitter_y = 0.0;
+            self.goal_jitter_x = 0.0;
+            self.goal_jitter_y = 0.0;
+            self.dropout_mask = [false; LOCAL_VIEW_CELLS];
+        }
+
+        self.physics = create_physics(&self.level, (self.spawn_jitter_x, self.spawn_jitter_y));
         self.exploration = ExplorationGrid::new(self.level.width, self.level.height);
         self.rewards = RewardState::new(&self.level);
         self.frame = 0;
@@ -70,7 +142,12 @@ impl LevelEnvironment {
     }
 
     pub fn step(&mut self, run_action: i64, jump_action: i64) -> Step {
-        let run = run_action - 1;
+        let effective_run_action = if self.is_mirrored {
+            2 - run_action
+        } else {
+            run_action
+        };
+        let run = effective_run_action - 1;
         let jump = jump_action != 0;
         let before = self
             .physics
@@ -98,9 +175,6 @@ impl LevelEnvironment {
         let tiles_explored = self
             .exploration
             .step_on_vertical_span(tx, feet_ty, head_ty, 1);
-        // Takeoff = jump impulse applied this step (including coyote). Holding jump in air
-        // does not re-apply impulse. Detect via a sharp upward vy delta: same-frame gravity
-        // pulls post-step vy well below raw `jump_impulse`, so an absolute threshold fails.
         let jump_takeoff = jump && delver.vy > vy_before + jump_impulse * 0.25;
         let distance = self.rewards.dijkstra.distance(tx, ty);
         let reward = self.rewards.calculate(
@@ -136,22 +210,56 @@ impl LevelEnvironment {
         let (gx, gy) = self.physics.goal_position();
         let (max_vx, max_vy) = self.physics.max_velocity();
         let goal_distance_norm = MAX_GRID_SIZE as f32 * DEFAULT_TILE_SIZE;
-        let local_view: [f32; LOCAL_VIEW_CELLS] = self
+        let mut local_view_vec: Vec<f32> = self
             .physics
             .local_view("delver", LOCAL_VIEW_RADIUS)
             .expect("physics engine always contains the delver")
             .into_iter()
             .map(|cell| cell as f32)
-            .collect::<Vec<_>>()
+            .collect();
+
+        // Apply local_view tile dropout if mask is active
+        if self.augmentations_enabled && self.config.enable_augmentations {
+            for (idx, &masked) in self.dropout_mask.iter().enumerate() {
+                if masked && idx < local_view_vec.len() {
+                    local_view_vec[idx] = 0.0;
+                }
+            }
+        }
+
+        // Apply horizontal matrix flip if mirrored
+        if self.is_mirrored {
+            let side = LOCAL_VIEW_SIDE; // 25
+            let mut flipped = vec![0.0; LOCAL_VIEW_CELLS];
+            for r in 0..side {
+                for c in 0..side {
+                    let src_idx = r * side + c;
+                    let dst_idx = r * side + (side - 1 - c);
+                    flipped[dst_idx] = local_view_vec[src_idx];
+                }
+            }
+            local_view_vec = flipped;
+        }
+
+        let local_view: [f32; LOCAL_VIEW_CELLS] = local_view_vec
             .try_into()
             .expect("LOCAL_VIEW_RADIUS always produces LOCAL_VIEW_CELLS cells");
+
+        let raw_dx = (gx - x) / goal_distance_norm + self.goal_jitter_x;
+        let raw_dy = (gy - y) / goal_distance_norm + self.goal_jitter_y;
+        let raw_vx = vx / max_vx;
+        let raw_vy = vy / max_vy;
+
+        let final_dx = if self.is_mirrored { -raw_dx } else { raw_dx };
+        let final_vx = if self.is_mirrored { -raw_vx } else { raw_vx };
+
         Observation {
             local_view,
             global_state: [
-                (gx - x) / goal_distance_norm,
-                (gy - y) / goal_distance_norm,
-                vx / max_vx,
-                vy / max_vy,
+                final_dx,
+                raw_dy,
+                final_vx,
+                raw_vy,
                 x.rem_euclid(self.level.tile_size) / self.level.tile_size,
                 y.rem_euclid(self.level.tile_size) / self.level.tile_size,
                 delver.is_on_ground as u8 as f32,
@@ -185,7 +293,7 @@ impl LevelEnvironment {
     }
 }
 
-fn create_physics(level: &Level) -> RustPhysicsEngine {
+fn create_physics(level: &Level, spawn_offset: (f32, f32)) -> RustPhysicsEngine {
     let player_height = runtime_core::DelverConfig::default().player_height;
     let (start_x, start_y) = level.delver_spawn_center(player_height);
     let goal_tiles = level.goal_tiles();
@@ -194,8 +302,90 @@ fn create_physics(level: &Level) -> RustPhysicsEngine {
         level.height,
         &level.solid_tiles,
         &goal_tiles,
-        start_x,
-        start_y,
+        start_x + spawn_offset.0,
+        start_y + spawn_offset.1,
         level.tile_size,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_level() -> Level {
+        Level::from_json(
+            r#"{
+              "_name": "t",
+              "map": {
+                "grid_size": [8, 8],
+                "tile_size": [16.0, 16.0],
+                "tilemap": { "layers": [{ "elements": [
+                  {"name": "Terrain", "position": [0, 0], "size": [8, 1]}
+                ]}] },
+                "world_objects_map": { "layers": [{ "elements": [
+                  {"name": "delver", "position": [1, 5], "size": [1, 3]},
+                  {"name": "goal", "position": [6, 5], "size": [1, 1]}
+                ]}] }
+              }
+            }"#,
+        )
+        .expect("test level")
+    }
+
+    #[test]
+    fn test_mirroring_matrix_flip() {
+        let side = LOCAL_VIEW_SIDE;
+        let mut original = vec![0.0_f32; LOCAL_VIEW_CELLS];
+        // Set column 0 to 1.0
+        for r in 0..side {
+            original[r * side + 0] = 1.0;
+        }
+
+        let mut flipped = vec![0.0_f32; LOCAL_VIEW_CELLS];
+        for r in 0..side {
+            for c in 0..side {
+                let src_idx = r * side + c;
+                let dst_idx = r * side + (side - 1 - c);
+                flipped[dst_idx] = original[src_idx];
+            }
+        }
+
+        // Flipped column 0 should now be column 24
+        for r in 0..side {
+            assert_eq!(flipped[r * side + 24], 1.0);
+            assert_eq!(flipped[r * side + 0], 0.0);
+        }
+    }
+
+    #[test]
+    fn test_action_remapping() {
+        let remap = |run_action: i64, is_mirrored: bool| -> i64 {
+            if is_mirrored {
+                2 - run_action
+            } else {
+                run_action
+            }
+        };
+
+        // Standard
+        assert_eq!(remap(0, false), 0); // Left stays Left
+        assert_eq!(remap(1, false), 1); // Idle stays Idle
+        assert_eq!(remap(2, false), 2); // Right stays Right
+
+        // Mirrored
+        assert_eq!(remap(0, true), 2); // Left becomes Right
+        assert_eq!(remap(1, true), 1); // Idle stays Idle
+        assert_eq!(remap(2, true), 0); // Right becomes Left
+    }
+
+    #[test]
+    fn test_set_augmentations_disabled() {
+        let level = Arc::new(test_level());
+        let config = Arc::new(Config::default());
+        let mut env = LevelEnvironment::new(level, config);
+        env.set_augmentations_enabled(false);
+        assert!(!env.augmentations_enabled);
+        assert!(!env.is_mirrored());
+    }
+}
+

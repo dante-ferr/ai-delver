@@ -50,6 +50,8 @@ class Minimap(ctk.CTkFrame):
         self._path_done = True
         self._tile_next_d = 0
         self._diags_per_tick = 1
+        # set_level(animate=True) before the canvas has a real size.
+        self._waiting_for_canvas = False
 
         self.layout_helper = MinimapLayout(self)
         self.tile_draw = MinimapTileDraw(self)
@@ -73,9 +75,10 @@ class Minimap(ctk.CTkFrame):
         start_pos,
         goal_pos,
         level_hash: str | None = None,
+        *,
+        animate: bool = True,
     ) -> bool:
         """Load level geometry. Returns True if the floor was kept (same hash)."""
-        self._cancel_animation()
         new_hash = level_hash or ""
         same_level = (
             bool(new_hash)
@@ -88,20 +91,48 @@ class Minimap(ctk.CTkFrame):
         self.walls = walls
         self.start_pos = start_pos
         self.goal_pos = goal_pos
-        self._level_hash = new_hash or None
-        self._growing = []
 
         if same_level:
             return True
 
+        self._cancel_animation()
+        self._waiting_for_canvas = False
+        self._level_hash = new_hash or None
+        self._growing = []
+
         self.canvas.delete("all")
         self._has_drawn_content = False
         self._tiles_complete = False
-        self.tile_animation.start_reveal()
+        if animate:
+            self._start_reveal_when_ready()
+        else:
+            layout = self._compute_layout()
+            if layout is not None:
+                self._layout = layout
+                self._draw_full(layout)
+                self._has_drawn_content = True
+                self._tiles_complete = True
+                self._tiles_done = True
+                self._path_done = True
         return False
+
+    def _start_reveal_when_ready(self) -> None:
+        """Start tile reveal once the canvas has a usable size (avoids post-anim growth)."""
+        layout = self._compute_layout()
+        if layout is None:
+            self._waiting_for_canvas = True
+            return
+        self._waiting_for_canvas = False
+        self.tile_animation.start_reveal()
+
+    def _try_start_pending_reveal(self) -> None:
+        if not self._waiting_for_canvas:
+            return
+        self._start_reveal_when_ready()
 
     def reset_to_default(self):
         self._cancel_animation()
+        self._waiting_for_canvas = False
         if self._has_drawn_content and self._layout is not None:
             self.tile_animation.start_wipe()
             return
@@ -115,6 +146,7 @@ class Minimap(ctk.CTkFrame):
     def clear(self):
         """Hard-clear without wipe animation."""
         self._cancel_animation()
+        self._waiting_for_canvas = False
         self.resize.cancel()
         self._clear_state()
         self.canvas.delete("all")
@@ -122,8 +154,19 @@ class Minimap(ctk.CTkFrame):
         self._has_drawn_content = False
         self._tiles_complete = False
 
+    def _is_animating(self) -> bool:
+        return self._anim_after_id is not None
+
     def draw_minimap(self):
         """Synchronous full redraw (used after resize)."""
+        # Never interrupt an in-flight reveal/path — and don't queue a post-anim
+        # sync redraw (that was causing a visible scale "growth" jump).
+        if self._is_animating() or self._waiting_for_canvas:
+            return
+        self._sync_draw_minimap()
+
+    def _sync_draw_minimap(self):
+        """Force a full sync redraw, canceling any animation."""
         self._cancel_animation()
         self.canvas.delete("all")
         self._growing = []
@@ -142,6 +185,8 @@ class Minimap(ctk.CTkFrame):
         self._draw_full(layout)
         self._has_drawn_content = True
         self._tiles_complete = True
+        self._tiles_done = True
+        self._path_done = True
 
     def _compute_layout(self) -> dict[str, Any] | None:
         return self.layout_helper.compute()
@@ -206,6 +251,10 @@ class Minimap(ctk.CTkFrame):
             self._schedule_tick()
         else:
             self._anim_after_id = None
+            self._on_animation_finished()
+
+    def _on_animation_finished(self) -> None:
+        """Hook for subclasses when reveal/path animation reaches the end."""
 
     def _clear_state(self):
         self.grid_size = None
@@ -217,3 +266,4 @@ class Minimap(ctk.CTkFrame):
         self._growing = []
         self._level_hash = None
         self._tiles_complete = False
+        self._waiting_for_canvas = False

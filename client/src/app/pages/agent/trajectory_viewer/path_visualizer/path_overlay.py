@@ -8,7 +8,7 @@ from app.fonts import canvas_font
 from src.app.components.minimap._tile_animation import MinimapTileAnimation
 
 if TYPE_CHECKING:
-    from ._trajectory_minimap import TrajectoryMinimap
+    from .trajectory_minimap import TrajectoryMinimap
 
 
 class PathOverlay:
@@ -87,10 +87,15 @@ class PathOverlay:
         points = layout.get("canvas_points") or []
         segments = max(0, len(points) - 1)
         if segments == 0:
-            m._path_done = True
-            self.draw_end_marker(layout)
+            m._path_batch = 1
+            m._path_idx = 0
+            m._path_done = False
+            m._pending_end_marker_only = True
+            m._end_marker_delay_ticks = max(1, m._path_reveal_ms // m._tick_ms)
             return
 
+        m._pending_end_marker_only = False
+        m._end_marker_delay_ticks = 0
         m._path_batch = MinimapTileAnimation.items_per_tick(
             segments, m._path_reveal_ms, m._tick_ms
         )
@@ -99,6 +104,15 @@ class PathOverlay:
 
     def advance_path_reveal(self, layout: dict[str, Any]) -> None:
         m = self.minimap
+        if getattr(m, "_pending_end_marker_only", False):
+            m._end_marker_delay_ticks = max(0, int(getattr(m, "_end_marker_delay_ticks", 1)) - 1)
+            if m._end_marker_delay_ticks > 0:
+                return
+            m._pending_end_marker_only = False
+            m._path_done = True
+            self.draw_end_marker(layout)
+            return
+
         points = layout.get("canvas_points") or []
         if len(points) < 2:
             m._path_done = True
@@ -120,6 +134,7 @@ class PathOverlay:
     def start_path_only(self) -> None:
         """Animate path only (same level as previous trajectory)."""
         m = self.minimap
+        m._cancel_animation()
         layout = m._compute_layout()
         if layout is None:
             m._layout = None
@@ -127,6 +142,7 @@ class PathOverlay:
 
         m._layout = layout
         m._has_drawn_content = True
+        m._tiles_complete = True
         m._tiles_done = True
         m._growing = []
 

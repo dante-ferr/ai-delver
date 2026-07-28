@@ -576,7 +576,9 @@ def run_train(args):
                     is_review_showcase = bool(traj_hash) and traj_hash in review_hashes
                     if not is_review_showcase:
                         await trajectory.save(
-                            args.agent, kind="play" if is_play_mode else "train"
+                            args.agent,
+                            kind="play" if is_play_mode else "train",
+                            cycle=current_cycle,
                         )
                         persisted = True
                         phase_showcase_amount += 1

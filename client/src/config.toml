@@ -67,6 +67,28 @@ path_reveal_ms = 450
 grow_frames = 10
 debounce_ms = 80
 
+# Trajectory run-picker grid (primary selector; slider stays secondary).
+[run_grid]
+cell_size = 14
+cell_gap = 2
+row_height = 16
+visible_rows = 6
+overscan_rows = 2
+max_height = 120
+legend_hash_chars = 12
+legend_width = 180
+side_by_side_min_width = 520
+scrub_width = 160
+legend_name_max_chars = 18
+legend_name_hover_ms = 1200
+path_popup_width = 720
+path_popup_height = 560
+tooltip_delay_ms = 80
+live_pulse_ms = 450
+play_border_color = "#fbbf24"
+selection_color = "#ffffff"
+live_color = "#60a5fa"
+
 [level_archive]
 hash_display_chars = 12
 window_width = 960

@@ -26,6 +26,12 @@ class MinimapResize:
     def on_configure_debounced(self) -> None:
         m = self.minimap
         m._configure_after_id = None
+        if m._waiting_for_canvas:
+            m._try_start_pending_reveal()
+            return
+        # Ignore size changes mid-animation so we don't snap/grow after it ends.
+        if m._is_animating():
+            return
         m.draw_minimap()
 
     def cancel(self) -> None:

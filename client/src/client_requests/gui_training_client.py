@@ -60,7 +60,9 @@ class GuiTrainingClient(TrainingClient):
             
             async def on_trajectory(trajectory, level_episode_count):
                 if trajectory:
-                    await trajectory.save(agent_loader.storage_key)
+                    await trajectory.save(
+                        agent_loader.storage_key, cycle=self._current_cycle
+                    )
                     agent_loader.mark_dirty()
                 training_state_manager.set_value("level_episode_count", level_episode_count)
                 self._current_cycle += 1

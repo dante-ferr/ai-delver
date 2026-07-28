@@ -76,7 +76,9 @@ class TrajectoryListener:
 
     async def _handle_trajectory(self, trajectory_data: str):
         trajectory = self.trajectory_factory.from_json(trajectory_data)
-        await trajectory.save(agent_loader.agent.name)
+        await trajectory.save(
+            agent_loader.agent.name, cycle=self.current_cycle
+        )
 
         self.current_cycle += 1
         training_state_manager.update_training_process_log(self.current_cycle)

@@ -29,4 +29,5 @@
   - [Run Types & Policy Modes](engineering/run_types.md)
   - [Error Handling](engineering/error_handling.md)
   - [Physics Performance](engineering/physics_performance.md)
+  - [Generalist & Emergent Creativity](engineering/generalist_and_creativity_proposal.md)
   - [Roadmap](engineering/roadmap.md)

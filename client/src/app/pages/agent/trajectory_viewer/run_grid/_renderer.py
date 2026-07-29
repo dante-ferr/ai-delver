@@ -31,18 +31,61 @@ class RunGridRenderer:
         g._canvas_redraw_after_id = None
         g.renderer.redraw()
 
-    def ensure_index_visible(self, real_index: int):
+    def ensure_index_visible(self, real_index: int) -> bool:
+        """Scroll so index is in view. Returns True if scroll row changed."""
         g = self.grid
         slot = g.renderer.slot_for_index(real_index)
         if slot is None:
-            return
+            return False
         cols = g.renderer.compute_cols()
         row = slot // cols
         view_rows = max(1, int(g.canvas.winfo_height()) // g.row_height)
+        old_scroll = g._scroll_row
         if row < g._scroll_row:
             g._scroll_row = row
         elif row >= g._scroll_row + view_rows:
             g._scroll_row = max(0, row - view_rows + 1)
+        return g._scroll_row != old_scroll
+
+    def cell_rect_for_index(self, real_index: int) -> tuple[float, float, float, float] | None:
+        """Canvas coords for a run cell, or None if not in the current viewport."""
+        g = self.grid
+        slot = g.renderer.slot_for_index(real_index)
+        if slot is None:
+            return None
+        cols = g.renderer.compute_cols()
+        row = slot // cols
+        col = slot % cols
+        view_rows = max(1, int(g.canvas.winfo_height()) // g.row_height)
+        if row < g._scroll_row or row >= g._scroll_row + view_rows:
+            return None
+        pitch = g.renderer.cell_pitch()
+        x0 = 2 + col * pitch
+        y0 = (row - g._scroll_row) * g.row_height + 2
+        x1 = x0 + g.cell_size
+        y1 = y0 + g.cell_size
+        return x0, y0, x1, y1
+
+    def move_selection_ring(self, real_index: int | None) -> None:
+        """Move the selection overlay without wiping the grid."""
+        g = self.grid
+        g.canvas.delete("selection_ring")
+        if real_index is None:
+            return
+        rect = g.renderer.cell_rect_for_index(real_index)
+        if rect is None:
+            return
+        x0, y0, x1, y1 = rect
+        g.canvas.create_rectangle(
+            x0 - 1,
+            y0 - 1,
+            x1 + 1,
+            y1 + 1,
+            fill="",
+            outline=g.renderer.selection_ring_color(),
+            width=2,
+            tags=("selection_ring",),
+        )
 
     def index_at_xy(self, x: float, y: float) -> int | None:
         g = self.grid

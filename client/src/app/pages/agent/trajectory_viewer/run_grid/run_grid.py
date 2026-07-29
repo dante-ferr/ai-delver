@@ -290,8 +290,15 @@ class RunGrid(ctk.CTkFrame):
 
 
     def set_live_mode(self, enabled: bool):
-        self._live_mode = bool(enabled)
-        self.renderer.redraw()
+        enabled = bool(enabled)
+        if self._live_mode == enabled:
+            return
+        self._live_mode = enabled
+        # Recolor the existing ring — avoid wiping the whole grid.
+        if self.canvas.find_withtag("selection_ring"):
+            self.renderer.update_selection_ring()
+        else:
+            self.renderer.move_selection_ring(self._selected_index)
 
 
     def set_selected_index(self, index: int | None):
@@ -299,15 +306,19 @@ class RunGrid(ctk.CTkFrame):
         same_index = index == self._selected_index
         self._selected_index = index
         new_focus = None
+        scrolled = False
         if index is not None:
             if not same_index:
-                self.renderer.ensure_index_visible(index)
+                scrolled = self.renderer.ensure_index_visible(index)
             entry = self.data.entry(index)
             if entry:
                 new_focus = str(entry.get("level_hash", "") or "") or None
         self._focused_level_hash = new_focus
         if not same_index:
-            self.renderer.redraw()
+            if scrolled:
+                self.renderer.redraw()
+            else:
+                self.renderer.move_selection_ring(index)
         if old_focus != new_focus:
             touched = {h for h in (old_focus, new_focus) if h}
             self.legend.refresh_legend_styles(hashes=touched or None)

@@ -169,8 +169,9 @@ class AppManager:
     def stop_game(self):
         self._stop_runtime("game")
 
-    def start_replay(self):
-        trajectory = agent_loader.agent.trajectory_loader.trajectory
+    def start_replay(self, trajectory=None):
+        if trajectory is None:
+            trajectory = agent_loader.agent.trajectory_loader.trajectory
         if trajectory is None:
             raise RuntimeError("No trajectory loaded")
 

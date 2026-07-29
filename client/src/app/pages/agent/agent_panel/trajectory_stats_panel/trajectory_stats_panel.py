@@ -226,17 +226,19 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
             self,
             text="All Stats",
             command=self._open_all_stats,
-            width=120
+            svg_path=str(config.ASSETS_PATH / "svg" / "stats.svg"),
+            font=app_font(size=11, weight="bold"),
         )
-        self.all_stats_button.pack(anchor="w", pady=(8, 0))
+        self.all_stats_button.pack(fill="x", pady=(8, 0))
 
         self.level_archive_button = StandardButton(
             self,
             text="Level Archive",
             command=self._open_level_archive,
-            width=120,
+            svg_path=str(config.ASSETS_PATH / "svg" / "archive.svg"),
+            font=app_font(size=11, weight="bold"),
         )
-        self.level_archive_button.pack(anchor="w", pady=(4, 0))
+        self.level_archive_button.pack(fill="x", pady=(4, 0))
 
         # Register callbacks to refresh stats automatically
         trajectory_stats_state_manager.add_on_refresh_stats_callback(

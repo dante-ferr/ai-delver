@@ -27,7 +27,10 @@ class Sidebar(ctk.CTkFrame):
         title_textbox.pack(padx=0, pady=0, fill="x")
 
         test_level_button = StandardButton(
-            self, text="Test Level", command=self._test_level
+            self,
+            text="Test Level",
+            command=self._test_level,
+            svg_path=str(config.ASSETS_PATH / "svg" / "test.svg"),
         )
         test_level_button.pack(pady=(0, config.STYLE.SECTION_SPACING))
 

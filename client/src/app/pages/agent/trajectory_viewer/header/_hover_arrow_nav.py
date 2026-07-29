@@ -17,6 +17,10 @@ class HoverArrowNav:
             top = self.header.winfo_toplevel()
             top.bind("<KeyPress-Left>", self.on_arrow_left, add="+")
             top.bind("<KeyPress-Right>", self.on_arrow_right, add="+")
+            top.bind("<Shift-KeyPress-Left>", self.on_shift_arrow_left, add="+")
+            top.bind("<Shift-KeyPress-Right>", self.on_shift_arrow_right, add="+")
+            top.bind("<Shift-Left>", self.on_shift_arrow_left, add="+")
+            top.bind("<Shift-Right>", self.on_shift_arrow_right, add="+")
             top.bind("<KeyPress-Up>", self.on_arrow_up, add="+")
             top.bind("<KeyPress-Down>", self.on_arrow_down, add="+")
         except Exception:
@@ -29,6 +33,10 @@ class HoverArrowNav:
             # that otherwise steal Up/Down once the grid is click-focused.
             canvas.bind("<KeyPress-Left>", self.on_arrow_left, add="+")
             canvas.bind("<KeyPress-Right>", self.on_arrow_right, add="+")
+            canvas.bind("<Shift-KeyPress-Left>", self.on_shift_arrow_left, add="+")
+            canvas.bind("<Shift-KeyPress-Right>", self.on_shift_arrow_right, add="+")
+            canvas.bind("<Shift-Left>", self.on_shift_arrow_left, add="+")
+            canvas.bind("<Shift-Right>", self.on_shift_arrow_right, add="+")
             canvas.bind("<KeyPress-Up>", self.on_arrow_up, add="+")
             canvas.bind("<KeyPress-Down>", self.on_arrow_down, add="+")
         except Exception:
@@ -134,16 +142,34 @@ class HoverArrowNav:
             return False
         return True
 
-    def on_arrow_left(self, _event):
+    def on_arrow_left(self, event=None):
         if not self._nav_allowed():
             return
-        self.header._on_prev_run()
+        if event is not None and getattr(event, "state", 0) & 1:
+            self.header._on_prev_landmark()
+        else:
+            self.header._on_prev_run()
         return "break"
 
-    def on_arrow_right(self, _event):
+    def on_arrow_right(self, event=None):
         if not self._nav_allowed():
             return
-        self.header._on_next_run()
+        if event is not None and getattr(event, "state", 0) & 1:
+            self.header._on_next_landmark()
+        else:
+            self.header._on_next_run()
+        return "break"
+
+    def on_shift_arrow_left(self, _event=None):
+        if not self._nav_allowed():
+            return
+        self.header._on_prev_landmark()
+        return "break"
+
+    def on_shift_arrow_right(self, _event=None):
+        if not self._nav_allowed():
+            return
+        self.header._on_next_landmark()
         return "break"
 
     def on_arrow_up(self, _event):

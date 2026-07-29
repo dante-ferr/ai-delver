@@ -1,15 +1,7 @@
-import customtkinter as ctk
-from app.fonts import app_font
-from src.config import config
+from app.components.icon_text_button import IconTextButton
 
 
-class StandardButton(ctk.CTkButton):
+class StandardButton(IconTextButton):
     def __init__(self, master, **kwargs):
-        kwargs.setdefault("cursor", "hand2")
-        kwargs.setdefault(
-            "font",
-            app_font(size=config.STYLE.FONT.STANDARD_SIZE, weight="bold"),
-        )
-        kwargs.setdefault("height", 32)
         super().__init__(master, **kwargs)
 

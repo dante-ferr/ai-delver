@@ -102,63 +102,46 @@ class Navbar(ctk.CTkFrame):
         self.refresh_status()
 
     def create_page_selectors(self, pages: dict[str, "Page"], default_page_name: str):
-        nav = config.STYLE.NAVBAR
-        pad = " " * int(nav.TAB_PAD_CHARS)
+        from app.components import StandardButton
 
-        def _tab_label(display_name: str) -> str:
-            return f"{pad}{display_name}{pad}"
-
-        self._page_by_display = {
-            _tab_label(page.display_name): page_name
-            for page_name, page in pages.items()
-        }
-        self._display_by_page = {
-            page_name: _tab_label(page.display_name)
-            for page_name, page in pages.items()
+        self._page_buttons: dict[str, StandardButton] = {}
+        self._page_icon_paths = {
+            "level_editor": str(config.ASSETS_PATH / "svg" / "pencil.svg"),
+            "agent": str(config.ASSETS_PATH / "svg" / "agent.svg"),
         }
 
-        if default_page_name not in self._display_by_page:
-            raise ValueError("The default page doesn't exist")
+        self._tabs_container = ctk.CTkFrame(self._left, fg_color="transparent")
+        self._tabs_container.pack(side="left", padx=(4, 0))
 
-        display_names = [_tab_label(page.display_name) for page in pages.values()]
-        self._tab_button = ctk.CTkSegmentedButton(
-            self._left,
-            values=display_names,
-            command=self._on_tab_selected,
-            font=app_font(size=nav.TAB_FONT_SIZE),
-            height=nav.TAB_HEIGHT,
-        )
-        self._tab_button.pack(side="left")
-        self._tab_button.set(self._display_by_page[default_page_name])
-        self.master.select_page(default_page_name)
+        for page_name, page in pages.items():
+            icon_path = self._page_icon_paths.get(page_name)
+            btn = StandardButton(
+                self._tabs_container,
+                text=page.display_name,
+                svg_path=icon_path,
+                command=lambda p=page_name: self._on_page_btn_clicked(p),
+                height=28,
+            )
+            btn.pack(side="left", padx=2)
+            self._page_buttons[page_name] = btn
+
+        self.select_page(default_page_name)
 
     def select_page(self, page_name: str) -> None:
         """Select a page via the navbar so the highlight stays in sync."""
         if getattr(self.master, "selected_page_name", None) == page_name:
             return
 
-        display_name = self._display_by_page.get(page_name)
-        if display_name is None:
-            raise ValueError(f"Unknown page '{page_name}'")
-
-        if self._tab_button is not None and self._tab_button.get() != display_name:
-            self._suppress_tab_command = True
-            try:
-                self._tab_button.set(display_name)
-            finally:
-                self._suppress_tab_command = False
+        for name, btn in getattr(self, "_page_buttons", {}).items():
+            if name == page_name:
+                btn.configure(fg_color=("gray70", "gray30"))
+            else:
+                btn.configure(fg_color="transparent")
 
         self.master.select_page(page_name)
 
-    def _on_tab_selected(self, display_name: str) -> None:
-        if self._suppress_tab_command:
-            return
-        page_name = self._page_by_display.get(display_name)
-        if page_name is None:
-            return
-        if getattr(self.master, "selected_page_name", None) == page_name:
-            return
-        self.master.select_page(page_name)
+    def _on_page_btn_clicked(self, page_name: str) -> None:
+        self.select_page(page_name)
 
     def refresh_document_title(self) -> None:
         page_name = getattr(self.master, "selected_page_name", None)

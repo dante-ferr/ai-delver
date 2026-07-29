@@ -53,35 +53,16 @@ class TrainPanel(ctk.CTkFrame):
             pady=(12, 12), fill="x"
         )
 
-        # Container for logs and gif next to each other at the bottom
+        # Logs panel at the bottom taking full width
         bottom_container = ctk.CTkFrame(self, fg_color="transparent")
         bottom_container.pack(
             fill="both", expand=True, pady=(0, 8)
         )
 
-        bottom_container.grid_columnconfigure(0, weight=1)
-        bottom_container.grid_columnconfigure(1, weight=0)
-        bottom_container.grid_rowconfigure(0, weight=1)
-
         train_logs_panel = TrainLogsPanel(bottom_container)
-        train_logs_panel.grid(row=0, column=0, sticky="nsew", padx=(2, 8))
-
-        # Add the Delver animation label next to the logs panel
-        self.gif_label = AnimatedGifLabel(bottom_container)
-        self.gif_label.grid(row=0, column=1, sticky="e", padx=(8, 4), pady=4)
-
-        # Register callback for training status changes to toggle delver gif
-        training_state_manager.add_callback(
-            "training", self._on_training_state_changed
-        )
+        train_logs_panel.pack(fill="both", expand=True, padx=2)
 
         self._set_amount_of_runs()
-
-    def _on_training_state_changed(self, is_training: bool):
-        if is_training:
-            self.gif_label.load_gif_by_name("run")
-        else:
-            self.gif_label.load_gif_by_name("idle")
 
 
     def _set_amount_of_runs(self):

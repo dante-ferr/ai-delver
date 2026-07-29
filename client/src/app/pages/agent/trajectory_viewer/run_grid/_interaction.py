@@ -16,13 +16,16 @@ class RunGridInteraction:
         g = self.grid
         old_focus = g._focused_level_hash
         g._selected_index = index
-        g.renderer.ensure_index_visible(index)
+        scrolled = g.renderer.ensure_index_visible(index)
         entry = g.data.entry(index)
         new_focus = None
         if entry:
             new_focus = str(entry.get("level_hash", "") or "") or None
         g._focused_level_hash = new_focus
-        g.renderer.redraw()
+        if scrolled:
+            g.renderer.redraw()
+        else:
+            g.renderer.move_selection_ring(index)
         if old_focus != new_focus:
             touched = {h for h in (old_focus, new_focus) if h}
             g.legend.refresh_legend_styles(hashes=touched or None)

@@ -76,7 +76,11 @@ class TrajectoryHeader(ctk.CTkFrame):
         self.live_checkbox.pack(side="left", padx=(12, 4))
 
         self.replay_button = StandardButton(
-            self.controls, text="Replay", command=self._replay, width=80
+            self.controls,
+            text="Replay",
+            command=self._replay,
+            svg_path=str(config.ASSETS_PATH / "svg" / "replay.svg"),
+            width=90,
         )
         self.replay_button.pack(side="left", padx=(8, 4))
 
@@ -220,6 +224,18 @@ class TrajectoryHeader(ctk.CTkFrame):
         if total > 0:
             self.load_trajectory_by_index(total - 1)
 
+    def _enable_live(self):
+        """Enter live mode (right/scroll past the last run)."""
+        if bool(self.live_var.get()):
+            return
+        self.live_var.set(True)
+        agent_loader.set_live(True)
+        total = self.total_trajectories
+        if total > 0 and self.current_index != total - 1:
+            self.load_trajectory_by_index(total - 1)
+        else:
+            self.run_grid.set_live_mode(True)
+
     def _disable_live(self):
         if self.live_var.get():
             self.live_var.set(False)
@@ -236,11 +252,21 @@ class TrajectoryHeader(ctk.CTkFrame):
             self._replay()
 
     def _on_prev_run(self):
-        self._disable_live()
+        # Live is a sentinel past the last run: left exits live without stepping back.
+        if self.live_var.get():
+            self._disable_live()
+            return
         self.run_grid.jump_prev_run()
 
     def _on_next_run(self):
-        self._disable_live()
+        if self.live_var.get():
+            return
+        total = self.total_trajectories
+        if total <= 0:
+            return
+        if self.current_index is not None and self.current_index >= total - 1:
+            self._enable_live()
+            return
         self.run_grid.jump_next_run()
 
     def _on_prev_landmark(self):
@@ -264,26 +290,35 @@ class TrajectoryHeader(ctk.CTkFrame):
         total = self.total_trajectories
         if total <= 0:
             return
-        current_val = self.slider.get()
+
         if event.num == 5 or event.delta < 0:
-            new_val = current_val - 1
+            direction = -1
         elif event.num == 4 or event.delta > 0:
-            new_val = current_val + 1
+            direction = 1
         else:
             return
 
-        if new_val < 1:
-            new_val = 1
-        elif new_val > total:
-            new_val = total
-
-        target_index = int(new_val) - 1
-        if target_index == self.current_index:
-            return
+        if direction < 0:
+            if self.live_var.get():
+                self._disable_live()
+                return
+            if self.current_index is None or self.current_index <= 0:
+                return
+            target_index = self.current_index - 1
+        else:
+            if self.live_var.get():
+                return
+            if self.current_index is None:
+                target_index = 0
+            elif self.current_index >= total - 1:
+                self._enable_live()
+                return
+            else:
+                target_index = self.current_index + 1
 
         self._disable_live()
-        self.slider.set(new_val)
-        self._on_slider_drag(new_val)
+        self.slider.set(target_index + 1)
+        self._on_slider_drag(target_index + 1)
         self.load_trajectory_by_index(target_index)
 
     def _on_entry_submit(self):

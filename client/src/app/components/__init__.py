@@ -17,6 +17,8 @@ from .section_title import SectionTitle
 from .range_slider_input import RangeSliderInput
 from .sortable_list import SortableList
 from .standard_button import StandardButton
+from .icon_text_button import IconTextButton
+from .responsive_button import ResponsiveButton
 from .add_button import AddButton
 from .animated_gif_label import AnimatedGifLabel
 from .minimap import Minimap
@@ -38,6 +40,8 @@ __all__ = [
     "RangeSliderInput",
     "SortableList",
     "StandardButton",
+    "IconTextButton",
+    "ResponsiveButton",
     "LoadButton",
     "DeleteButton",
     "AnimatedGifLabel",

@@ -16,14 +16,44 @@ from app.components.overlay.message_overlay import MessageOverlay
 from loaders import agent_loader
 from bootstrap import PROJECT_ROOT
 
+from app.components import FileLoaderOverlay, SvgImage
+from app.theme import theme
+from src.config import config
+from level.config import LEVEL_SAVE_FOLDER_PATH
+from app.components.overlay.file_loader_overlay.file_loader_overlay_spawner import (
+    FileLoaderOverlaySpawner,
+)
+
+
+class _QuickPlayLevelOverlay(FileLoaderOverlay):
+    def __init__(self, file_dirs, file_type, on_level_selected=None):
+        self.on_level_selected = on_level_selected
+        super().__init__(
+            file_dirs,
+            file_type,
+            show_sucess_message=False,
+        )
+
+    def _prompt_text(self) -> str:
+        return "Select a level to quick play."
+
+    def _action_button_text(self) -> str:
+        return "Play"
+
+    def _load(self):
+        selected_level = self.get_selected_name()
+        super()._load()
+        if self.on_level_selected:
+            self.on_level_selected(selected_level)
+
 
 class TrainButtonsContainer(ctk.CTkFrame):
     """
-    A UI container with buttons to start training, put Delver to play selected levels,
-    and interrupt training. It runs the CLI training client script as a subprocess in a separate thread.
+    A UI container with two columns of buttons for training and playing/testing levels,
+    equipped with responsive icons inside the buttons.
     """
 
-    STACK_BELOW_WIDTH = 380
+    STACK_BELOW_WIDTH = 340
     DEBOUNCE_MS = 80
 
     def __init__(self, master):
@@ -32,23 +62,38 @@ class TrainButtonsContainer(ctk.CTkFrame):
         self._configure_after_id: str | None = None
 
         self.train_button = StandardButton(
-            self, text="Train", command=self._start_train_thread
-        )
-
-        self.play_button = StandardButton(
-            self, text="Play Levels", command=self._start_play_thread
+            self,
+            text="Train",
+            command=self._start_train_thread,
+            svg_path=str(config.ASSETS_PATH / "svg" / "train.svg"),
         )
 
         self.interrupt_training_button = StandardButton(
             self,
             text="Interrupt Training",
             command=self._start_interrupt_thread,
+            svg_path=str(config.ASSETS_PATH / "svg" / "x.svg"),
+        )
+
+        self.play_button = StandardButton(
+            self,
+            text="Play Levels",
+            command=self._start_play_thread,
+            svg_path=str(config.ASSETS_PATH / "svg" / "test.svg"),
+        )
+
+        self.quick_play_button = StandardButton(
+            self,
+            text="Quick Play Level",
+            command=self._open_quick_play_overlay,
+            svg_path=str(config.ASSETS_PATH / "svg" / "quick_play.svg"),
         )
 
         self._apply_button_layout(stacked=False)
 
         training_state_manager.add_disable_on_train_element(self.train_button)
         training_state_manager.add_disable_on_train_element(self.play_button)
+        training_state_manager.add_disable_on_train_element(self.quick_play_button)
         training_state_manager.add_enable_on_train_element(
             self.interrupt_training_button
         )
@@ -75,27 +120,37 @@ class TrainButtonsContainer(ctk.CTkFrame):
             return
         self._stacked = stacked
 
-        for col in range(3):
-            self.grid_columnconfigure(col, weight=0)
-        for row in range(3):
-            self.grid_rowconfigure(row, weight=0)
-
         if stacked:
             self.grid_columnconfigure(0, weight=1)
+            self.grid_columnconfigure(1, weight=0)
+            for row in range(4):
+                self.grid_rowconfigure(row, weight=0)
+
             self.train_button.grid(row=0, column=0, padx=0, pady=(0, 4), sticky="ew")
             self.interrupt_training_button.grid(
-                row=2, column=0, padx=(4, 0), pady=(4, 0), sticky="ew"
+                row=1, column=0, padx=0, pady=(0, 8), sticky="ew"
             )
-            self.play_button.grid(row=1, column=0, padx=0, pady=(0, 4), sticky="ew")
+            self.play_button.grid(row=2, column=0, padx=0, pady=(0, 4), sticky="ew")
+            self.quick_play_button.grid(
+                row=3, column=0, padx=0, pady=0, sticky="ew"
+            )
         else:
             self.grid_columnconfigure(0, weight=1)
             self.grid_columnconfigure(1, weight=1)
-            self.grid_columnconfigure(2, weight=1)
-            self.train_button.grid(row=0, column=0, padx=(0, 2), pady=0, sticky="ew")
+            for row in range(2):
+                self.grid_rowconfigure(row, weight=0)
+
+            # Column 0: Train section (Train, Interrupt Training)
+            self.train_button.grid(row=0, column=0, padx=(0, 3), pady=(0, 4), sticky="ew")
             self.interrupt_training_button.grid(
-                row=0, column=2, padx=(2, 0), pady=0, sticky="ew"
+                row=1, column=0, padx=(0, 3), pady=0, sticky="ew"
             )
-            self.play_button.grid(row=0, column=1, padx=(2, 2), pady=0, sticky="ew")
+
+            # Column 1: Test section (Play Levels, Quick Play Level)
+            self.play_button.grid(row=0, column=1, padx=(3, 0), pady=(0, 4), sticky="ew")
+            self.quick_play_button.grid(
+                row=1, column=1, padx=(3, 0), pady=0, sticky="ew"
+            )
 
     def _start_train_thread(self):
         """
@@ -133,6 +188,95 @@ class TrainButtonsContainer(ctk.CTkFrame):
             target=self._run_subprocess_play, daemon=True
         )
         thread.start()
+
+    def _open_quick_play_overlay(self):
+        FileLoaderOverlaySpawner(
+            LEVEL_SAVE_FOLDER_PATH,
+            "level",
+            overlay_class=lambda dirs, ftype: _QuickPlayLevelOverlay(
+                dirs, ftype, on_level_selected=self._start_quick_play_thread
+            ),
+        )
+
+    def _start_quick_play_thread(self, level_name: str):
+        if verify_level_issues():
+            return
+
+        thread = threading.Thread(
+            target=self._run_quick_play, args=(level_name,), daemon=True
+        )
+        thread.start()
+
+    def _run_quick_play(self, level_name: str):
+        from app_manager import app_manager
+
+        training_state_manager.set_value("sending_training_request", True)
+
+        async def _async_quick_play():
+            agent_name = agent_loader.storage_key
+            gui_training_client.ensure_levels_saved([level_name], agent_name)
+
+            payload = gui_training_client.create_training_payload(
+                levels=[level_name],
+                mode="static",
+                amount_of_cycles=1,
+                runs_per_cycle=1,
+                play=True,
+            )
+
+            response = await gui_training_client.submit_training(payload)
+            session_id = response.get("session_id")
+            if not session_id:
+                raise RuntimeError("No session_id received from server.")
+
+            gui_training_client.session_id = session_id
+
+            received_trajectory = None
+
+            async def on_trajectory(trajectory, level_episode_count):
+                nonlocal received_trajectory
+                if trajectory is not None:
+                    received_trajectory = trajectory
+
+            def on_level_transition(levels_trained):
+                pass
+
+            def on_completed():
+                pass
+
+            def on_error(err):
+                raise RuntimeError(err)
+
+            await gui_training_client.listen_to_trajectory(
+                session_id,
+                on_trajectory,
+                on_level_transition,
+                on_completed,
+                on_error,
+            )
+
+            return received_trajectory
+
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            trajectory = loop.run_until_complete(_async_quick_play())
+            loop.close()
+
+            if trajectory is None:
+                raise RuntimeError("No trajectory received from server.")
+
+            self.after(0, lambda: app_manager.start_replay(trajectory))
+        except Exception as e:
+            print(f"[Quick Play Error] {e}")
+            self.after(
+                0,
+                lambda err=e: MessageOverlay(
+                    f"Quick Play failed: {err}", subject="Error"
+                ),
+            )
+        finally:
+            training_state_manager.reset_states()
 
     def _start_interrupt_thread(self):
         """

@@ -25,9 +25,9 @@ class Theme:
         self.special = custom.get("special", ["#cbaa89", "#bf7f3f", "#73573b", "#5f3214", "#401811"])
 
         # Backgrounds & Surface Gradients (Neutral Group)
-        self.bg_darkest = self.neutral.get("darkest", "#02050b")
-        self.bg_dark = self.neutral.get("dark", "#070d18")
-        self.bg_mid = self.neutral.get("mid", "#0f192d")
+        self.bg_darkest = self.neutral.get("darkest", "#050608")
+        self.bg_dark = self.neutral.get("dark", "#0d0f12")
+        self.bg_mid = self.neutral.get("mid", "#16191e")
         self.bg_dark_mid = self.neutral.get("dark_mid", self.bg_dark)
         self.bg_mid_light = self.neutral.get("mid_light", self.bg_mid)
 

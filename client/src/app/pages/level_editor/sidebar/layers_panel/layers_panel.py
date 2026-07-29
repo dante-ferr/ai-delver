@@ -21,9 +21,13 @@ class LayersPanel(ctk.CTkFrame):
     def __init__(self, master):
         super().__init__(master, fg_color="transparent")
 
-        title = SectionTitle(self, text="Layers")
-        title.pack(pady=8, side="top", anchor="w")
+        self.title = SectionTitle(self, text="Layers")
+        self.title.pack(pady=8, side="top", anchor="w")
 
+        self.container_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.container_frame.pack(side="top", anchor="w", fill="x")
+
+        self._mode = "side"
         self.layer_containers = self._create_layer_containers()
         default_layer_container = next(
             (
@@ -48,9 +52,19 @@ class LayersPanel(ctk.CTkFrame):
             on_select=_on_select,
         )
 
+    def set_mode(self, mode: str):
+        if getattr(self, "_mode", None) == mode:
+            return
+        self._mode = mode
+        self._pack_layer_containers()
+
     def _pack_layer_containers(self):
         for layer_container in self.layer_containers:
-            layer_container.pack(side="top", padx=8, anchor="w", fill="x")
+            layer_container.pack_forget()
+
+        self.title.pack_configure(pady=(4, 4) if getattr(self, "_mode", "side") == "bottom" else 8)
+        for layer_container in self.layer_containers:
+            layer_container.pack(in_=self.container_frame, side="top", padx=4, pady=1, anchor="w", fill="x")
 
     def _create_layer_containers(self):
         layer_containers: list[LayerContainer] = []
@@ -69,5 +83,5 @@ class LayersPanel(ctk.CTkFrame):
             size=(layer_icon_size, layer_icon_size),
             fill=theme.icon_color,
         )
-        container = LayerContainer(self, layer.name, icon.get_ctk_image())
+        container = LayerContainer(self.container_frame, layer.name, icon.get_ctk_image())
         return container

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from .header import TrajectoryHeader
 from .summary_panel import TrajectorySummaryPanel
 from .path_visualizer import TrajectoryMinimap, PathVisualizerPopup
-from app.components import StandardButton
+from app.components import StandardButton, MouseWheelScrollableFrame
 
 if TYPE_CHECKING:
     from runtime.episode_trajectory import EpisodeTrajectory
@@ -29,8 +29,9 @@ class TrajectoryViewer(ctk.CTkFrame):
         self._path_popup: PathVisualizerPopup | None = None
         self._last_minimap_args = None
 
-        # Main content area on Row 1 (Split layout) - Configured first to avoid init-order errors
-        self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
+        # Main content area on Row 1 (Unified Scrollable Container)
+        self.content_frame = MouseWheelScrollableFrame(self, fg_color="transparent")
+        self.content_frame.configure(border_width=0)
         self.content_frame.grid(row=1, column=0, padx=8, pady=(4, 8), sticky="nsew")
 
         # Left panel: Summary & timeline
@@ -112,6 +113,8 @@ class TrajectoryViewer(ctk.CTkFrame):
             return
         self._apply_content_layout(stacked=width < self.STACK_BELOW_WIDTH)
         self._sync_header_width()
+        self.content_frame.bind_scroll_events_recursively(self.content_frame)
+        self.content_frame.after(50, self.content_frame._check_scroll_visibility)
 
     def _apply_content_layout(self, stacked: bool):
         if stacked == self._stacked:
@@ -182,6 +185,14 @@ class TrajectoryViewer(ctk.CTkFrame):
         except Exception as e:
             print(f"[Visualizer Error] Failed to parse level file: {e}")
 
+        # Update canvas height dynamically for vertical levels (grid_h > grid_w)
+        if grid_size and grid_size[1] > grid_size[0]:
+            aspect = grid_size[1] / max(1, grid_size[0])
+            target_h = max(280, min(650, int(300 * aspect)))
+            self.minimap_panel.canvas.configure(height=target_h)
+        else:
+            self.minimap_panel.canvas.configure(height=280)
+
         # Update left summary/timeline panel
         self.summary_panel.update_summary(self.trajectory)
 
@@ -197,6 +208,9 @@ class TrajectoryViewer(ctk.CTkFrame):
         self.minimap_panel.update_minimap(*self._last_minimap_args, animate=True)
         if self._path_popup is not None and self._path_popup.winfo_exists():
             self._path_popup.sync(*self._last_minimap_args, animate=True)
+
+        self.content_frame.bind_scroll_events_recursively(self.content_frame)
+        self.content_frame.after(50, self.content_frame._check_scroll_visibility)
 
     def _open_path_popup(self):
         if self._path_popup is not None and self._path_popup.winfo_exists():
@@ -217,3 +231,5 @@ class TrajectoryViewer(ctk.CTkFrame):
         self._last_minimap_args = None
         if self._path_popup is not None and self._path_popup.winfo_exists():
             self._path_popup.sync(None, None, None, [], None, None)
+        self.content_frame.bind_scroll_events_recursively(self.content_frame)
+        self.content_frame.after(50, self.content_frame._check_scroll_visibility)

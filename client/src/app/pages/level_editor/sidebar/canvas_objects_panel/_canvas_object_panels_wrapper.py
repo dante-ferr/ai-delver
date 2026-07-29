@@ -51,3 +51,10 @@ class CanvasObjectPanelsWrapper(ctk.CTkFrame):
         self.current_canvas_objects_panel.pack(
             pady=8, anchor="w", fill="both", expand=True
         )
+
+    def set_mode(self, mode: str):
+        target_height = 140 if mode == "bottom" else 400
+        for panel in self.canvas_objects_panels.values():
+            panel.configure(height=target_height)
+        if self.current_canvas_objects_panel is not None:
+            self.current_canvas_objects_panel._check_scroll_visibility()

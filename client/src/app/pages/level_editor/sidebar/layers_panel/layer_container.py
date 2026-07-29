@@ -2,11 +2,15 @@ import customtkinter as ctk
 from app.fonts import app_font
 from src.config import config
 
+from app.theme import theme
+
 Color = tuple[str, str] | str
 
 
 class LayerContainer(ctk.CTkFrame):
-    active_color: Color = ("gray75", "gray25")
+    @property
+    def active_color(self) -> Color:
+        return ("gray75", theme.secondary_dark)
     inactive_color: Color = "transparent"
 
     def __init__(self, master, layer_name: str, icon_image: ctk.CTkImage):

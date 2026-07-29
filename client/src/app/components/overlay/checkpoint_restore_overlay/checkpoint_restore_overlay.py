@@ -70,7 +70,7 @@ class CheckpointRestoreOverlay(Overlay):
         )
         self.level_menu.grid(row=0, column=1, sticky="ew")
 
-        header = ctk.CTkFrame(self, fg_color=("gray80", "gray20"), corner_radius=4)
+        header = ctk.CTkFrame(self, fg_color=("gray80", theme.bg_dark_mid), corner_radius=4)
         header.pack(padx=12, pady=(0, 4), fill="x")
         for i, (label, weight) in enumerate(zip(self.COLUMNS, self.COL_WEIGHTS)):
             header.grid_columnconfigure(i, weight=weight, uniform="ckpt")
@@ -82,6 +82,7 @@ class CheckpointRestoreOverlay(Overlay):
                     size=config.STYLE.FONT.STANDARD_SIZE,
                     weight="bold",
                 ),
+                text_color=theme.text_light,
             ).grid(row=0, column=i, sticky="ew", padx=8, pady=6)
 
         self.list_frame = MouseWheelScrollableFrame(
@@ -213,7 +214,7 @@ class CheckpointRestoreOverlay(Overlay):
         self._selected_id = entry_id
         row = self._rows.get(entry_id)
         if row is not None:
-            row.configure(fg_color=("gray75", "gray25"))
+            row.configure(fg_color=("gray75", "#401811"))
 
     def _matches_filters(self, entry: dict[str, Any]) -> bool:
         level_filter = self._level_var.get()

@@ -1,3 +1,4 @@
+from app.theme import theme
 from app.components.overlay.message_overlay import MessageOverlay
 from app.fonts import app_font
 from app.components.overlay import Overlay
@@ -137,7 +138,7 @@ class FileLoaderOverlay(Overlay):
         self._selected_name = name
         row = self._rows.get(name)
         if row is not None:
-            row.configure(fg_color=("gray75", "gray25"))
+            row.configure(fg_color=("gray75", theme.secondary_dark))
 
     def _on_filter(self, *_args):
         query = self._filter_var.get().strip().lower()

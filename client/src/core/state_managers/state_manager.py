@@ -47,8 +47,19 @@ class StateManager:
     def _notify_callbacks(self, name: str):
         if name in self.vars:
             value = self.vars[name].get()
-            for callback in self._callbacks[name]:
-                callback(value)
+            stale_callbacks = []
+            for callback in list(self._callbacks[name]):
+                try:
+                    callback(value)
+                except Exception as e:
+                    err_str = str(e)
+                    if "bad window path name" in err_str or "invalid command name" in err_str:
+                        stale_callbacks.append(callback)
+                    else:
+                        raise e
+            for cb in stale_callbacks:
+                if cb in self._callbacks[name]:
+                    self._callbacks[name].remove(cb)
 
     def get_value(self, name: str) -> Any:
         if name not in self.vars:

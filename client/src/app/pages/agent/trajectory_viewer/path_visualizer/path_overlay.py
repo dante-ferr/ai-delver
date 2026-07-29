@@ -11,6 +11,9 @@ if TYPE_CHECKING:
     from .trajectory_minimap import TrajectoryMinimap
 
 
+from app.theme import theme
+
+
 class PathOverlay:
     """Draws and animates the delver path + end marker on a TrajectoryMinimap."""
 
@@ -25,7 +28,7 @@ class PathOverlay:
         ex, ey = canvas_points[-1]
         scale = layout["scale"]
         r = max(5.0, scale * 0.4)
-        end_color = "#10b981" if layout.get("victorious") else "#ef4444"
+        end_color = "#10b981" if layout.get("victorious") else theme.primary_darker
         m.canvas.create_oval(
             ex - r,
             ey - r,
@@ -62,7 +65,7 @@ class PathOverlay:
 
         self.minimap.canvas.create_line(
             *coords,
-            fill="#3b82f6",
+            fill=theme.primary_color,
             width=3,
             tags=("path",),
         )
@@ -76,7 +79,7 @@ class PathOverlay:
                 coords.extend(p)
             self.minimap.canvas.create_line(
                 *coords,
-                fill="#3b82f6",
+                fill=theme.primary_color,
                 width=3,
                 tags=("path",),
             )

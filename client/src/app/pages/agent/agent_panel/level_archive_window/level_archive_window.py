@@ -75,7 +75,7 @@ class LevelArchiveWindow(ctk.CTkToplevel):
         table_panel.grid_rowconfigure(1, weight=1)
 
         col_header = ctk.CTkFrame(
-            table_panel, fg_color=("gray80", "gray20"), corner_radius=4
+            table_panel, fg_color=("gray80", "#20181b"), corner_radius=4
         )
         col_header.grid(row=0, column=0, sticky="ew", pady=(0, 4))
         for i, (label, weight) in enumerate(zip(self.COLUMNS, self.COL_WEIGHTS)):
@@ -88,6 +88,7 @@ class LevelArchiveWindow(ctk.CTkToplevel):
                     size=config.STYLE.FONT.STANDARD_SIZE,
                     weight="bold",
                 ),
+                text_color="#a69ea1",
             ).grid(row=0, column=i, sticky="ew", padx=8, pady=6)
 
         self.list_frame = MouseWheelScrollableFrame(
@@ -100,7 +101,7 @@ class LevelArchiveWindow(ctk.CTkToplevel):
             self.list_frame,
             text="No archived levels yet. Train with a focus commit to populate.",
             font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
-            text_color="#888888",
+            text_color="#a69ea1",
         )
 
         detail = ctk.CTkFrame(self, fg_color="transparent")
@@ -112,41 +113,42 @@ class LevelArchiveWindow(ctk.CTkToplevel):
         self.minimap = Minimap(detail)
         self.minimap.grid(row=0, column=0, sticky="nsew", pady=(0, 8))
 
-        matches_panel = ctk.CTkFrame(detail, fg_color=("gray90", "gray17"), corner_radius=8)
+        matches_panel = ctk.CTkFrame(detail, fg_color=("gray90", "#1a1416"), corner_radius=8)
         matches_panel.grid(row=1, column=0, sticky="nsew")
         matches_panel.grid_columnconfigure(0, weight=1)
         matches_panel.grid_rowconfigure(1, weight=1)
 
         ctk.CTkLabel(
             matches_panel,
-            text="Matching level saves",
-            font=app_font(size=14, weight="bold"),
-            anchor="w",
-        ).grid(row=0, column=0, padx=12, pady=(12, 4), sticky="w")
+            text="Matching Global Levels",
+            font=app_font(size=12, weight="bold"),
+            text_color="#fda4af",
+        ).grid(row=0, column=0, padx=12, pady=(10, 4), sticky="w")
 
-        self.matches_list = MouseWheelScrollableFrame(
+        self.matches_scroll = MouseWheelScrollableFrame(
             matches_panel,
             fg_color="transparent",
         )
-        self.matches_list.grid(row=1, column=0, padx=8, pady=(0, 8), sticky="nsew")
+        self.matches_scroll.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
 
-        self._matches_empty = ctk.CTkLabel(
-            self.matches_list,
-            text="Select a level to find matching saves.",
-            font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
-            text_color="#888888",
-        )
-        self._matches_empty.pack(anchor="w", padx=4, pady=4)
+        self.footer = ctk.CTkFrame(self, fg_color="transparent")
+        self.footer.grid(row=3, column=0, columnspan=2, padx=20, pady=(0, 16), sticky="ew")
 
         self._clipboard_status = ctk.CTkLabel(
-            self,
+            self.footer,
             text="",
             font=app_font(size=11),
-            text_color="#10b981",
+            text_color="#a69ea1",
         )
-        self._clipboard_status.grid(
-            row=3, column=0, columnspan=2, padx=20, pady=(0, 12), sticky="w"
+        self._clipboard_status.pack(side="left")
+
+        close_btn = ctk.CTkButton(
+            self.footer,
+            text="Close",
+            width=80,
+            command=self.destroy,
         )
+        close_btn.pack(side="right")
 
         self._load_entries()
         if self._entries:

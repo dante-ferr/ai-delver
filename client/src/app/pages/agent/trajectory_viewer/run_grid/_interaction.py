@@ -3,6 +3,7 @@ from __future__ import annotations
 import customtkinter as ctk
 
 from app.fonts import app_font
+from app.theme import theme
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -34,27 +35,43 @@ class RunGridInteraction:
         if g.on_select:
             g.on_select(index)
 
-    def ensure_tooltip_widget(self):
-        """In-window overlay — avoids a separate Hyprland / WM client."""
+    def show_tooltip(self, text: str, x: int, y: int):
+        g = self.grid
+        self.create_tooltip_if_needed()
+        g._tooltip_label.configure(text=text)
+
+        g.update_idletasks()
+        w = g._tooltip.winfo_reqwidth()
+        h = g._tooltip.winfo_reqheight()
+
+        px = max(4, min(x + 12, g.winfo_width() - w - 8))
+        py = max(4, min(y + 12, g.winfo_height() - h - 8))
+
+        g._tooltip.place(x=px, y=py)
+        g._tooltip.lift()
+
+    def create_tooltip_if_needed(self):
         g = self.grid
         if g._tooltip is not None and g._tooltip.winfo_exists():
             return
         g._tooltip = ctk.CTkFrame(
             g,
-            fg_color="#111827",
+            fg_color=theme.bg_dark_mid,
             corner_radius=4,
             border_width=1,
-            border_color="#374151",
+            border_color=theme.bg_mid,
         )
         g._tooltip_label = ctk.CTkLabel(
             g._tooltip,
             text="",
             font=app_font(size=11),
-            text_color="#f9fafb",
+            text_color=theme.text_light,
             justify="left",
             anchor="nw",
         )
         g._tooltip_label.pack(padx=8, pady=6)
+
+    ensure_tooltip_widget = create_tooltip_if_needed
 
     def hide_tooltip(self):
         g = self.grid

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from app.fonts import canvas_font
+from app.theme import theme
 from ._layout import MinimapLayout
 
 if TYPE_CHECKING:
@@ -26,9 +27,9 @@ class MinimapTileDraw:
         cx, cy, half = MinimapLayout.tile_center(layout, x, y)
 
         if is_wall:
-            fill, outline = "#4f4f4f", "#3e3e3e"
+            fill, outline = theme.wall_fill, theme.wall_outline
         else:
-            fill, outline = "#171717", "#2a2a2a"
+            fill, outline = theme.bg_darkest, theme.bg_dark
 
         item_id = m.canvas.create_rectangle(
             cx,
@@ -59,9 +60,9 @@ class MinimapTileDraw:
         cx, cy, half = MinimapLayout.tile_center(layout, x, y)
         is_wall = (x, y) in layout["wall_set"]
         if is_wall:
-            fill, outline = "#4f4f4f", "#3e3e3e"
+            fill, outline = theme.wall_fill, theme.wall_outline
         else:
-            fill, outline = "#171717", "#2a2a2a"
+            fill, outline = theme.bg_darkest, theme.bg_dark
         m.canvas.create_rectangle(
             cx - half,
             cy - half,

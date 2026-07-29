@@ -10,6 +10,9 @@ if TYPE_CHECKING:
     from .pages.page import Page
 
 
+from app.theme import theme
+
+
 class Navbar(ctk.CTkFrame):
     """Session chrome: brand, page modes, contextual document, system status."""
 
@@ -17,7 +20,7 @@ class Navbar(ctk.CTkFrame):
         nav = config.STYLE.NAVBAR
         super().__init__(
             master,
-            fg_color=("gray86", "gray17"),
+            fg_color=("gray86", theme.bg_dark_mid),
             height=nav.HEIGHT,
             corner_radius=0,
         )
@@ -27,9 +30,11 @@ class Navbar(ctk.CTkFrame):
         self._suppress_tab_command = False
 
         self.grid_propagate(False)
-        self.grid_columnconfigure(0, weight=0)
+
+        # 3-column layout: Left (Brand + Page tabs), Center (Title), Right (Controls/Status)
+        self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
-        self.grid_columnconfigure(2, weight=0)
+        self.grid_columnconfigure(2, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
         pad_x = nav.PAD_X
@@ -55,6 +60,7 @@ class Navbar(ctk.CTkFrame):
         self._brand = ctk.CTkLabel(
             self._left,
             text=nav.BRAND,
+            text_color=theme.primary_color,
             font=app_font(
                 size=config.STYLE.FONT.STANDARD_SIZE,
                 weight="bold",
@@ -62,14 +68,12 @@ class Navbar(ctk.CTkFrame):
         )
         self._brand.pack(side="left", padx=(0, nav.BRAND_GAP))
 
-        self._tab_button: ctk.CTkSegmentedButton | None = None
-
         self._title_label = ctk.CTkLabel(
             self,
             text="",
             anchor="center",
             font=app_font(size=config.STYLE.FONT.SMALL_SIZE),
-            text_color=("gray40", nav.STATUS_MUTED_COLOR),
+            text_color=("gray40", theme.text_light),
         )
         self._title_label.grid(row=0, column=1, sticky="ew", padx=8, pady=pad_y)
 
@@ -125,6 +129,17 @@ class Navbar(ctk.CTkFrame):
             btn.pack(side="left", padx=2)
             self._page_buttons[page_name] = btn
 
+        from app.components import IconButton
+        gear_icon_path = str(config.ASSETS_PATH / "svg" / "gear.svg")
+        self.settings_btn = IconButton(
+            self._tabs_container,
+            svg_path=gear_icon_path,
+            command=self._open_settings_popup,
+            width=20,
+            height=20,
+        )
+        self.settings_btn.pack(side="left", padx=(8, 2))
+
         self.select_page(default_page_name)
 
     def select_page(self, page_name: str) -> None:
@@ -134,14 +149,18 @@ class Navbar(ctk.CTkFrame):
 
         for name, btn in getattr(self, "_page_buttons", {}).items():
             if name == page_name:
-                btn.configure(fg_color=("gray70", "gray30"))
+                btn.configure(fg_color=theme.secondary_dark, text_color=theme.primary_color)
             else:
-                btn.configure(fg_color="transparent")
+                btn.configure(fg_color="transparent", text_color=theme.text_slate)
 
         self.master.select_page(page_name)
 
     def _on_page_btn_clicked(self, page_name: str) -> None:
         self.select_page(page_name)
+
+    def _open_settings_popup(self) -> None:
+        from app.components.overlay import SettingsOverlay
+        SettingsOverlay()
 
     def refresh_document_title(self) -> None:
         page_name = getattr(self.master, "selected_page_name", None)

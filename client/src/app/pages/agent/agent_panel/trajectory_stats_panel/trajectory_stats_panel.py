@@ -166,7 +166,7 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
                 label = ctk.CTkLabel(
                     self.stats_container,
                     text=f"Error: {stats['error']}",
-                    text_color="red",
+                    text_color="#a8261b",
                     font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
                 )
                 label.pack(anchor="w", padx=4, pady=0)
@@ -179,12 +179,31 @@ class TrajectoryStatsPanel(ctk.CTkFrame):
                         continue
                     display_name = stat_name.replace("_", " ").capitalize()
                     pady_val = (0, 8) if stat_name == "processed_count" else (0, 0)
-                    label = ctk.CTkLabel(
-                        self.stats_container,
-                        text=f"{display_name}: {stat_value}",
+                    row_frame = ctk.CTkFrame(self.stats_container, fg_color="transparent")
+                    row_frame.pack(anchor="w", padx=4, pady=pady_val)
+
+                    lbl_name = ctk.CTkLabel(
+                        row_frame,
+                        text=f"{display_name}: ",
+                        text_color="#a69ea1",
+                        font=app_font(size=config.STYLE.FONT.STANDARD_SIZE, weight="bold"),
+                    )
+                    lbl_name.pack(side="left")
+
+                    val_color = (
+                        "#00ffff"
+                        if "victory" in stat_name
+                        else "#38bdf8"
+                        if "step" in stat_name
+                        else "#fcd34d"
+                    )
+                    lbl_val = ctk.CTkLabel(
+                        row_frame,
+                        text=str(stat_value),
+                        text_color=val_color,
                         font=app_font(size=config.STYLE.FONT.STANDARD_SIZE),
                     )
-                    label.pack(anchor="w", padx=4, pady=pady_val)
+                    lbl_val.pack(side="left")
 
                 trajectory_stats_state_manager.victories_history = list(
                     stats.get("victories_history", []) or []

@@ -3,6 +3,7 @@ from __future__ import annotations
 import customtkinter as ctk
 
 from app.fonts import app_font, canvas_font
+from app.theme import theme
 from typing import TYPE_CHECKING
 
 from ._config import color_for_level_hash
@@ -177,16 +178,20 @@ class RunGridRenderer:
                 ):
                     sep_y = y0 - max(1, g.cell_gap)
                     g.canvas.create_line(
-                        2, sep_y, width - 2, sep_y, fill="#374151", width=1
+                        2, sep_y, width - 2, sep_y, fill=theme.bg_mid, width=1
                     )
                 if cycle is not None:
                     prev_cycle = cycle
                     has_prev_cycle = True
 
                 level_hash = str(entry.get("level_hash", "") or "")
-                color = color_for_level_hash(level_hash) if entry else "#4b5563"
+                color = (
+                    color_for_level_hash(level_hash, ordered_hashes=g._ordered_level_hashes)
+                    if entry
+                    else theme.bg_mid_light
+                )
                 if not entry:
-                    color = "#4b5563"
+                    color = theme.bg_mid_light
                 victorious = bool(entry.get("victorious"))
                 is_play = entry.get("kind") == "play"
 

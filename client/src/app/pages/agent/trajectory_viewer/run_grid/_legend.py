@@ -3,6 +3,7 @@ from __future__ import annotations
 import customtkinter as ctk
 
 from app.fonts import app_font, canvas_font
+from app.theme import theme
 from typing import TYPE_CHECKING
 
 from ._config import color_for_level_hash
@@ -66,16 +67,16 @@ class RunGridLegend:
             return
         g._name_hover_overlay = ctk.CTkFrame(
             g,
-            fg_color="#111827",
+            fg_color=theme.bg_dark,
             corner_radius=4,
             border_width=1,
-            border_color="#374151",
+            border_color=theme.bg_mid,
         )
         g._name_hover_label = ctk.CTkLabel(
             g._name_hover_overlay,
             text="",
             font=app_font(size=11),
-            text_color="#f9fafb",
+            text_color=theme.text_light,
             justify="left",
             anchor="w",
         )
@@ -181,10 +182,10 @@ class RunGridLegend:
 
         overlay = ctk.CTkFrame(
             g,
-            fg_color="#1f2937",
+            fg_color=theme.bg_dark,
             corner_radius=6,
             border_width=1,
-            border_color="#4b5563",
+            border_color=theme.bg_mid,
         )
         btn = ctk.CTkButton(
             overlay,
@@ -277,12 +278,12 @@ class RunGridLegend:
 
         for level_hash in ordered:
             name = seen[level_hash]
-            color = color_for_level_hash(level_hash)
+            color = color_for_level_hash(level_hash, ordered_hashes=ordered)
             row = ctk.CTkFrame(g.legend_scroll, fg_color="transparent", corner_radius=4)
             row.pack(fill="x", padx=4, pady=1)
 
             swatch = ctk.CTkCanvas(
-                row, width=12, height=12, highlightthickness=0, bg="#252525"
+                row, width=12, height=12, highlightthickness=0, bg=theme.bg_darkest
             )
             swatch.pack(side="left", padx=(2, 6), pady=2)
             swatch.create_rectangle(1, 1, 11, 11, fill=color, outline=color)
@@ -295,7 +296,7 @@ class RunGridLegend:
                 anchor="w",
                 height=22,
                 fg_color="transparent",
-                text_color="#d4d4d8",
+                text_color=theme.text_light,
                 font=app_font(size=11),
                 cursor="hand2",
             )

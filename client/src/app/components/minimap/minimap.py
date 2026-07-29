@@ -15,13 +15,16 @@ from ._tile_animation import MinimapTileAnimation
 from ._tile_draw import MinimapTileDraw
 
 
+from app.theme import theme
+
+
 class Minimap(ctk.CTkFrame):
     """Level overview with size-independent diagonal reveal + staggered tile grow."""
 
     TITLE = "Minimap"
 
     def __init__(self, master, **kwargs):
-        super().__init__(master, fg_color="#2b2b2b", corner_radius=8, **kwargs)
+        super().__init__(master, fg_color=theme.bg_dark, corner_radius=8, **kwargs)
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
@@ -59,11 +62,14 @@ class Minimap(ctk.CTkFrame):
         self.resize = MinimapResize(self)
 
         self.minimap_title = ctk.CTkLabel(
-            self, text=self.TITLE, font=app_font(size=14, weight="bold")
+            self,
+            text=self.TITLE,
+            font=app_font(size=14, weight="bold"),
+            text_color=theme.primary_color,
         )
         self.minimap_title.grid(row=0, column=0, padx=12, pady=(12, 4), sticky="w")
 
-        self.canvas = ctk.CTkCanvas(self, bg="#2b2b2b", highlightthickness=0)
+        self.canvas = ctk.CTkCanvas(self, bg=theme.bg_dark, highlightthickness=0)
         self.canvas.grid(row=1, column=0, padx=12, pady=(0, 12), sticky="nsew")
         self.canvas.bind("<Configure>", self.resize.on_configure)
 

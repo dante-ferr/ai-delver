@@ -4,8 +4,10 @@ if TYPE_CHECKING:
     from .selection_element_group import SelectionElementGroup
 
 
+from app.theme import theme
+
 def default_activate_callback(selection_element_group: "SelectionElementGroup"):
-    selection_element_group.frame.configure(fg_color=("gray75", "gray25"))
+    selection_element_group.frame.configure(fg_color=("gray75", theme.secondary_dark))
 
 
 def default_deactivate_callback(selection_element_group: "SelectionElementGroup"):

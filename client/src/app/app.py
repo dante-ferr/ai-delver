@@ -92,17 +92,36 @@ class App(ctk.CTk):
         )
 
     def restart_page(self, page_name: str):
-        if self.pages[page_name]:
-            self.pages[page_name].pack_forget()
-            self.pages[page_name].grid_forget()
+        if self.pages.get(page_name):
+            old_page = self.pages[page_name]
+            old_page.pack_forget()
+            old_page.grid_forget()
+            try:
+                old_page.destroy()
+            except Exception:
+                pass
         self.pages[page_name] = PAGE_COMPONENTS[page_name](self.page_container)
 
         if self.selected_page_name == page_name:
+            self.selected_page = None
             self.select_page(page_name)
 
     def restart_all_pages(self):
-        for page_name in self.pages.keys():
+        for page_name in list(self.pages.keys()):
             self.restart_page(page_name)
+
+    def reload_ui(self):
+        ctk.set_default_color_theme(str(theme.path))
+        self.configure(fg_color=theme.bg_darkest)
+
+        if hasattr(self, "navbar") and self.navbar:
+            self.navbar.destroy()
+        self.navbar = Navbar(self)
+        self.navbar.grid(row=0, column=0, sticky="ew")
+
+        current = self.selected_page_name or "level_editor"
+        self.restart_all_pages()
+        self.navbar.create_page_selectors(self.pages, default_page_name=current)
 
     def _create_pages(self):
         self.pages: dict[str, Page] = {

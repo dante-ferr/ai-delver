@@ -20,8 +20,8 @@ class DraggableBox(ctk.CTkFrame):
         self.name = name
         self.remove_box_button = remove_box_button
 
-        self.default_color = ("gray80", "gray20")
-        self.hover_color = ("gray75", "gray25")
+        self.default_color = ("gray80", theme.bg_dark)
+        self.hover_color = ("gray75", theme.secondary_dark)
 
         self._setup_ui()
         self._setup_bindings()
@@ -31,7 +31,7 @@ class DraggableBox(ctk.CTkFrame):
             fg_color=self.default_color,
             corner_radius=6,
             border_width=1,
-            border_color="gray50",
+            border_color=theme.bg_mid,
         )
 
         self.label = ctk.CTkLabel(

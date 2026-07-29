@@ -64,14 +64,14 @@ class AllStatsWindow(ctk.CTkToplevel):
         self.steps_graph = StatsMiniGraph(
             self.graphs_container,
             title="Trajectory Steps",
-            line_color="#8b5cf6",
+            line_color="#00ffff",
             height=self.GRAPH_HEIGHT,
         )
         self.all_time_loss_label = ctk.CTkLabel(
             self.graphs_container, text="Loss", font=app_font(size=12, weight="bold")
         )
         self.all_time_loss_graph = StatsMiniGraph(
-            self.graphs_container, title="", line_color="#ef4444", height=self.GRAPH_HEIGHT
+            self.graphs_container, title="", line_color="#a8261b", height=self.GRAPH_HEIGHT
         )
         self.all_time_return_label = ctk.CTkLabel(
             self.graphs_container,

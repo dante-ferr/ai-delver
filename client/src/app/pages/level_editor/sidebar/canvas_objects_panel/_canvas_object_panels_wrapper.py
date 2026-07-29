@@ -31,6 +31,8 @@ class CanvasObjectPanelsWrapper(ctk.CTkFrame):
         return canvas_objects_panels
 
     def _on_layer_select(self, layer_name: str):
+        if not self.winfo_exists():
+            return
         self._set_current_canvas_objects_panel_by_layer_name(layer_name)
 
         current_canvas_objects_panel = cast(

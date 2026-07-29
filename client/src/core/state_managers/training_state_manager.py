@@ -132,14 +132,37 @@ class TrainingStateManager(StateManager):
         ) and not self.get_value("sending_interrupt_training_request")
 
         state_for_disable_elements = "disabled" if is_busy else "normal"
-        for element in self.disable_on_train_elements:
-            element.configure(state=state_for_disable_elements)
+        stale_disabled = set()
+        for element in list(self.disable_on_train_elements):
+            try:
+                if hasattr(element, "winfo_exists") and not element.winfo_exists():
+                    stale_disabled.add(element)
+                    continue
+                element.configure(state=state_for_disable_elements)
+            except Exception:
+                stale_disabled.add(element)
+        self.disable_on_train_elements.difference_update(stale_disabled)
 
         state_for_enable_elements = (
             "normal" if is_training_and_not_interrupting else "disabled"
         )
-        for element in self.enable_on_train_elements:
-            element.configure(state=state_for_enable_elements)
+        stale_enabled = set()
+        for element in list(self.enable_on_train_elements):
+            try:
+                if hasattr(element, "winfo_exists") and not element.winfo_exists():
+                    stale_enabled.add(element)
+                    continue
+                element.configure(state=state_for_enable_elements)
+            except Exception:
+                stale_enabled.add(element)
+        self.enable_on_train_elements.difference_update(stale_enabled)
+
+        if self.train_logs_panel:
+            try:
+                if hasattr(self.train_logs_panel, "winfo_exists") and not self.train_logs_panel.winfo_exists():
+                    self.train_logs_panel = None
+            except Exception:
+                self.train_logs_panel = None
 
         if self.train_logs_panel:
             if self.get_value("sending_training_request"):

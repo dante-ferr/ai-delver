@@ -9,6 +9,7 @@ import customtkinter as ctk
 
 from app.components import MouseWheelScrollableFrame
 from app.fonts import app_font
+from app.theme import theme
 
 from ._config import _cfg, resolve_bg_color
 from ._data import RunGridData
@@ -92,16 +93,16 @@ class RunGrid(ctk.CTkFrame):
 
         # Legend row style tokens
         self._STYLE_FILTER = {
-            "fg_color": "#2563eb",
-            "text_color": "#eff6ff",
+            "fg_color": theme.primary_color,
+            "text_color": "#000000",
         }
         self._STYLE_FOCUS = {
-            "fg_color": "#3f3f46",
-            "text_color": "#e4e4e7",
+            "fg_color": theme.secondary_dark,
+            "text_color": theme.primary_color,
         }
         self._STYLE_IDLE = {
             "fg_color": "transparent",
-            "text_color": "#d4d4d8",
+            "text_color": theme.text_light,
         }
 
         self.grid_columnconfigure(0, weight=1)
@@ -165,10 +166,9 @@ class RunGrid(ctk.CTkFrame):
 
         self.clear_filter_btn = ctk.CTkButton(
             self.controls,
-            text="Unselect levels",
-            width=110,
-            height=22,
+            text="Clear level filter",
             font=app_font(size=11),
+            height=22,
             command=self.clear_level_filter,
             state="disabled",
         )
@@ -179,7 +179,7 @@ class RunGrid(ctk.CTkFrame):
         self.body.grid(row=1, column=0, sticky="nsew")
         self.grid_rowconfigure(1, weight=1)
 
-        self.canvas_frame = ctk.CTkFrame(self.body, fg_color="#1f1f1f", corner_radius=6)
+        self.canvas_frame = ctk.CTkFrame(self.body, fg_color=theme.bg_darkest, corner_radius=6)
         self.canvas_frame.grid_columnconfigure(0, weight=1)
         self.canvas_frame.grid_rowconfigure(0, weight=1)
 
@@ -187,7 +187,7 @@ class RunGrid(ctk.CTkFrame):
         self.canvas = ctk.CTkCanvas(
             self.canvas_frame,
             height=self._panel_height,
-            bg=resolve_bg_color(self.canvas_frame, "#1f1f1f"),
+            bg=resolve_bg_color(self.canvas_frame, theme.bg_darkest),
             highlightthickness=0,
         )
         self.canvas.grid(row=0, column=0, sticky="nsew", padx=(4, 0), pady=4)
@@ -208,7 +208,7 @@ class RunGrid(ctk.CTkFrame):
             self.legend_column,
             text="Levels (hash · train name)",
             font=app_font(size=11, weight="bold"),
-            text_color="#9ca3af",
+            text_color=theme.primary_color,
             anchor="w",
         )
         self.legend_title.grid(row=0, column=0, sticky="ew", pady=(0, 2))
@@ -216,7 +216,7 @@ class RunGrid(ctk.CTkFrame):
         self.legend_scroll = MouseWheelScrollableFrame(
             self.legend_column,
             height=self._panel_height,
-            fg_color="#252525",
+            fg_color=theme.bg_dark,
             corner_radius=6,
         )
         self.legend_scroll.grid(row=1, column=0, sticky="nsew")

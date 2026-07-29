@@ -18,7 +18,7 @@ class CanvasPlacementGhost:
 
     GHOST_TAG = "placement_ghost"
     VALID_OUTLINE = "#7CFF9A"
-    INVALID_OUTLINE = "#FF6B6B"
+    INVALID_OUTLINE = "#a8261b"
     ALPHA = 140
 
     def __init__(self, canvas: "LevelCanvas"):
@@ -54,6 +54,11 @@ class CanvasPlacementGhost:
 
     def refresh(self):
         """Redraw ghost at the last known position (e.g. after zoom)."""
+        try:
+            if not self.canvas.winfo_exists():
+                return
+        except Exception:
+            return
         if self._last_continuous_world_pos is not None:
             self._last_pivot = None
             self._last_draw_key = None

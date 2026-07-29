@@ -46,7 +46,7 @@ tab_height = 30
 tab_pad_chars = 3
 title_max_chars = 40
 status_connected_color = "#6BBF6B"
-status_disconnected_color = "#D14E4E"
+status_disconnected_color = "#a8261b"
 status_loading_color = "#C9A227"
 status_muted_color = "#8A8F98"
 status_training_color = "#E8A05A"
@@ -87,7 +87,7 @@ tooltip_delay_ms = 80
 live_pulse_ms = 450
 play_border_color = "#fbbf24"
 selection_color = "#ffffff"
-live_color = "#60a5fa"
+live_color = "#00ffff"
 
 [level_archive]
 hash_display_chars = 12

@@ -15,6 +15,17 @@ Prefer extending an existing config section over inventing a parallel source of 
 - Editor image lookup: `level.resolve_editor_object_image` (representation if present, else sprite). Do not duplicate identical PNGs in both folders.
 - See `.cursor/rules/sprites-and-representations.mdc` and `docs/src/engineering/assets_sprites_representations.md`.
 
+## Component File Architecture & Module Structure
+
+When building complex components or classes (especially in the frontend app), DO NOT place hundreds or thousands of lines of code into a single monolithic file. Instead, decompose the component into a clean package structure:
+
+1. **Dedicated Package Directory**: Group the component and its sub-modules inside a dedicated package directory named after the component in `snake_case`.
+2. **Package Entry Point (`__init__.py`)**: Cleanly expose the main public class in `__init__.py` (and define `__all__`), allowing consumers to import the main class directly from the package without referencing internal file paths.
+3. **Main Orchestrator Class**: Place the primary facade/coordinator class in a main file inside the directory matching the component name. This class manages top-level initialization, state delegation, event wiring, and public APIs.
+4. **Specialized Sub-components & Handlers**: Decompose sub-domains of responsibility (e.g. specialized renderers, sub-windows, event handlers, canvas elements, overlays) into focused internal module files prefixed with an underscore (e.g. `_subdomain_handler.py` or `_component_dialog.py`).
+5. **Context/Owner Reference**: Instantiate sub-component delegate objects inside the main class and pass `self` (or a context reference) to their constructors so sub-components can access shared state cleanly.
+
+
 ## Commits
 
 The commit message should be structured as follows:

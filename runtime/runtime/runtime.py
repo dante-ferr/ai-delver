@@ -97,6 +97,9 @@ class Runtime:
         self.world_objects_controller.update_world_objects(dt)
         if self.physics:
             self.physics_engine.step(dt)
+            # Locomotion (esp. JUMP) must see post-takeoff velocity, not the
+            # pre-step grounded pose from Delver.update.
+            self.delver.sync_locomotion_from_physics()
 
     def run(self):
         self.running = True

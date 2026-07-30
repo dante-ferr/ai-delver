@@ -40,6 +40,8 @@ class Delver(SkeletalEntity):
         self._spawn_based_id = "delver"
         self.pending_run: float = 0.0
         self.pending_jump: bool = False
+        # Carried across update → physics.step → sync_locomotion_from_physics.
+        self._locomotion_is_moving: bool = False
         # State-sync replay writes poses here; live play keeps reading physics.
         self._replay_position: tuple[float, float] | None = None
 
@@ -130,22 +132,34 @@ class Delver(SkeletalEntity):
         self.pending_run = 0.0
         self.pending_jump = False
 
+        # Skeleton advance happens here; pose + locomotion sync after physics.step
+        # so takeoff velocity is visible before JUMP can be cleared.
         s = self._state()
         if self.skeleton:
             self.skeleton.position = (s.x, s.y - 3.0)
             self.skeleton.update(dt)
 
-        is_moving = self.is_moving_intentionally
+        self._locomotion_is_moving = self.is_moving_intentionally
         self.is_moving_intentionally = False
-        self._update_locomotion(s, is_moving)
+
+    def sync_locomotion_from_physics(self):
+        """Apply locomotion from post-step physics. Call after physics_engine.step."""
+        if self.in_replay:
+            return
+        s = self._state()
+        if self.skeleton:
+            self.skeleton.position = (s.x, s.y - 3.0)
+        self._update_locomotion(s, self._locomotion_is_moving)
 
     def draw(self, dt: float):
         if self.skeleton:
             self.skeleton.draw(dt)
 
     def _update_locomotion(self, state, is_moving: bool):
-        # Maintain JUMP state while still rising
+        # Hold JUMP through the whole ascent (set by jump() on the prior frame).
         if self.locomotion_state == DelverLocomotionState.JUMP and state.vy > 0:
+            if self.skeleton:
+                self._update_tilt(state, is_moving)
             return
 
         self.update_locomotion_state(
@@ -177,6 +191,10 @@ class Delver(SkeletalEntity):
             super().play_locomotion_animation()
 
     def _on_jump_finish(self):
+        # Replay locomotion is owned by trajectory snapshots; live physics pose
+        # is stale/wrong while replaying and must not override them.
+        if self.in_replay:
+            return
         if self.locomotion_state == DelverLocomotionState.JUMP:
             s = self._state()
             if s.vy <= 0:

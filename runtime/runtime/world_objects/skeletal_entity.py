@@ -96,7 +96,8 @@ class SkeletalEntity(WorldObject):
 
     def _on_land_finish(self):
         if self._locomotion_state == LocomotionState.LAND:
-            self.locomotion_state = LocomotionState.RUN if getattr(self, "is_moving", False) else LocomotionState.IDLE
+            moving = getattr(self, "is_moving", False) or self.is_moving_intentionally
+            self.locomotion_state = LocomotionState.RUN if moving else LocomotionState.IDLE
 
     def run_animation(
         self,

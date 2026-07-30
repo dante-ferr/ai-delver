@@ -85,7 +85,14 @@ fn run_episode(
     let mut jumps_data = Vec::new();
     let max_steps = (config.max_seconds_per_episode * config.actions_per_second).max(1);
 
-    frame_snapshots.push(frame_snapshot_from_pose(env.delver_pose()));
+    let mut prev_on_ground = true;
+    let mut previous_on_air_vy = 0.0_f32;
+    frame_snapshots.push(frame_snapshot_from_pose(
+        env.delver_pose(),
+        prev_on_ground,
+        &mut previous_on_air_vy,
+    ));
+    prev_on_ground = env.delver_pose().is_on_ground;
 
     let mut total_confidence = 0.0_f32;
     let mut step_count = 0_usize;
@@ -146,7 +153,13 @@ fn run_episode(
             jump_takeoffs += 1;
         }
         total_reward += step.reward;
-        frame_snapshots.push(frame_snapshot_from_pose(env.delver_pose()));
+        let pose = env.delver_pose();
+        frame_snapshots.push(frame_snapshot_from_pose(
+            pose,
+            prev_on_ground,
+            &mut previous_on_air_vy,
+        ));
+        prev_on_ground = pose.is_on_ground;
         observation = step.observation;
         episode_start = 0.0;
         if step.done {
@@ -188,8 +201,13 @@ fn run_episode(
     })
 }
 
-fn frame_snapshot_from_pose(pose: DelverPose) -> Value {
-    let (locomotion_state, move_angle, is_moving_intentionally) = locomotion_from_pose(pose);
+fn frame_snapshot_from_pose(
+    pose: DelverPose,
+    prev_on_ground: bool,
+    previous_on_air_vy: &mut f32,
+) -> Value {
+    let (locomotion_state, move_angle, is_moving_intentionally) =
+        locomotion_from_pose(pose, prev_on_ground, previous_on_air_vy);
     json!({
         "entities": [{
             "entity_id": "delver",
@@ -206,16 +224,114 @@ fn frame_snapshot_from_pose(pose: DelverPose) -> Value {
     })
 }
 
-fn locomotion_from_pose(pose: DelverPose) -> (&'static str, Option<f64>, bool) {
-    if pose.action_jump || !pose.is_on_ground {
-        if pose.is_on_ground || pose.vy <= 0.0 {
+/// Matches `SkeletalEntity.LAND_ANIMATION_REQUIRED_FALLING_SPEED`.
+const LAND_ANIMATION_REQUIRED_FALLING_SPEED: f32 = -250.0;
+
+fn locomotion_from_pose(
+    pose: DelverPose,
+    prev_on_ground: bool,
+    previous_on_air_vy: &mut f32,
+) -> (&'static str, Option<f64>, bool) {
+    // Match Delver / SkeletalEntity: rising → JUMP, falling → FALL, hard contact → LAND.
+    if !pose.is_on_ground {
+        if pose.vy.abs() > 1.0 {
+            *previous_on_air_vy = pose.vy;
+        }
+        if pose.vy > 0.0 {
             return ("JUMP", None, false);
         }
         return ("FALL", None, false);
+    }
+
+    if !prev_on_ground {
+        let hard_landing = *previous_on_air_vy <= LAND_ANIMATION_REQUIRED_FALLING_SPEED;
+        *previous_on_air_vy = 0.0;
+        if hard_landing {
+            return ("LAND", None, false);
+        }
+    }
+
+    if pose.action_jump {
+        return ("JUMP", None, false);
     }
     if pose.action_run.abs() > 0.1 {
         let angle = if pose.action_run < 0.0 { 180.0 } else { 0.0 };
         return ("RUN", Some(angle), true);
     }
     ("IDLE", None, false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pose(
+        is_on_ground: bool,
+        vy: f32,
+        action_run: f32,
+        action_jump: bool,
+    ) -> DelverPose {
+        DelverPose {
+            x: 0.0,
+            y: 0.0,
+            vx: 0.0,
+            vy,
+            is_on_ground,
+            action_run,
+            action_jump,
+        }
+    }
+
+    #[test]
+    fn locomotion_rising_is_jump_falling_is_fall() {
+        let mut air_vy = 0.0;
+        let (rising, _, _) =
+            locomotion_from_pose(pose(false, 400.0, 0.0, false), true, &mut air_vy);
+        let (falling, _, _) =
+            locomotion_from_pose(pose(false, -200.0, 0.0, false), true, &mut air_vy);
+        assert_eq!(rising, "JUMP");
+        assert_eq!(falling, "FALL");
+        assert_eq!(air_vy, -200.0);
+    }
+
+    #[test]
+    fn locomotion_hard_landing_is_land() {
+        let mut air_vy = 0.0;
+        locomotion_from_pose(pose(false, -300.0, 0.0, false), true, &mut air_vy);
+        let (landed, _, _) =
+            locomotion_from_pose(pose(true, 0.0, 0.0, false), false, &mut air_vy);
+        assert_eq!(landed, "LAND");
+        assert_eq!(air_vy, 0.0);
+    }
+
+    #[test]
+    fn locomotion_soft_landing_skips_land() {
+        let mut air_vy = 0.0;
+        locomotion_from_pose(pose(false, -100.0, 0.0, false), true, &mut air_vy);
+        let (landed, _, _) =
+            locomotion_from_pose(pose(true, 0.0, 1.0, false), false, &mut air_vy);
+        assert_eq!(landed, "RUN");
+    }
+
+    #[test]
+    fn locomotion_grounded_jump_action_is_jump() {
+        let mut air_vy = 0.0;
+        let (state, _, _) =
+            locomotion_from_pose(pose(true, 0.0, 0.0, true), true, &mut air_vy);
+        assert_eq!(state, "JUMP");
+    }
+
+    #[test]
+    fn locomotion_grounded_run_and_idle() {
+        let mut air_vy = 0.0;
+        let (run, angle, moving) =
+            locomotion_from_pose(pose(true, 0.0, 1.0, false), true, &mut air_vy);
+        assert_eq!(run, "RUN");
+        assert_eq!(angle, Some(0.0));
+        assert!(moving);
+
+        let (idle, _, _) =
+            locomotion_from_pose(pose(true, 0.0, 0.0, false), true, &mut air_vy);
+        assert_eq!(idle, "IDLE");
+    }
 }

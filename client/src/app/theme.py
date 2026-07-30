@@ -1,6 +1,52 @@
 import json
+from pathlib import Path
+
 import customtkinter as ctk
 from src.config import config
+
+
+def _ui_prefs_path() -> Path:
+    # client/src/app/theme.py → client/data/ui_prefs.json
+    return Path(__file__).resolve().parents[2] / "data" / "ui_prefs.json"
+
+
+def _read_ui_prefs() -> dict:
+    path = _ui_prefs_path()
+    if not path.is_file():
+        return {}
+    try:
+        with open(path, "r") as file:
+            data = json.load(file)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_theme_preference(theme_name: str) -> None:
+    path = _ui_prefs_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    prefs = _read_ui_prefs()
+    prefs["theme"] = theme_name
+    with open(path, "w") as file:
+        json.dump(prefs, file, indent=2, sort_keys=True)
+
+
+def _configured_default_theme() -> str:
+    try:
+        return str(config.STYLE.THEME)
+    except AttributeError:
+        return "dungeon"
+
+
+def resolve_initial_theme() -> str:
+    available = list_available_themes()
+    saved = _read_ui_prefs().get("theme")
+    if isinstance(saved, str) and saved in available:
+        return saved
+    configured = _configured_default_theme()
+    if configured in available:
+        return configured
+    return available[0] if available else "dungeon"
 
 
 class Theme:
@@ -88,5 +134,4 @@ def theme_stem_from_display_name(display_name: str) -> str | None:
     return None
 
 
-default_theme = "dungeon"
-theme = Theme(default_theme)
+theme = Theme(resolve_initial_theme())

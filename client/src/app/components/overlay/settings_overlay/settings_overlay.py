@@ -3,6 +3,7 @@ from app.fonts import app_font
 from app.theme import (
     theme,
     list_available_themes,
+    save_theme_preference,
     theme_display_name,
     theme_stem_from_display_name,
 )
@@ -71,6 +72,7 @@ class SettingsOverlay(Overlay):
 
         stem = theme_stem_from_display_name(selected_theme) or selected_theme
         theme.load(stem)
+        save_theme_preference(stem)
         if app_manager.editor_app:
             app_manager.editor_app.reload_ui()
 

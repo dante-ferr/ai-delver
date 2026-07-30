@@ -29,6 +29,8 @@ standard_size = 14
 subtitle_size = 18
 
 [style]
+# Default Color theme stem (assets/themes/<name>.json). User choice is persisted in data/ui_prefs.json.
+theme = "dungeon"
 section_spacing = 48
 
 # Global editor chrome (session header above page content).

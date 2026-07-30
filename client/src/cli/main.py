@@ -248,6 +248,15 @@ def main():
         help="Optional path to world.toml (defaults to runtime/src/engine/world.toml)",
     )
 
+    # Subcommand: regen-dragonbones
+    subparsers.add_parser(
+        "regen-dragonbones",
+        help=(
+            "Regenerate editor representations for every DragonBones entity "
+            "(and Delver preview GIFs)"
+        ),
+    )
+
     args = parser.parse_args()
 
     if args.command == "train":
@@ -282,6 +291,9 @@ def main():
     elif args.command == "platforming-limits":
         from cli.commands.platforming_limits import run_platforming_limits
         run_platforming_limits(args)
+    elif args.command == "regen-dragonbones":
+        from cli.commands.regen_dragonbones import run_regen_dragonbones
+        run_regen_dragonbones(args)
 
 if __name__ == "__main__":
     main()

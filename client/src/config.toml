@@ -96,9 +96,18 @@ hash_display_chars = 12
 window_width = 960
 window_height = 640
 
-# Delver sprite animation shown next to the training log.
+# Per-entity DragonBones editor representation export settings.
+# New skeletal entities need a [dragonbones.<name>] block.
+[dragonbones.delver]
+representation_animation = "idle"
+representation_frame = 0
+
+# Delver sprite animation shown next to the training log (and GIF export knobs).
 [delver_gif]
 target_height = 140
+animations = ["idle", "run"]
+scale = 4.0
+antialias = true
 
 [shortcuts]
 level_editor = "<Alt-Key-1>"

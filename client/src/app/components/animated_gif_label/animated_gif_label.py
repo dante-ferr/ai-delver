@@ -42,7 +42,13 @@ class AnimatedGifLabel(ctk.CTkLabel):
                 skeleton_path = config.ASSETS_PATH / "img" / "sprites" / "delver"
                 # Ensure the folder exists
                 gif_path.parent.mkdir(parents=True, exist_ok=True)
-                export_animation_gif(skeleton_path, animation_name, gif_path, scale=4.0, antialias=True)
+                export_animation_gif(
+                    skeleton_path,
+                    animation_name,
+                    gif_path,
+                    scale=float(config.DELVER_GIF.SCALE),
+                    antialias=bool(config.DELVER_GIF.ANTIALIAS),
+                )
             except Exception as e:
                 print(f"[AnimatedGifLabel Error] Failed to export GIF '{animation_name}': {e}")
                 # We don't raise/crash, we just return so we don't block the UI

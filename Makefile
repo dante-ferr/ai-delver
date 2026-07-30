@@ -30,3 +30,8 @@ docs-serve:
 	@which mdbook > /dev/null || (echo "❌ mdBook is not installed. Please install it first (e.g. 'cargo install mdbook' or download the binary from https://github.com/rust-lang/mdBook/releases)" && exit 1)
 	@echo "🖥️ Starting local documentation server at http://localhost:3000..."
 	mdbook serve docs
+
+# Regenerate DragonBones editor representations (and Delver preview GIFs).
+# Requires a working OpenGL context; headless: xvfb-run -a make regen-dragonbones
+regen-dragonbones:
+	cd client && poetry run python src/cli/main.py regen-dragonbones

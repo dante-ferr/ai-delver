@@ -6,10 +6,12 @@ from .pages import Page
 from .navbar import Navbar
 from .theme import theme
 from .fonts import init_fonts
+from .ctk_cursor_patch import apply_ctk_cursor_patch
 
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme(str(theme.path))
+apply_ctk_cursor_patch()
 init_fonts()
 
 PAGE_COMPONENTS = {

@@ -41,22 +41,47 @@ class PathVisualizerPopup(ctk.CTkToplevel):
         self.protocol("WM_DELETE_WINDOW", self.destroy)
         self.after(10, self._reveal)
 
-    def _reveal(self):
+    def _center_on_screen(self) -> None:
+        """Place the popup at the center of the screen / parent window."""
+        if not self.winfo_exists():
+            return
         self.update_idletasks()
-        w = max(self._popup_w, self.winfo_reqwidth())
-        h = max(self._popup_h, self.winfo_reqheight())
+        w = self.winfo_width() if self.winfo_width() > 1 else self.winfo_reqwidth()
+        h = self.winfo_height() if self.winfo_height() > 1 else self.winfo_reqheight()
+        parent = self.master
         try:
-            sw = int(self.winfo_screenwidth())
-            sh = int(self.winfo_screenheight())
-            x = max(0, (sw - w) // 2)
-            y = max(0, (sh - h) // 2)
+            if parent is not None:
+                parent.update_idletasks()
+                # Prefer the parent window's monitor area (multi-monitor safe).
+                px = int(parent.winfo_rootx())
+                py = int(parent.winfo_rooty())
+                pw = int(parent.winfo_width())
+                ph = int(parent.winfo_height())
+                x = px + max(0, (pw - w) // 2)
+                y = py + max(0, (ph - h) // 2)
+            else:
+                sw = int(self.winfo_screenwidth())
+                sh = int(self.winfo_screenheight())
+                x = max(0, (sw - w) // 2)
+                y = max(0, (sh - h) // 2)
         except Exception:
             x, y = 80, 80
-        self.geometry(f"{w}x{h}+{x}+{y}")
+        try:
+            # Tell the WM the app chose the position (don't snap to cursor).
+            self.wm_positionfrom("user")
+        except Exception:
+            pass
+        self.geometry(f"+{x}+{y}")
 
+    def _reveal(self):
+        self._center_on_screen()
         self.deiconify()
         self.lift()
         self.focus_set()
+        # Tiling WMs (notably Hyprland) often place type=dialog windows at the
+        # cursor on map, ignoring pre-map geometry — re-assert after mapping.
+        self.after_idle(self._center_on_screen)
+        self.after(50, self._center_on_screen)
 
     def sync(
         self,

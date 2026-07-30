@@ -6,6 +6,7 @@ from typing import Any
 import customtkinter as ctk
 
 from app.fonts import app_font
+from app.theme import theme
 from app.components.mouse_whell_scrollable_frame.mouse_wheel_scrollable_frame import (
     MouseWheelScrollableFrame,
 )
@@ -102,7 +103,9 @@ class CheckpointRestoreOverlay(Overlay):
             self._create_row(entry)
 
         if self._all_checkpoints:
-            self._select(self._all_checkpoints[0]["id"])
+            first_entry = self._all_checkpoints[0]
+            entry_id = first_entry.get("id", f"{first_entry.get('level', 'unknown')}_{first_entry.get('created_at', '')}")
+            self._select(entry_id)
         self._on_filters_changed()
 
         actions = ctk.CTkFrame(self, fg_color="transparent")
@@ -159,7 +162,7 @@ class CheckpointRestoreOverlay(Overlay):
         return kind.replace("_", " ")
 
     def _create_row(self, entry: dict[str, Any]) -> ctk.CTkFrame:
-        entry_id = entry["id"]
+        entry_id = entry.get("id", f"{entry.get('level', 'unknown')}_{entry.get('created_at', '')}")
         row = ctk.CTkFrame(
             self.list_frame,
             fg_color="transparent",
@@ -239,9 +242,11 @@ class CheckpointRestoreOverlay(Overlay):
     def _on_filters_changed(self, *_args):
         visible: list[str] = []
         for entry in self._all_checkpoints:
-            entry_id = entry["id"]
-            row = self._rows[entry_id]
-            if self._matches_filters(entry):
+            entry_id = entry.get("id", f"{entry.get('level', 'unknown')}_{entry.get('created_at', '')}")
+            row = self._rows.get(entry_id)
+            if row is None:
+                # Skip if row was not created (unlikely)
+                continue
                 row.pack(fill="x", pady=1)
                 visible.append(entry_id)
             else:
@@ -261,7 +266,8 @@ class CheckpointRestoreOverlay(Overlay):
         if not self._selected_id:
             return None
         for entry in self._all_checkpoints:
-            if entry["id"] == self._selected_id:
+            entry_id = entry.get("id", f"{entry.get('level', 'unknown')}_{entry.get('created_at', '')}")
+            if entry_id == self._selected_id:
                 return entry
         return None
 
@@ -272,7 +278,7 @@ class CheckpointRestoreOverlay(Overlay):
         if not self._matches_filters(entry):
             return
 
-        selected_id = entry["id"]
+        selected_id = entry.get("id", f"{entry.get('level', 'unknown')}_{entry.get('created_at', '')}")
         level = entry.get("level") or "unknown"
         kind = self._format_kind(entry.get("kind"))
         date = self._format_date(entry.get("created_at"))

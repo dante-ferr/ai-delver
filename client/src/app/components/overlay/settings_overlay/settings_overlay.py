@@ -1,6 +1,11 @@
 import customtkinter as ctk
 from app.fonts import app_font
-from app.theme import theme, list_available_themes
+from app.theme import (
+    theme,
+    list_available_themes,
+    theme_display_name,
+    theme_stem_from_display_name,
+)
 from ..overlay import Overlay
 
 
@@ -35,15 +40,16 @@ class SettingsOverlay(Overlay):
         self.theme_label.grid(row=0, column=0, sticky="w", pady=6)
 
         available_themes = list_available_themes()
-        current_theme = theme.name if theme.name in available_themes else available_themes[0]
+        current_stem = theme.name if theme.name in available_themes else available_themes[0]
+        theme_labels = [theme_display_name(stem) for stem in available_themes]
 
         self.theme_menu = ctk.CTkOptionMenu(
             self.settings_frame,
-            values=available_themes,
+            values=theme_labels,
             command=self._on_theme_selected,
             font=app_font(size=12),
         )
-        self.theme_menu.set(current_theme)
+        self.theme_menu.set(theme_display_name(current_stem))
         self.theme_menu.grid(row=0, column=1, sticky="e", pady=6)
 
         # Footer Actions
@@ -63,7 +69,8 @@ class SettingsOverlay(Overlay):
     def _on_theme_selected(self, selected_theme: str):
         from app_manager import app_manager
 
-        theme.load(selected_theme)
+        stem = theme_stem_from_display_name(selected_theme) or selected_theme
+        theme.load(stem)
         if app_manager.editor_app:
             app_manager.editor_app.reload_ui()
 

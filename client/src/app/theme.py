@@ -16,6 +16,9 @@ class Theme:
             data = json.load(file)
 
         self.data = data
+        self.display_name = data.get("_comments", {}).get(
+            "Theme", theme_name.replace("_", " ").title()
+        )
         custom = data.get("custom", {})
 
         # Color Groups
@@ -64,6 +67,25 @@ def list_available_themes() -> list[str]:
     if not themes_dir.exists():
         return ["dungeon"]
     return sorted([f.stem for f in themes_dir.glob("*.json")])
+
+
+def theme_display_name(theme_name: str) -> str:
+    path = config.ASSETS_PATH / "themes" / f"{theme_name}.json"
+    try:
+        with open(path, "r") as file:
+            data = json.load(file)
+        return data.get("_comments", {}).get(
+            "Theme", theme_name.replace("_", " ").title()
+        )
+    except (OSError, json.JSONDecodeError):
+        return theme_name.replace("_", " ").title()
+
+
+def theme_stem_from_display_name(display_name: str) -> str | None:
+    for stem in list_available_themes():
+        if theme_display_name(stem) == display_name:
+            return stem
+    return None
 
 
 default_theme = "dungeon"

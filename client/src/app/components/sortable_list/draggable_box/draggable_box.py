@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from app.fonts import app_font
+from app.theme import theme
 from src.config import config
 from ._delete_button import DeleteButton
 from typing import TYPE_CHECKING, cast, Callable, Sequence, Union

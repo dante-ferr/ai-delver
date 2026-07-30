@@ -51,7 +51,7 @@
     "corner_radius": 6,
     "border_width": 0,
     "fg_color": ["#00ffff", "#0f377d"],
-    "hover_color": ["#33ffff", "#16191e"],
+    "hover_color": ["#00e6e6", "#0b2a60"],
     "border_color": ["#52748a", "#252930"],
     "text_color": ["#000000", "#e2e8f0"],
     "text_color_disabled": ["gray60", "#94a3b8"]
@@ -74,7 +74,7 @@
     "border_width": 3,
     "fg_color": ["#00ffff", "#0f377d"],
     "border_color": ["#52748a", "#252930"],
-    "hover_color": ["#33ffff", "#050608"],
+    "hover_color": ["#00e6e6", "#0b2a60"],
     "checkmark_color": ["#000000", "#00ffff"],
     "text_color": ["gray10", "#e2e8f0"],
     "text_color_disabled": ["gray60", "#94a3b8"]
@@ -96,7 +96,7 @@
     "border_width_unchecked": 3,
     "fg_color": ["#00ffff", "#0f377d"],
     "border_color": ["#52748a", "#252930"],
-    "hover_color": ["#33ffff", "#050608"],
+    "hover_color": ["#00e6e6", "#0b2a60"],
     "text_color": ["gray10", "#e2e8f0"],
     "text_color_disabled": ["gray60", "#94a3b8"]
   },
@@ -115,13 +115,13 @@
     "fg_color": ["#52748a", "#0d0f12"],
     "progress_color": ["gray40", "#252930"],
     "button_color": ["#00ffff", "#0f377d"],
-    "button_hover_color": ["#33ffff", "#050608"]
+    "button_hover_color": ["#00e6e6", "#0b2a60"]
   },
   "CTkOptionMenu": {
     "corner_radius": 6,
     "fg_color": ["#00ffff", "#0f377d"],
-    "button_color": ["#33ffff", "#050608"],
-    "button_hover_color": ["#33ffff", "#16191e"],
+    "button_color": ["#00e6e6", "#0b2a60"],
+    "button_hover_color": ["#00e6e6", "#08204b"],
     "text_color": ["#000000", "#e2e8f0"],
     "text_color_disabled": ["gray60", "#94a3b8"]
   },
@@ -147,9 +147,9 @@
     "border_width": 2,
     "fg_color": ["#52748a", "#050608"],
     "selected_color": ["#00ffff", "#0f377d"],
-    "selected_hover_color": ["#33ffff", "#16191e"],
+    "selected_hover_color": ["#00e6e6", "#0b2a60"],
     "unselected_color": ["#52748a", "#0d0f12"],
-    "unselected_hover_color": ["gray70", "#252930"],
+    "unselected_hover_color": ["gray70", "#16191e"],
     "text_color": ["#000000", "#e2e8f0"],
     "text_color_disabled": ["gray60", "#94a3b8"]
   },

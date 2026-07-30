@@ -23,7 +23,7 @@ class IconButton(ctk.CTkButton):
         kwargs.setdefault("fg_color", "transparent")
         kwargs.setdefault("width", 24)
         kwargs.setdefault("height", 24)
-        kwargs.setdefault("hover_color", "#555")
+        kwargs.setdefault("hover_color", ("gray80", theme.bg_mid))
 
         super().__init__(master, text="", image=icon.get_ctk_image(), **kwargs)
 

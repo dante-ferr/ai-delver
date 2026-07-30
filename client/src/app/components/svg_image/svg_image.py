@@ -22,32 +22,21 @@ class SvgImage(ImageTk.PhotoImage):
         if not path.exists():
             raise FileNotFoundError(f"SVG file not found: {svg_path}")
 
-        temp_svg_path = self._edit_svg(svg_path, stroke, fill)
-
-        png_data = cairosvg.svg2png(
-            url=temp_svg_path, output_width=self.size[0], output_height=self.size[1]
-        )
-        if type(png_data) != bytes:
-            raise RuntimeError("Failed to convert SVG to PNG")
-
-        os.remove(temp_svg_path)
-
-        return Image.open(BytesIO(png_data))
-
-    def _edit_svg(self, svg_path: str, stroke: str, fill: str):
-        with open(svg_path, "r") as file:
+        with open(svg_path, "r", encoding="utf-8") as file:
             svg_content = file.read()
 
         svg_content = re.sub(r'stroke="[^"]+"', f'stroke="{stroke}"', svg_content)
         svg_content = re.sub(r'fill="[^"]+"', f'fill="{fill}"', svg_content)
 
-        temp_svg_path = temp_svg_path = os.path.join(
-            os.getenv("TEMP_DIR", "/tmp"), "temp_modified.svg"
+        png_data = cairosvg.svg2png(
+            bytestring=svg_content.encode("utf-8"),
+            output_width=self.size[0],
+            output_height=self.size[1],
         )
-        with open(temp_svg_path, "w") as temp_file:
-            temp_file.write(svg_content)
+        if type(png_data) != bytes:
+            raise RuntimeError("Failed to convert SVG to PNG")
 
-        return temp_svg_path
+        return Image.open(BytesIO(png_data))
 
     def get_ctk_image(self):
         ctk_image = ctk.CTkImage(light_image=self.image, size=self.size)

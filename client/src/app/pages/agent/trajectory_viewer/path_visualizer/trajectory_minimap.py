@@ -69,6 +69,16 @@ class TrajectoryMinimap(Minimap):
             animate=animate,
         )
 
+    def _layout_for_path_swap(self) -> dict[str, Any] | None:
+        """Path swaps must keep the scale/offset the floor tiles were drawn with.
+
+        Recomputing layout after a canvas resize (e.g. tall level → wide level)
+        would move the path while leaving platforms in place.
+        """
+        if self._layout is not None:
+            return self._overlay_path_on_layout(self._layout)
+        return self._compute_layout()
+
     def _replace_path_instant(
         self,
         trajectory,
@@ -97,13 +107,7 @@ class TrajectoryMinimap(Minimap):
             self._anim_after_id = None
             self._anim_gen += 1
 
-        if self._tiles_done:
-            layout = self._compute_layout()
-        elif self._layout is not None:
-            layout = self._overlay_path_on_layout(self._layout)
-        else:
-            layout = self._compute_layout()
-
+        layout = self._layout_for_path_swap()
         if layout is None:
             self._path_done = True
             return
@@ -122,7 +126,7 @@ class TrajectoryMinimap(Minimap):
             layout["victorious"] = False
             return layout
 
-        grid_w, grid_h = layout["grid_w"], layout["grid_h"]
+        grid_h = layout["grid_h"]
         tile_w, tile_h = self.tile_size if self.tile_size else (16, 16)
         scale = layout["scale"]
         offset_x = layout["offset_x"]
@@ -135,10 +139,11 @@ class TrajectoryMinimap(Minimap):
                     path_points.append(entity.position)
                     break
 
+        # Snapshot positions are body centers (world Y-up).
         canvas_points = []
         for px, py in path_points:
-            gx = (px - tile_w / 2) / tile_w
-            gy = (grid_h * tile_h - (py - tile_h / 2)) / tile_h
+            gx = px / tile_w
+            gy = grid_h - (py / tile_h)
             cx = offset_x + gx * scale
             cy = offset_y + gy * scale
             canvas_points.append((cx, cy))

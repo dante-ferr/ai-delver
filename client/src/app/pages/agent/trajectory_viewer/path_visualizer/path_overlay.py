@@ -138,7 +138,8 @@ class PathOverlay:
         """Animate path only (same level as previous trajectory)."""
         m = self.minimap
         m._cancel_animation()
-        layout = m._compute_layout()
+        # Keep the floor's scale/offset; only refresh path + markers.
+        layout = m._layout_for_path_swap()
         if layout is None:
             m._layout = None
             return

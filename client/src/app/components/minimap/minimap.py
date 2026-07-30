@@ -260,7 +260,29 @@ class Minimap(ctk.CTkFrame):
             self._on_animation_finished()
 
     def _on_animation_finished(self) -> None:
-        """Hook for subclasses when reveal/path animation reaches the end."""
+        """After reveal, redraw if the canvas size changed mid-animation.
+
+        Resize events are ignored while animating (to avoid a scale jump), so a
+        height change from a previous level can leave tiles fitted to the old
+        canvas. Reconcile once the animation is idle.
+        """
+        self._reconcile_layout_with_canvas()
+
+    def _reconcile_layout_with_canvas(self) -> None:
+        if self._layout is None or self._is_animating() or self._waiting_for_canvas:
+            return
+        fresh = self.layout_helper.compute()
+        if fresh is None:
+            return
+        old = self._layout
+        if (
+            abs(fresh["scale"] - old["scale"]) > 1e-6
+            or abs(fresh["offset_x"] - old["offset_x"]) > 1e-6
+            or abs(fresh["offset_y"] - old["offset_y"]) > 1e-6
+            or fresh["grid_w"] != old["grid_w"]
+            or fresh["grid_h"] != old["grid_h"]
+        ):
+            self._sync_draw_minimap()
 
     def _clear_state(self):
         self.grid_size = None

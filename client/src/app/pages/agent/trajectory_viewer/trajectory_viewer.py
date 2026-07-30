@@ -185,13 +185,16 @@ class TrajectoryViewer(ctk.CTkFrame):
         except Exception as e:
             print(f"[Visualizer Error] Failed to parse level file: {e}")
 
-        # Update canvas height dynamically for vertical levels (grid_h > grid_w)
+        # Update canvas height dynamically for vertical levels (grid_h > grid_w).
+        # Apply size before layout so the path visualizer doesn't fit to the
+        # previous level's canvas and then drift on same-level path swaps.
         if grid_size and grid_size[1] > grid_size[0]:
             aspect = grid_size[1] / max(1, grid_size[0])
             target_h = max(280, min(650, int(300 * aspect)))
             self.minimap_panel.canvas.configure(height=target_h)
         else:
             self.minimap_panel.canvas.configure(height=280)
+        self.minimap_panel.canvas.update_idletasks()
 
         # Update left summary/timeline panel
         self.summary_panel.update_summary(self.trajectory)

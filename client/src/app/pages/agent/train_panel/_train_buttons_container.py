@@ -209,6 +209,8 @@ class TrainButtonsContainer(ctk.CTkFrame):
 
     def _run_quick_play(self, level_name: str):
         from app_manager import app_manager
+        import base64
+        from agent.agent import Agent
 
         training_state_manager.set_value("sending_training_request", True)
 
@@ -216,11 +218,18 @@ class TrainButtonsContainer(ctk.CTkFrame):
             agent_name = agent_loader.storage_key
             gui_training_client.ensure_levels_saved([level_name], agent_name)
 
+            model_bytes_b64 = None
+            agent_obj = Agent(agent_name)
+            if agent_obj.weights_path and agent_obj.weights_path.is_file():
+                with open(agent_obj.weights_path, "rb") as f:
+                    model_bytes_b64 = base64.b64encode(f.read()).decode("utf-8")
+
             payload = gui_training_client.create_training_payload(
                 levels=[level_name],
                 mode="static",
                 amount_of_cycles=1,
                 runs_per_cycle=1,
+                model_bytes_b64=model_bytes_b64,
                 play=True,
             )
 

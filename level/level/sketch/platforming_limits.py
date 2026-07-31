@@ -147,7 +147,7 @@ def compute_platforming_limits(
     # Gap: floor coyote COM travel + ray-inset overhang (round would overclaim unreachable gaps).
     recommended_max_rise = max(1, math.floor(max_jump_height_tiles + 1e-6))
     recommended_max_stack = recommended_max_rise + 1
-    recommended_max_gap = max(1, math.floor(sim_gap_tiles + 1e-6))
+    recommended_max_gap = max(1, math.floor((sim_gap_tiles - 0.5) + 1e-6))
     player_height_tiles = player_height / tile_h
     recommended_ceiling = max(
         1, math.ceil(player_height_tiles + max_jump_height_tiles * 0.5)
@@ -289,7 +289,8 @@ def _cached_max_gap_tiles_for_delta(fingerprint: tuple[Any, ...]) -> int:
 
     overhang_px = float(player_width) - 2.0 * float(ray_offset_inward)
     sim_gap_px_effective = sim_gap_px + overhang_px
-    return max(0, math.floor(sim_gap_px_effective / float(tile_w) + 1e-6))
+    sim_gap_tiles = sim_gap_px_effective / float(tile_w)
+    return max(0, math.floor((sim_gap_tiles - 0.5) + 1e-6))
 
 
 def _physics_params(

@@ -33,6 +33,7 @@ Physics TOMLs (delver.toml + world.toml)
 ### A. Programmatic Locomotion Envelope (`platforming_limits.py`)
 - **Physics Derivation**: Delver Height ($DH$) and Jump Height ($JH$) are dynamically calculated from physics constants (`delver.toml` and `world.toml`).
 - **Delta-Height Gap Lookups**: `max_gap_tiles_for_delta_height(delta_h)` simulates semi-implicit Euler coyote jumps for any height delta $\Delta h = y_{\text{landing}} - y_{\text{takeoff}}$ (positive = climb, negative = fall). Out-of-reach climbs return $0$.
+- **0.5 Tile Human Safety Margin**: Deducts `0.5` tiles from effective gap reach before flooring (`math.floor((sim_gap_tiles - 0.5) + 1e-6)`), preventing procedural pits from requiring frame-perfect coyote jumps.
 - **CLI Tooling**: `python src/cli/main.py platforming-limits --delta-height N` exposes physics budgets via JSON stdout.
 
 ### B. Clearance-Aware Vaulting (`_clearance.py`)

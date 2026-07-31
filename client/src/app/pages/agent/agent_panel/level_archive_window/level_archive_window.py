@@ -9,7 +9,6 @@ from typing import Any
 import customtkinter as ctk
 from app.fonts import app_font
 from level import Level
-from level.config import LEVEL_SAVE_FOLDER_PATH
 from loaders import agent_loader
 
 from src.app.components import Minimap, MouseWheelScrollableFrame
@@ -334,20 +333,21 @@ class LevelArchiveWindow(ctk.CTkToplevel):
             self.matches_list.bind_scroll_events_recursively(label)
 
     def _find_matching_global_levels(self, target_hash: str) -> list[str]:
-        root = Path(LEVEL_SAVE_FOLDER_PATH)
-        if not root.is_dir():
-            return []
+        from level.resolve_level import handcrafted_levels_dir, generated_levels_dir
 
+        roots = [handcrafted_levels_dir(), generated_levels_dir()]
         matches: list[str] = []
-        for child in sorted(root.iterdir(), key=lambda p: p.name.lower()):
-            if not child.is_dir():
+        seen: set[str] = set()
+        for root in roots:
+            if not root.is_dir():
                 continue
-            level_json = child / "level.json"
-            if not level_json.is_file():
-                continue
-            digest = self._hash_for_path(level_json)
-            if digest == target_hash:
-                matches.append(child.name)
+            for level_json in sorted(root.rglob("level.json")):
+                if level_json.parent.name in ("handcrafted", "generated"):
+                    continue
+                digest = self._hash_for_path(level_json)
+                if digest == target_hash and level_json.parent.name not in seen:
+                    seen.add(level_json.parent.name)
+                    matches.append(level_json.parent.name)
         return matches
 
     def _hash_for_path(self, path: Path) -> str | None:

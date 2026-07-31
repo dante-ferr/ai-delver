@@ -19,7 +19,7 @@ from bootstrap import PROJECT_ROOT
 from app.components import FileLoaderOverlay, SvgImage
 from app.theme import theme
 from src.config import config
-from level.config import LEVEL_SAVE_FOLDER_PATH
+from level.config import HANDCRAFTED_LEVEL_SAVE_FOLDER_PATH
 from app.components.overlay.file_loader_overlay.file_loader_overlay_spawner import (
     FileLoaderOverlaySpawner,
 )
@@ -191,7 +191,7 @@ class TrainButtonsContainer(ctk.CTkFrame):
 
     def _open_quick_play_overlay(self):
         FileLoaderOverlaySpawner(
-            LEVEL_SAVE_FOLDER_PATH,
+            HANDCRAFTED_LEVEL_SAVE_FOLDER_PATH,
             "level",
             overlay_class=lambda dirs, ftype: _QuickPlayLevelOverlay(
                 dirs, ftype, on_level_selected=self._start_quick_play_thread

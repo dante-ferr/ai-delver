@@ -1,0 +1,150 @@
+# Clearance-aware procedural platforming generator + curriculum knobs.
+
+default_count = 10
+seed = 0
+default_pack_group = "platforming_gen_v1"
+# Retries per level when finalize rejects an oversized / unplaceable sketch.
+pack_level_max_attempts = 8
+# When false, packs use a single hard free-mix phase (no named curriculum).
+use_curriculum = false
+
+# Structure selection weights (reweighted at runtime; clearance conflicts → 0).
+continue_weight = 2.5
+pit_weight = 4.0
+floor_height_shift_weight = 2.0
+turn_weight = 2.5
+# Climb → reverse → extend the other way (creates switchbacks).
+switchback_weight = 3.0
+
+# Prefer continuing in the current heading vs turning (turns also require
+# the current floor to sit higher than the previous one).
+forward_bias = 1.2
+# After a successful climb, chance to immediately reverse direction.
+post_climb_turn_odds = 0.65
+# Multiplier applied to turn_weight while standing above the previous floor.
+post_climb_turn_boost = 3.0
+
+# Floor / platform sizing
+min_platform_width = 2
+max_platform_width = 6
+min_continue_length = 2
+max_continue_length = 6
+spawn_platform_width = 4
+spawn_platform_thickness = 1
+
+# Path length (number of structure steps after spawn)
+min_path_steps = 8
+max_path_steps = 14
+
+# Vertical / gap authoring
+# Deepest allowed downward surface delta in tiles (negative delta_h floor).
+max_fall_height = 6
+# Minimum |delta| when sampling a non-zero height change (pits / shifts).
+min_delta_magnitude = 0
+# Easy-end gap budget; hard phases may use physics max for the chosen delta.
+easy_max_gap_tiles = 5
+# Pits must span at least this many empty tiles (horizontal depth).
+min_gap_tiles = 5
+# How many tiles of each platform edge are included in a pit/shift span.
+span_edge_overlap_tiles = 1
+
+# Enforced empty clearance above floors.
+# Heights are in Delver-height multiples; absolute tiles = ceil(DH * multiplier).
+# Min (= DH) is common but not exclusive — continuity keeps adjacent segments close.
+min_floor_clearance_delver_heights = 1.0
+max_floor_clearance_delver_heights = 1.0
+# Max |Δheight| in tiles between successive floor corridors.
+clearance_height_max_step = 2
+clearance_height_stay_weight = 3.0
+clearance_height_change_weight = 1.0
+# Chance the spawn corridor starts taller than the minimum.
+clearance_height_start_raise_odds = 0.25
+# Across pits / climbs: jump-arc clearance above the *takeoff* floor (JH + DH).
+# Landing platforms keep ambient floor clearance; only climb lips are raised.
+span_clearance_jump_heights = 1.0
+span_clearance_delver_heights = 1.0
+
+# Optional patterns (odds in [0, 1])
+neighbor_pit_bridge_odds = 0.12
+neighbor_pit_bridge_width = 2
+delay_ledge_odds = 0.08
+delay_ledge_width = 2
+delay_ledge_jump_height_fraction = 0.75
+
+# Finalize padding around the painted path before sealing walls.
+finalize_pad_tiles = 2
+# Extra empty rows reserved above the highest floor for clearance.
+top_margin_tiles = 1
+
+# Curriculum: named obstacle-type phases (only when use_curriculum = true).
+levels_per_phase = 2
+
+[[phases]]
+name = "flat_run"
+allow_pits = false
+allow_floor_height_shifts = false
+max_gap_tiles = 0
+max_rise_tiles = 0
+max_fall_tiles = 0
+min_path_steps = 3
+max_path_steps = 6
+continue_weight = 10.0
+pit_weight = 0.0
+floor_height_shift_weight = 0.0
+
+[[phases]]
+name = "same_height_pits"
+allow_pits = true
+allow_floor_height_shifts = false
+max_gap_tiles = 8
+max_rise_tiles = 0
+max_fall_tiles = 0
+force_delta_h = 0
+min_path_steps = 4
+max_path_steps = 8
+continue_weight = 3.0
+pit_weight = 4.0
+floor_height_shift_weight = 0.0
+
+[[phases]]
+name = "rises"
+allow_pits = true
+allow_floor_height_shifts = true
+max_gap_tiles = 5
+# Positive deltas only (climbs); 0 means use jump height from physics.
+max_rise_tiles = 0
+max_fall_tiles = 0
+prefer_positive_delta = true
+min_path_steps = 5
+max_path_steps = 10
+continue_weight = 2.5
+pit_weight = 2.0
+floor_height_shift_weight = 3.0
+
+[[phases]]
+name = "falls"
+allow_pits = true
+allow_floor_height_shifts = true
+max_gap_tiles = 6
+max_rise_tiles = 0
+# 0 means use max_fall_height from this file.
+max_fall_tiles = 0
+prefer_negative_delta = true
+min_path_steps = 5
+max_path_steps = 10
+continue_weight = 2.5
+pit_weight = 2.0
+floor_height_shift_weight = 3.0
+
+[[phases]]
+name = "mixed"
+allow_pits = true
+allow_floor_height_shifts = true
+max_gap_tiles = 0
+max_rise_tiles = 0
+max_fall_tiles = 0
+min_path_steps = 6
+max_path_steps = 14
+continue_weight = 3.0
+pit_weight = 2.5
+floor_height_shift_weight = 2.0

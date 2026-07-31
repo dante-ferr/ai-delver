@@ -4,7 +4,7 @@ import hashlib
 import copy
 from pytiling.serialization import map_from_dict
 from pathlib import Path
-from .config import LEVEL_SAVE_FOLDER_PATH
+from .config import HANDCRAFTED_LEVEL_SAVE_FOLDER_PATH
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
@@ -89,9 +89,9 @@ class Level:
     @property
     def save_file_path(self):
         """
-        Dynamically generates the save file path.
+        Dynamically generates the save file path (handcrafted production levels).
         """
-        return Path(LEVEL_SAVE_FOLDER_PATH) / Path(self.name) / f"level.json"
+        return Path(HANDCRAFTED_LEVEL_SAVE_FOLDER_PATH) / Path(self.name) / f"level.json"
 
     @property
     def same_name_saved(self):

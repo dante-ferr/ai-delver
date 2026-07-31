@@ -2,6 +2,8 @@
 __pycache__/
 .env
 docs/book/
+docs/src/temp/
+docs/src/.obsidian/
 target/
 *.so
 .cursor

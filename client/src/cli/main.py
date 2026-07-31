@@ -247,6 +247,15 @@ def main():
         default=None,
         help="Optional path to world.toml (defaults to runtime/src/engine/world.toml)",
     )
+    limits_p.add_argument(
+        "--delta-height",
+        type=int,
+        default=None,
+        help=(
+            "If set, also report max gap tiles for this surface delta "
+            "(landing − takeoff; positive = climb)"
+        ),
+    )
 
     # Subcommand: regen-dragonbones
     subparsers.add_parser(
@@ -254,6 +263,92 @@ def main():
         help=(
             "Regenerate editor representations for every DragonBones entity "
             "(and Delver preview GIFs)"
+        ),
+    )
+
+    # Subcommand: play-level
+    play_p = subparsers.add_parser(
+        "play-level",
+        help="Launch interactive Pyglet playtest for a level (Left/Right + Space)",
+    )
+    play_p.add_argument(
+        "--level",
+        required=True,
+        help="Level name or directory path to playtest",
+    )
+
+    # Subcommand: playtest-gui
+    subparsers.add_parser(
+        "playtest-gui",
+        help="Open level browser GUI (list + minimap preview + play)",
+    )
+
+    # Subcommand: level-group (list / add / delete)
+    group_p = subparsers.add_parser(
+        "level-group",
+        help="Manage named level groups in client/data/level_groups.json",
+    )
+    group_sub = group_p.add_subparsers(dest="group_action", required=True)
+
+    group_sub.add_parser("list", help="List all level groups")
+
+    group_add = group_sub.add_parser(
+        "add",
+        help="Create or replace a level group",
+    )
+    group_add.add_argument("--name", required=True, help="Group name (without @)")
+    group_add.add_argument(
+        "--levels",
+        default="",
+        help="Comma-separated level names (may be empty for an empty group)",
+    )
+    group_add.add_argument(
+        "--replace",
+        action="store_true",
+        help="Overwrite an existing group with the same name",
+    )
+
+    group_del = group_sub.add_parser(
+        "delete",
+        help="Delete a level group from level_groups.json",
+    )
+    group_del.add_argument("--name", required=True, help="Group name (without @)")
+    group_del.add_argument(
+        "--delete-files",
+        action="store_true",
+        help="Also delete generated/<name>/ on disk if present",
+    )
+
+    # Subcommand: gen-platforming-pack
+    gen_p = subparsers.add_parser(
+        "gen-platforming-pack",
+        help="Generate a procedural platforming level pack under level_saves/generated/",
+    )
+    gen_p.add_argument(
+        "--group",
+        required=True,
+        help="Group name (also registered as @<group> in level_groups.json)",
+    )
+    gen_p.add_argument(
+        "--count",
+        type=int,
+        default=None,
+        help=(
+            "Number of levels to generate (default: curriculum size, or "
+            "procedural_platforming.default_count with --no-curriculum)"
+        ),
+    )
+    gen_p.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="RNG seed for reproducible packs",
+    )
+    gen_p.add_argument(
+        "--no-curriculum",
+        action="store_true",
+        help=(
+            "Force free-mix generation (overrides procedural_platforming.use_curriculum)"
         ),
     )
 
@@ -294,6 +389,18 @@ def main():
     elif args.command == "regen-dragonbones":
         from cli.commands.regen_dragonbones import run_regen_dragonbones
         run_regen_dragonbones(args)
+    elif args.command == "play-level":
+        from cli.commands.play_level import run_play_level
+        run_play_level(args)
+    elif args.command == "playtest-gui":
+        from cli.commands.playtest_gui import run_playtest_gui
+        run_playtest_gui(args)
+    elif args.command == "level-group":
+        from cli.commands.level_group import run_level_group
+        run_level_group(args)
+    elif args.command == "gen-platforming-pack":
+        from cli.commands.gen_platforming_pack import run_gen_platforming_pack
+        run_gen_platforming_pack(args)
 
 if __name__ == "__main__":
     main()

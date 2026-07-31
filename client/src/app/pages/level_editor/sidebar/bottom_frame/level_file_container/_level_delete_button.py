@@ -1,5 +1,5 @@
 from app.components import DeleteButton, FileDeleterOverlay
-from level.config import LEVEL_SAVE_FOLDER_PATH
+from level.config import HANDCRAFTED_LEVEL_SAVE_FOLDER_PATH
 from app.components.overlay.file_loader_overlay.file_loader_overlay_spawner import (
     FileLoaderOverlaySpawner,
 )
@@ -24,4 +24,6 @@ class LevelDeleteButton(DeleteButton):
         super().__init__(master, command=self._on_click, **kwargs)
 
     def _on_click(self):
-        FileLoaderOverlaySpawner(LEVEL_SAVE_FOLDER_PATH, "level", _LevelDeleterOverlay)
+        FileLoaderOverlaySpawner(
+            HANDCRAFTED_LEVEL_SAVE_FOLDER_PATH, "level", _LevelDeleterOverlay
+        )

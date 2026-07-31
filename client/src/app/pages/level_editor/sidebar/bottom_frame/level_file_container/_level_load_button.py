@@ -1,5 +1,5 @@
 from app.components import FileLoaderOverlay, LoadButton
-from level.config import LEVEL_SAVE_FOLDER_PATH
+from level.config import HANDCRAFTED_LEVEL_SAVE_FOLDER_PATH
 from app.components.overlay.file_loader_overlay.file_loader_overlay_spawner import (
     FileLoaderOverlaySpawner,
 )
@@ -29,6 +29,8 @@ class LevelLoadButton(LoadButton):
 
     def _on_click(self):
         def _open_picker():
-            FileLoaderOverlaySpawner(LEVEL_SAVE_FOLDER_PATH, "level", _LevelLoaderOverlay)
+            FileLoaderOverlaySpawner(
+                HANDCRAFTED_LEVEL_SAVE_FOLDER_PATH, "level", _LevelLoaderOverlay
+            )
 
         confirm_discard_unsaved(kind="level", on_discard=_open_picker)

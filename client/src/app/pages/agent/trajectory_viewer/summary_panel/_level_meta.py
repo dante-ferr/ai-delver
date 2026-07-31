@@ -78,22 +78,20 @@ class LevelMetaLookup:
             return []
 
         try:
-            from level.config import LEVEL_SAVE_FOLDER_PATH
+            from level.resolve_level import handcrafted_levels_dir, generated_levels_dir
 
-            root = Path(LEVEL_SAVE_FOLDER_PATH)
-            if not root.is_dir():
-                return []
-
+            roots = [handcrafted_levels_dir(), generated_levels_dir()]
             matches: list[str] = []
-            for child in sorted(root.iterdir(), key=lambda p: p.name.lower()):
-                if not child.is_dir():
+            seen: set[str] = set()
+            for root in roots:
+                if not root.is_dir():
                     continue
-                level_json = child / "level.json"
-                if not level_json.is_file():
-                    continue
-                digest = self.hash_for_path(level_json)
-                if digest == target_hash:
-                    matches.append(child.name)
+                for level_json in sorted(root.rglob("level.json")):
+                    digest = self.hash_for_path(level_json)
+                    name = level_json.parent.name
+                    if digest == target_hash and name not in seen:
+                        seen.add(name)
+                        matches.append(name)
             return matches
         except Exception:
             return []

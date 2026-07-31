@@ -6,7 +6,7 @@ import math
 from functools import lru_cache
 from pathlib import Path
 
-from level.config import TILE_HEIGHT, TILE_WIDTH
+from level.config import config as level_config
 
 
 # Explicit overrides / non-physics objects. Delver is derived from delver.toml.
@@ -16,25 +16,40 @@ _STATIC_SIZES: dict[str, tuple[int, int]] = {
 
 
 def default_delver_toml() -> Path:
-    from level.config import PROJECT_ROOT
+    return (
+        level_config.PROJECT_ROOT
+        / "runtime"
+        / "src"
+        / "world_objects"
+        / "delver"
+        / "delver.toml"
+    )
 
-    return PROJECT_ROOT / "runtime" / "src" / "world_objects" / "delver" / "delver.toml"
 
-
-@lru_cache(maxsize=4)
 def delver_size_tiles(
     delver_toml: str | None = None,
-    tile_width: int = TILE_WIDTH,
-    tile_height: int = TILE_HEIGHT,
+    tile_width: int | None = None,
+    tile_height: int | None = None,
 ) -> tuple[int, int]:
     """Ceil of physics AABB in tiles so the footprint covers the standing body."""
+    tw = int(tile_width if tile_width is not None else level_config.TILE_WIDTH)
+    th = int(tile_height if tile_height is not None else level_config.TILE_HEIGHT)
+    path = str(delver_toml) if delver_toml else str(default_delver_toml())
+    return _delver_size_tiles_cached(path, tw, th)
+
+
+@lru_cache(maxsize=8)
+def _delver_size_tiles_cached(
+    delver_toml: str,
+    tile_width: int,
+    tile_height: int,
+) -> tuple[int, int]:
     try:
         import tomllib
     except ModuleNotFoundError:  # Python < 3.11
         import tomli as tomllib  # type: ignore
 
-    path = Path(delver_toml) if delver_toml else default_delver_toml()
-    with path.open("rb") as handle:
+    with Path(delver_toml).open("rb") as handle:
         data = tomllib.load(handle)
     width_px = float(data["player_width"])
     height_px = float(data["player_height"])

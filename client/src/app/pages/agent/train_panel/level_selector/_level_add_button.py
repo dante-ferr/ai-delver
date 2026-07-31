@@ -1,5 +1,5 @@
 from app.components import FileLoaderOverlay, AddButton
-from level.config import LEVEL_SAVE_FOLDER_PATH
+from level.config import HANDCRAFTED_LEVEL_SAVE_FOLDER_PATH
 from app.components.overlay.file_loader_overlay.file_loader_overlay_spawner import (
     FileLoaderOverlaySpawner,
 )
@@ -51,7 +51,7 @@ class LevelAddButton(AddButton):
             return
 
         FileLoaderOverlaySpawner(
-            LEVEL_SAVE_FOLDER_PATH,
+            HANDCRAFTED_LEVEL_SAVE_FOLDER_PATH,
             "level",
             _LevelAdderOverlay,
             exclude_files=training_state_manager.training_levels,

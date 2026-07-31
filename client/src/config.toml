@@ -11,9 +11,9 @@ max_brush_size = 9
 initial_brush_size = 1
 
 [camera]
-start_zoom = 2.0
+start_zoom = 3.0
 min_zoom = 1.0
-max_zoom = 4.0
+max_zoom = 7.0
 scroll_speed = 1.0
 zoom_speed = 0.3
 
@@ -95,6 +95,16 @@ live_color = "#00ffff"
 hash_display_chars = 12
 window_width = 960
 window_height = 640
+
+# Standalone level browser / playtest secondary app (playtest-gui CLI).
+[playtest_gui]
+window_width = 1040
+window_height = 720
+title = "Level Playtest"
+# "Regen pack" button: wipe + regenerate this generated group.
+regen_pack_group = "platforming_gen_v1"
+regen_pack_count = 30
+regen_pack_button_label = "Regen pack (30)"
 
 # Per-entity DragonBones editor representation export settings.
 # New skeletal entities need a [dragonbones.<name>] block.

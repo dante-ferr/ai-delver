@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from level.config import MAX_GRID_SIZE, MIN_GRID_SIZE
+from level.config import config as level_config
 from level.exceptions import LevelError
 
 ALLOWED_ELEMENT_IDS = frozenset({"platform", "delver", "goal"})
@@ -44,8 +44,8 @@ def parse_level_sketch(data: Any) -> LevelSketch:
         raise LevelSketchError("Sketch 'grid_size' must be [width, height] integers.")
 
     width, height = int(grid_size[0]), int(grid_size[1])
-    min_w, min_h = MIN_GRID_SIZE
-    max_w, max_h = MAX_GRID_SIZE
+    min_w, min_h = tuple(level_config.MIN_GRID_SIZE)
+    max_w, max_h = tuple(level_config.MAX_GRID_SIZE)
     if width < min_w or height < min_h or width > max_w or height > max_h:
         raise LevelSketchError(
             f"Sketch grid_size {width}x{height} is outside allowed bounds "

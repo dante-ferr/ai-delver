@@ -2,8 +2,7 @@ import os
 import json
 import httpx
 import websockets
-from level import config as level_config
-from level import Level
+from level import Level, LevelResolveError, resolve_level_json
 from runtime.episode_trajectory import EpisodeTrajectoryFactory
 
 class TrainingClient:
@@ -39,10 +38,11 @@ class TrainingClient:
         (e.g. default ``size``) and produce a different digest.
         """
         for level_name in levels:
-            level_path = f"{level_config.LEVEL_SAVE_FOLDER_PATH}/{level_name}/level.json"
-            if not os.path.exists(level_path):
+            try:
+                level_path = resolve_level_json(level_name)
+            except LevelResolveError as e:
                 from level.exceptions import LevelLoadError
-                raise LevelLoadError(level_path, "Level file not found.")
+                raise LevelLoadError(str(level_name), "Level file not found.") from e
             with open(level_path, "r") as file:
                 level_data = json.load(file)
             level_hash = Level.hash_json(level_data)
@@ -68,13 +68,20 @@ class TrainingClient:
         """Builds the request payload dictionary expected by the server."""
         level_jsons = []
         for level_name in levels:
-            level_path = f"{level_config.LEVEL_SAVE_FOLDER_PATH}/{level_name}/level.json"
             try:
+                level_path = resolve_level_json(level_name)
                 with open(level_path, "r") as file:
                     level_jsons.append(json.load(file))
+            except LevelResolveError as e:
+                from level.exceptions import LevelLoadError
+                raise LevelLoadError(
+                    str(level_name), f"Failed to read level JSON: {e}", original_exception=e
+                ) from e
             except Exception as e:
                 from level.exceptions import LevelLoadError
-                raise LevelLoadError(level_path, f"Failed to read level JSON: {e}", original_exception=e) from e
+                raise LevelLoadError(
+                    str(level_name), f"Failed to read level JSON: {e}", original_exception=e
+                ) from e
 
         payload = {
             "levels": level_jsons,

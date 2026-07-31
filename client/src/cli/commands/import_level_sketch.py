@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 from level import LevelSketchError, LevelSketchImporter
-from level.config import LEVEL_SAVE_FOLDER_PATH
+from level.config import HANDCRAFTED_LEVEL_SAVE_FOLDER_PATH
 
 
 def print_json(event: str, **kwargs):
@@ -27,7 +27,7 @@ def run_import_level_sketch(args):
                 sys.exit(1)
             level.name = name
 
-        save_path = Path(LEVEL_SAVE_FOLDER_PATH) / level.name / "level.json"
+        save_path = Path(HANDCRAFTED_LEVEL_SAVE_FOLDER_PATH) / level.name / "level.json"
         if save_path.is_file() and not force:
             print_json(
                 "error",

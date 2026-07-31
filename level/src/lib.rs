@@ -148,18 +148,41 @@ impl Level {
     }
 
     /// Resolves either a direct path or a level-save name using `repo_root`.
+    ///
+    /// Search order: direct path, handcrafted/, generated/ (and one pack nesting
+    /// level), then legacy flat `level_saves/<name>/`.
     pub fn resolve(input: impl AsRef<Path>, repo_root: impl AsRef<Path>) -> Result<PathBuf> {
         let input = input.as_ref();
         let repo_root = repo_root.as_ref();
         let saves = repo_root.join("client/data/level_saves");
-        let candidates = [
+        let handcrafted = saves.join("handcrafted");
+        let generated = saves.join("generated");
+
+        let mut candidates: Vec<PathBuf> = vec![
             input.to_path_buf(),
             input.join("level.json"),
             repo_root.join(input),
             repo_root.join(input).join("level.json"),
+            handcrafted.join(input),
+            handcrafted.join(input).join("level.json"),
+            generated.join(input),
+            generated.join(input).join("level.json"),
             saves.join(input),
             saves.join(input).join("level.json"),
         ];
+
+        // generated/<pack>/<name>/level.json
+        if generated.is_dir() {
+            if let Ok(entries) = fs::read_dir(&generated) {
+                for entry in entries.flatten() {
+                    let pack_dir = entry.path();
+                    if pack_dir.is_dir() {
+                        candidates.push(pack_dir.join(input).join("level.json"));
+                        candidates.push(pack_dir.join(input));
+                    }
+                }
+            }
+        }
 
         candidates
             .into_iter()
@@ -358,7 +381,7 @@ mod tests {
             .as_nanos();
         let root =
             std::env::temp_dir().join(format!("ai-delver-level-{}-{nonce}", std::process::id()));
-        let level_dir = root.join("client/data/level_saves/example");
+        let level_dir = root.join("client/data/level_saves/handcrafted/example");
         fs::create_dir_all(&level_dir).unwrap();
         let level_path = level_dir.join("level.json");
         fs::write(&level_path, VALID_LEVEL).unwrap();

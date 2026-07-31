@@ -576,4 +576,116 @@ mod tests {
             "must not land on a +5 surface rise (80px); feet apex was {max_feet}"
         );
     }
+
+    /// Same-height coyote gap envelope: gap of 8 empty tiles is reachable; 9 is not.
+    ///
+    /// Matches ``platforming_limits`` authoring budget (COM coyote travel + ray-inset
+    /// overhang ≈ 8.75 tiles → floor to 8).
+    #[test]
+    fn measures_same_height_coyote_gap_reach() {
+        let tile = 16.0_f32;
+        let height = 8_usize;
+        let floor_row = height - 1;
+        let half_h = DelverConfig::default().player_height / 2.0;
+        let half_w = DelverConfig::default().player_width / 2.0;
+        let floor_top = (height - floor_row) as f32 * tile;
+        let inward = DelverConfig::default().ray_offset_inward;
+        let coyote_frames =
+            (DelverConfig::default().jump_tolerance_max * 60.0).floor() as i32;
+
+        let try_clear = |gap_tiles: usize, coyote_delay_frames: i32| -> (bool, f32) {
+            let left_end = 12_usize;
+            let right_start = left_end + gap_tiles;
+            let width = right_start + 10;
+            let mut solids: Vec<(usize, usize)> = Vec::new();
+            for x in 0..left_end {
+                solids.push((x, floor_row));
+            }
+            for x in right_start..width {
+                solids.push((x, floor_row));
+            }
+
+            let start_x = 2.0 * tile + half_w;
+            let start_y = floor_top + half_h + 1.0;
+            let mut engine = RustPhysicsEngine::from_geometry_ref(
+                width,
+                height,
+                &solids,
+                &[],
+                start_x,
+                start_y,
+                tile,
+            );
+
+            engine.set_delver_action(0.0, false).unwrap();
+            for _ in 0..60 {
+                let _ = engine.step_native(1.0 / 60.0).unwrap();
+            }
+
+            let right_catch_x = right_start as f32 * tile - (half_w - inward);
+            let mut landed_far = false;
+            let mut max_x = start_x;
+            let mut airborne_frames = -1_i32;
+            let mut jumped = false;
+            for _ in 0..500 {
+                let peek = engine.delver().unwrap();
+                if peek.is_on_ground {
+                    airborne_frames = -1;
+                } else if airborne_frames < 0 {
+                    airborne_frames = 0;
+                } else {
+                    airborne_frames += 1;
+                }
+                let want_jump =
+                    !jumped && airborne_frames >= coyote_delay_frames && airborne_frames >= 0;
+                engine.set_delver_action(1.0, want_jump).unwrap();
+                let d = engine.step_native(1.0 / 60.0).unwrap();
+                if want_jump {
+                    jumped = true;
+                    engine.set_delver_action(1.0, false).unwrap();
+                }
+                max_x = max_x.max(d.x);
+                if d.is_dead {
+                    break;
+                }
+                if d.is_on_ground && jumped {
+                    let feet = d.y - half_h;
+                    if d.x >= right_catch_x && (feet - floor_top).abs() < 4.0 {
+                        landed_far = true;
+                        break;
+                    }
+                    if d.x < right_catch_x {
+                        break;
+                    }
+                }
+            }
+            (landed_far, max_x)
+        };
+
+        let clear_gap = |gap_tiles: usize| -> bool {
+            let mut best = false;
+            let mut best_x = 0.0_f32;
+            // Sweep coyote delay: 0 = jump first airborne frame; late ≈ full coyote.
+            for delay in 0..=coyote_frames {
+                let (ok, max_x) = try_clear(gap_tiles, delay);
+                if max_x > best_x {
+                    best_x = max_x;
+                }
+                if ok {
+                    best = true;
+                }
+            }
+            eprintln!("gap={gap_tiles} cleared={best} best_max_x={best_x:.2}");
+            best
+        };
+
+        assert!(
+            clear_gap(8),
+            "expected to clear a same-height gap of 8 empty tiles with coyote jump"
+        );
+        assert!(
+            !clear_gap(9),
+            "must not clear a same-height gap of 9 empty tiles"
+        );
+    }
 }

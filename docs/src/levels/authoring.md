@@ -34,7 +34,7 @@ Use `recommended_max_rise_tiles`, `recommended_max_gap_tiles`, `recommended_min_
 | :--- | :--- |
 | Steady run speed | `vx_ss = min(move_force / linear_damping, max_vx)` |
 | Jump height | `h = jump_impulse² / (2 · \|gravity\|)` |
-| Max gap | Coyote edge jump + `player_width` toe overhang |
+| Max gap | Coyote edge jump + ray-inset overhang (`player_width − 2·ray_offset_inward`) |
 | Tiles | divide by 16px |
 
 ### Counting rise / gap

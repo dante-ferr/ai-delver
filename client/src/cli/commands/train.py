@@ -76,14 +76,13 @@ def raise_keyboard_interrupt(signum, frame):
 
 def _level_hashes_for(levels: list[str]) -> dict[str, str]:
     """Hash on-disk level JSONs for curriculum resolvability."""
-    from level import config as level_config
-    from level import Level
-    import os
+    from level import Level, resolve_level_json, LevelResolveError
 
     hashes: dict[str, str] = {}
     for level_name in levels:
-        level_path = f"{level_config.LEVEL_SAVE_FOLDER_PATH}/{level_name}/level.json"
-        if not os.path.exists(level_path):
+        try:
+            level_path = resolve_level_json(level_name)
+        except LevelResolveError:
             continue
         try:
             with open(level_path, "r", encoding="utf-8") as file:
@@ -123,6 +122,9 @@ def run_train(args):
         client_instance = TrainingClient(server_url=args.server)
 
         coach_levels = [l.strip() for l in args.levels.split(",") if l.strip()]
+        from utils.level_groups import expand_level_list
+
+        coach_levels = expand_level_list(coach_levels)
         if not coach_levels:
             print_json("error", message="No valid levels provided.")
             return

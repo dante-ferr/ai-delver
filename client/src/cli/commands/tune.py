@@ -219,18 +219,28 @@ def _mastery_score(
 
 def _consolidation_levels(level_names: list[str], consolidate_csv: str) -> list[str]:
     """Filter consolidation targets to levels present in the curriculum."""
-    requested = [level.strip() for level in consolidate_csv.split(",") if level.strip()]
+    from utils.level_groups import expand_level_list
+
+    requested = expand_level_list(
+        [level.strip() for level in consolidate_csv.split(",") if level.strip()]
+    )
     present = set(level_names)
     return [name for name in requested if name in present]
 
 
 def run_tune(args):
     """Executes a hyperparameter search using Optuna with sequential mastery scoring."""
+    from utils.level_groups import expand_level_list
+
     client_dir = Path(__file__).resolve().parents[3]
-    level_names = [level.strip() for level in args.levels.split(",") if level.strip()]
+    level_names = expand_level_list(
+        [level.strip() for level in args.levels.split(",") if level.strip()]
+    )
     if not level_names:
         print_json("error", message="No valid levels provided to tune.")
         return
+    # Subprocess train calls reuse the expanded CSV so @groups are not re-parsed there.
+    args.levels = ",".join(level_names)
 
     tune_architecture = bool(getattr(args, "tune_architecture", False))
     tune_ej_only = bool(getattr(args, "tune_ej_only", False))

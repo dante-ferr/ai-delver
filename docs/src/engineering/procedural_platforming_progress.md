@@ -39,11 +39,13 @@ Physics TOMLs (delver.toml + world.toml)
 ### B. Clearance-Aware Vaulting (`_clearance.py`)
 - **Higher Edge Anchoring**: Jump vault ceilings across pits and height shifts are measured relative to $\text{higher\_y} = \min(y_{\text{takeoff}}, y_{\text{landing}})$.
 - **Vault Height**: Vault clearance equals at least $(JH + DH)$ tiles above $\text{higher\_y}$, spanning across gap columns and edge overlap bands on both takeoff and landing platforms.
-- **Contiguous Drop Clearance**: For drops ($\Delta h < 0$), `paint_span_clearance` extends the upper floor's ceiling across the transition gap, preventing ceiling tiles from blocking the Delver's head as they step off into a fall.
+- **Full Drop Chasm Volume Clearance**: For drops ($\Delta h < 0$), `paint_span_clearance` dynamically paints the entire 3D volume $x \in [\text{takeoff\_x0}, \text{land\_x0} + \Delta h]$, $y \in [\text{ceiling}, \text{land\_y}]$ as `CLEARANCE`. This extends the upper floor's ceiling across the full parabolic fall trajectory and prevents `_finalize.py` interior fill from placing solid platform blocks under takeoff edges.
 
 ### C. Structure Placement & Enforced Empty Areas (`_structures.py`)
 - **Static EEA Enforcement**: `can_place_floor_run` checks that no candidate platform tile overlaps existing `CLEARANCE` (EEA) or `PLATFORM` cells. Overlapping candidates are rejected immediately (structure choice weight drops to 0).
 - **Solid Step Face Walls**: In `try_floor_height_shift`, vertical step face walls are painted solid for all rows $y \in [\text{lo\_y}, \text{hi\_y}]$, eliminating hollow notch artifacts (`xx0` edge tips).
+- **Climb Shift Clearance Simplification**: In `try_floor_height_shift`, contiguous climbs ($\Delta h > 0$) set `requires_jump = False` and use ambient `clearance_h`, removing unneeded $JH + DH$ vault ceilings above upper landing edges while maintaining the transition gap required for reaching the upper floor.
+- **Drop Landing Runway Guarantee**: `try_floor_height_shift` enforces `length = max(length, drop_depth + 1)` for drops, ensuring the landing platform provides enough horizontal runway before subsequent structures can generate.
 - **Configurable Transition Gap Wideness**: Height shifts sample transition gap wideness in range `[min_shift_transition_gap_tiles, max_shift_transition_gap_tiles]`, dynamically providing 1 to 3 tiles of open transition corridor.
 
 ### D. Finalization & Actor Anchoring (`_finalize.py`)

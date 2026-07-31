@@ -217,6 +217,11 @@ def paint_span_clearance(
         grid, x0=land_x0, x1=land_x1, floor_y=land_y, height=ambient
     )
 
+    effective_landing_overlap = max(
+        landing_edge_overlap,
+        max(0, land_y - takeoff_y),
+    )
+
     if not requires_jump or height < 1:
         higher_y = min(takeoff_y, land_y)
         ceiling = higher_y - ambient
@@ -231,13 +236,23 @@ def paint_span_clearance(
             floor_y=takeoff_y,
             height=takeoff_h,
         )
+        drop_depth = max(0, land_y - takeoff_y)
+        effective_landing_overlap = max(landing_edge_overlap, drop_depth)
         lip0, lip1 = _landing_edge_band(
             takeoff_x0=takeoff_x0,
             takeoff_x1=takeoff_x1,
             land_x0=land_x0,
             land_x1=land_x1,
-            overlap=landing_edge_overlap,
+            overlap=effective_landing_overlap,
         )
+        # Paint the full drop chasm volume from ceiling down to max(takeoff_y, land_y)
+        drop_lo = min(takeoff_x0, land_x0)
+        drop_hi = max(takeoff_x1, land_x1, land_x0 + effective_landing_overlap)
+        drop_bottom = max(takeoff_y, land_y)
+        for x in range(drop_lo, drop_hi):
+            for y in range(ceiling, drop_bottom):
+                grid.paint_clearance(x, y)
+
         lip_h = max(
             ambient,
             clearance_height_above_floor(floor_y=land_y, ceiling_y=ceiling),

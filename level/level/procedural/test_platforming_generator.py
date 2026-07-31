@@ -418,6 +418,37 @@ class TestClearanceGenerator(unittest.TestCase):
                                         f"Ceiling block at (x={x+dx}, y={y-dy}) blocks fall edge from (x={x}, y={y}) in seed {seed}",
                                     )
 
+    def test_deep_drop_clearance_scales_with_drop_depth(self):
+        from level.procedural._clearance import paint_span_clearance
+        from level.procedural._sketch_grid import CellKind, SketchGrid
+
+        grid = SketchGrid()
+        for x in range(0, 4):
+            grid.paint_platform(x, 10)
+        for x in range(4, 10):
+            grid.paint_platform(x, 14)  # 4-tile drop
+
+        paint_span_clearance(
+            grid,
+            takeoff_x0=0,
+            takeoff_x1=4,
+            takeoff_y=10,
+            land_x0=4,
+            land_x1=10,
+            land_y=14,
+            height=3,
+            floor_clearance_h=3,
+            landing_edge_overlap=2,
+            requires_jump=False,
+        )
+        # For a 4-tile drop, clearance up to takeoff ceiling (row 7 = 10-3) must span at least 4 columns into landing (x=4, 5, 6, 7)
+        for x in range(4, 8):
+            self.assertEqual(
+                grid.get(x, 7),
+                CellKind.CLEARANCE,
+                f"Column {x} at ceiling row 7 should be CLEARANCE for deep drop",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

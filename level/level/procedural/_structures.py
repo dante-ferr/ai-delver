@@ -241,6 +241,9 @@ def try_floor_height_shift(
         return None
     takeoff_y = head.floor_y
     landing_y = takeoff_y - delta_h
+    if delta_h < 0:
+        drop_depth = landing_y - takeoff_y
+        length = max(length, drop_depth + 1)
     tip = head.tip_x
     overlap = max(1, min(head.segment.width, length, int(span_edge_overlap)))
     if head.direction > 0:
@@ -269,7 +272,6 @@ def try_floor_height_shift(
         if not grid.paint_platform(x, landing_y):
             return None
 
-    requires_jump = delta_h > 0  # climb only
     paint_span_clearance(
         grid,
         takeoff_x0=takeoff_span_x0,
@@ -278,35 +280,18 @@ def try_floor_height_shift(
         land_x0=x0,
         land_x1=x1,
         land_y=landing_y,
-        height=span_clearance_h,
+        height=clearance_h,
         floor_clearance_h=clearance_h,
         landing_edge_overlap=overlap,
-        requires_jump=requires_jump,
+        requires_jump=False,
     )
-    if requires_jump:
-        paint_floor_clearance(
-            grid,
-            x0=takeoff_span_x0,
-            x1=takeoff_span_x1,
-            floor_y=takeoff_y,
-            height=max(
-                head.clearance_h,
-                clearance_height_for_edge(
-                    edge_y=takeoff_y,
-                    takeoff_y=takeoff_y,
-                    span_height=span_clearance_h,
-                    floor_clearance=clearance_h,
-                ),
-            ),
-        )
-    else:
-        paint_floor_clearance(
-            grid,
-            x0=takeoff_span_x0,
-            x1=takeoff_span_x1,
-            floor_y=takeoff_y,
-            height=max(head.clearance_h, clearance_h),
-        )
+    paint_floor_clearance(
+        grid,
+        x0=takeoff_span_x0,
+        x1=takeoff_span_x1,
+        floor_y=takeoff_y,
+        height=max(head.clearance_h, clearance_h),
+    )
     seg = FloorSeg(x0, x1, landing_y)
     return PathHead(
         head.direction,

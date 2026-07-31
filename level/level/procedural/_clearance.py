@@ -218,16 +218,37 @@ def paint_span_clearance(
     )
 
     if not requires_jump or height < 1:
+        higher_y = min(takeoff_y, land_y)
+        ceiling = higher_y - ambient
+        takeoff_h = max(
+            ambient,
+            clearance_height_above_floor(floor_y=takeoff_y, ceiling_y=ceiling),
+        )
         paint_floor_clearance(
             grid,
             x0=takeoff_x0,
             x1=takeoff_x1,
             floor_y=takeoff_y,
-            height=ambient,
+            height=takeoff_h,
         )
-        return ambient
+        lip0, lip1 = _landing_edge_band(
+            takeoff_x0=takeoff_x0,
+            takeoff_x1=takeoff_x1,
+            land_x0=land_x0,
+            land_x1=land_x1,
+            overlap=landing_edge_overlap,
+        )
+        lip_h = max(
+            ambient,
+            clearance_height_above_floor(floor_y=land_y, ceiling_y=ceiling),
+        )
+        paint_floor_clearance(
+            grid, x0=lip0, x1=lip1, floor_y=land_y, height=lip_h
+        )
+        return takeoff_h
 
-    ceiling = span_ceiling_y(takeoff_y=takeoff_y, span_height=height)
+    higher_y = min(takeoff_y, land_y)
+    ceiling = higher_y - height
     takeoff_h = max(
         ambient,
         clearance_height_above_floor(floor_y=takeoff_y, ceiling_y=ceiling),
@@ -250,25 +271,23 @@ def paint_span_clearance(
 
     pit_floor = max(takeoff_y, land_y)
     for x in range(gap_lo, gap_hi):
-        for y in range(ceiling, pit_floor):
+        for y in range(ceiling, pit_floor + 1):
             grid.paint_clearance(x, y)
 
-    # Climb only: raise the landing lip so the arc is not sealed at the edge.
-    # Drops must not inherit the takeoff vault after the edge.
-    if land_y < takeoff_y:
-        lip0, lip1 = _landing_edge_band(
-            takeoff_x0=takeoff_x0,
-            takeoff_x1=takeoff_x1,
-            land_x0=land_x0,
-            land_x1=land_x1,
-            overlap=landing_edge_overlap,
-        )
-        lip_h = max(
-            ambient,
-            clearance_height_above_floor(floor_y=land_y, ceiling_y=ceiling),
-        )
-        paint_floor_clearance(
-            grid, x0=lip0, x1=lip1, floor_y=land_y, height=lip_h
-        )
+    # Both climbs and drops span vault clearance into the landing edge overlap band.
+    lip0, lip1 = _landing_edge_band(
+        takeoff_x0=takeoff_x0,
+        takeoff_x1=takeoff_x1,
+        land_x0=land_x0,
+        land_x1=land_x1,
+        overlap=landing_edge_overlap,
+    )
+    lip_h = max(
+        ambient,
+        clearance_height_above_floor(floor_y=land_y, ceiling_y=ceiling),
+    )
+    paint_floor_clearance(
+        grid, x0=lip0, x1=lip1, floor_y=land_y, height=lip_h
+    )
 
     return takeoff_h

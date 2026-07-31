@@ -12,29 +12,29 @@ use_curriculum = false
 continue_weight = 2.5
 pit_weight = 4.0
 floor_height_shift_weight = 2.0
-turn_weight = 2.5
+turn_weight = 0.0
 # Climb → reverse → extend the other way (creates switchbacks).
-switchback_weight = 3.0
+switchback_weight = 0.0
 
 # Prefer continuing in the current heading vs turning (turns also require
 # the current floor to sit higher than the previous one).
 forward_bias = 1.2
 # After a successful climb, chance to immediately reverse direction.
-post_climb_turn_odds = 0.65
+post_climb_turn_odds = 0.0
 # Multiplier applied to turn_weight while standing above the previous floor.
 post_climb_turn_boost = 3.0
 
 # Floor / platform sizing
-min_platform_width = 2
+min_platform_width = 3
 max_platform_width = 6
-min_continue_length = 2
+min_continue_length = 3
 max_continue_length = 6
 spawn_platform_width = 4
 spawn_platform_thickness = 1
 
 # Path length (number of structure steps after spawn)
-min_path_steps = 8
-max_path_steps = 14
+min_path_steps = 6
+max_path_steps = 10
 
 # Vertical / gap authoring
 # Deepest allowed downward surface delta in tiles (negative delta_h floor).
@@ -45,8 +45,11 @@ min_delta_magnitude = 0
 easy_max_gap_tiles = 5
 # Pits must span at least this many empty tiles (horizontal depth).
 min_gap_tiles = 5
-# How many tiles of each platform edge are included in a pit/shift span.
-span_edge_overlap_tiles = 1
+# How many tiles of each platform edge are included in a pit span.
+span_edge_overlap_tiles = 2
+# Transition gap wideness range (tiles) for height-shifted floors (falls and climbs).
+min_shift_transition_gap_tiles = 1
+max_shift_transition_gap_tiles = 3
 
 # Enforced empty clearance above floors.
 # Heights are in Delver-height multiples; absolute tiles = ceil(DH * multiplier).

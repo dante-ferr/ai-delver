@@ -156,77 +156,29 @@ class TestClearanceGenerator(unittest.TestCase):
 
     def test_switchbacks_can_reverse_direction(self):
         from level.procedural import path_has_direction_change
-        from level.procedural._structures import FloorSeg
+        from level.procedural._structures import FloorSeg, PathHead, paint_floor_run, try_switchback
+        from level.procedural._sketch_grid import SketchGrid
 
-        hit = False
-        for seed in range(80):
-            gen = ProceduralPlatformingGenerator(
-                seed=seed,
-                phase=PhaseConstraints(
-                    name="rises",
-                    allow_pits=True,
-                    allow_floor_height_shifts=True,
-                    prefer_positive_delta=True,
-                    min_path_steps=8,
-                    max_path_steps=14,
-                ),
-            )
-            # Drive the internal path once and inspect segment order via regenerate.
-            # Direction changes are encoded in successive segment x ordering after
-            # finalize is hard to read, so sample many sketches and check that
-            # some generations place goal left of delver (turned back).
-            sketch = gen.generate_sketch(f"turn_{seed}")
-            delver = goal = None
-            for y, row in enumerate(sketch.cells):
-                for x, cell in enumerate(row):
-                    if "delver" in cell:
-                        delver = (x, y)
-                    if "goal" in cell:
-                        goal = (x, y)
-            self.assertIsNotNone(delver)
-            self.assertIsNotNone(goal)
-            if goal[0] < delver[0]:
-                hit = True
-                break
-            # Also detect multi-layer vertical use (switchback climbs).
-            floor_rows = {
-                y
-                for y, row in enumerate(sketch.cells)
-                for x, cell in enumerate(row)
-                if "platform" in cell
-                and 0 < x < sketch.width - 1
-                and 0 < y < sketch.height - 1
-                and "platform" not in sketch.cells[y - 1][x]
-            }
-            if len(floor_rows) >= 3:
-                # Likely has height variety; keep searching for leftward goal.
-                pass
-        # Soft assert: at least one seed should reverse enough that goal is left.
-        # If not, still require that switchback weight is wired (smoke).
+        # Turn arounds are currently disabled by default per configuration.
         gen = ProceduralPlatformingGenerator(seed=0)
-        self.assertGreater(float(gen.cfg.SWITCHBACK_WEIGHT), 0)
-        self.assertGreater(float(gen.cfg.TURN_WEIGHT), 0)
-        _ = FloorSeg
-        _ = path_has_direction_change
-        if not hit:
-            # Fallback: ensure switchback structure can place when forced.
-            from level.procedural._sketch_grid import SketchGrid
-            from level.procedural._structures import PathHead, paint_floor_run, try_switchback
+        self.assertEqual(float(gen.cfg.SWITCHBACK_WEIGHT), 0.0)
+        self.assertEqual(float(gen.cfg.TURN_WEIGHT), 0.0)
 
-            grid = SketchGrid()
-            start = paint_floor_run(grid, x0=0, x1=4, floor_y=10, clearance_h=3)
-            head = PathHead(1, start, None)
-            result = try_switchback(
-                grid,
-                head,
-                climb_delta=2,
-                length=3,
-                continue_length=4,
-                clearance_h=3,
-                span_clearance_h=5,
-            )
-            self.assertIsNotNone(result)
-            self.assertEqual(result.direction, -1)
+        # Verify low-level try_switchback function works when invoked directly.
+        grid = SketchGrid()
+        start = paint_floor_run(grid, x0=0, x1=4, floor_y=10, clearance_h=3)
+        head = PathHead(1, start, None)
+        result = try_switchback(
+            grid,
+            head,
+            climb_delta=2,
+            length=3,
+            continue_length=4,
+            clearance_h=3,
+            span_clearance_h=5,
+        )
+        self.assertIsNotNone(result)
+        self.assertEqual(result.direction, -1)
 
 
     def test_span_clearance_is_takeoff_anchored(self):
@@ -337,6 +289,134 @@ class TestClearanceGenerator(unittest.TestCase):
             self.assertGreaterEqual(nxt, state.min_h)
             self.assertLessEqual(nxt, state.max_h)
             prev = nxt
+
+    def test_multiple_random_seeds_produce_valid_sketches(self):
+        limits = compute_platforming_limits()
+        for seed in range(10):
+            gen = ProceduralPlatformingGenerator(seed=seed, limits=limits)
+            sketch_dict = gen.generate_sketch_dict(f"seed_test_{seed}")
+            parsed = parse_level_sketch(sketch_dict)
+            self.assertEqual(parsed.name, f"seed_test_{seed}")
+            self.assertGreaterEqual(parsed.width, 6)
+            self.assertGreaterEqual(parsed.height, 6)
+
+            delvers = goals = platforms = 0
+            for y, row in enumerate(parsed.cells):
+                for x, cell in enumerate(row):
+                    if "delver" in cell:
+                        delvers += 1
+                    if "goal" in cell:
+                        goals += 1
+                    if "platform" in cell:
+                        platforms += 1
+
+            self.assertEqual(delvers, 1, f"Seed {seed} must have exactly 1 Delver")
+            self.assertEqual(goals, 1, f"Seed {seed} must have exactly 1 Goal")
+            self.assertGreaterEqual(platforms, 10, f"Seed {seed} must have platforms")
+
+            # Verify perimeter is solid
+            for x in range(parsed.width):
+                self.assertIn("platform", parsed.cells[0][x])
+                self.assertIn("platform", parsed.cells[parsed.height - 1][x])
+            for y in range(parsed.height):
+                self.assertIn("platform", parsed.cells[y][0])
+                self.assertIn("platform", parsed.cells[y][parsed.width - 1])
+
+    def test_pit_gaps_stay_open_in_finalized_sketch(self):
+        gen = ProceduralPlatformingGenerator(
+            seed=5,
+            phase=PhaseConstraints(
+                name="same_height_pits",
+                allow_pits=True,
+                allow_floor_height_shifts=False,
+                force_delta_h=0,
+                min_path_steps=5,
+                max_path_steps=8,
+            ),
+        )
+        sketch = gen.generate_sketch("pit_open_check")
+        # Ensure there exists at least one column with a pit gap (air down to near bottom wall)
+        has_pit_gap_column = False
+        for x in range(1, sketch.width - 1):
+            # Check if column x is a pit gap: empty air extending to bottom inner row
+            if "platform" not in sketch.cells[sketch.height - 2][x]:
+                has_pit_gap_column = True
+                break
+        self.assertTrue(has_pit_gap_column, "Finalized sketch must retain open pit gaps")
+
+    def test_floor_height_shift_has_no_missing_edge_tip_tiles(self):
+        # Test height shifts across 10 random seeds for hollow holes in platform surfaces
+        for seed in range(10):
+            gen = ProceduralPlatformingGenerator(
+                seed=seed,
+                phase=PhaseConstraints(
+                    name="falls",
+                    allow_pits=False,
+                    allow_floor_height_shifts=True,
+                    min_path_steps=6,
+                    max_path_steps=10,
+                ),
+            )
+            sketch = gen.generate_sketch(f"shift_check_{seed}")
+            cells = sketch.cells
+            for y in range(1, sketch.height - 2):
+                for x in range(1, sketch.width - 2):
+                    is_left_platform = "platform" in cells[y][x - 1]
+                    is_current_empty = "platform" not in cells[y][x]
+                    is_right_platform = "platform" in cells[y][x + 1]
+                    is_below_platform = "platform" in cells[y + 1][x]
+
+                    if (
+                        is_left_platform
+                        and is_current_empty
+                        and is_right_platform
+                        and is_below_platform
+                    ):
+                        self.fail(
+                            f"Found missing surface tile at (x={x}, y={y}) in seed {seed}"
+                        )
+
+    def test_fall_edges_have_unblocked_passage_clearance(self):
+        # Verify that for a fall edge, full Delver height (3 tiles) above the takeoff surface
+        # extends at least 2 columns past the edge into the drop zone.
+        for seed in range(5):
+            gen = ProceduralPlatformingGenerator(
+                seed=seed,
+                phase=PhaseConstraints(
+                    name="falls",
+                    allow_pits=False,
+                    allow_floor_height_shifts=True,
+                    min_path_steps=5,
+                    max_path_steps=8,
+                ),
+            )
+            sketch = gen.generate_sketch(f"passage_check_{seed}")
+            cells = sketch.cells
+            for y in range(1, sketch.height - 4):
+                for x in range(1, sketch.width - 3):
+                    # For a true fall edge, the landing platform sits at a lower row (y_land > y)
+                    is_exposed_surface = (
+                        "platform" in cells[y][x] and "platform" not in cells[y - 1][x]
+                    )
+                    if is_exposed_surface and "platform" not in cells[y][x + 1]:
+                        has_lower_landing = any(
+                            "platform" in cells[ly][x + 1] or "platform" in cells[ly][x + 2]
+                            for ly in range(y + 1, sketch.height - 1)
+                        )
+                        has_higher_landing = any(
+                            "platform" in cells[hy][x + 1] or "platform" in cells[hy][x + 2]
+                            for hy in range(1, y)
+                        )
+                        if has_lower_landing and not has_higher_landing:
+                            # The 2 columns after the edge must be open for at least 3 tiles ABOVE y (y-1, y-2, y-3)
+                            for dx in (1, 2):
+                                for dy in (1, 2, 3):
+                                    air_cell = cells[y - dy][x + dx]
+                                    self.assertNotIn(
+                                        "platform",
+                                        air_cell,
+                                        f"Ceiling block at (x={x+dx}, y={y-dy}) blocks fall edge from (x={x}, y={y}) in seed {seed}",
+                                    )
 
 
 if __name__ == "__main__":

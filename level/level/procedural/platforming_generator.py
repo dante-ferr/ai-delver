@@ -230,7 +230,12 @@ class ProceduralPlatformingGenerator:
         return max(self.span_clearance_h, ambient)
 
     def _span_edge_overlap(self) -> int:
-        return max(1, int(self.cfg.get("span_edge_overlap_tiles", 1)))
+        return max(2, int(self.cfg.get("span_edge_overlap_tiles", 2)))
+
+    def _sample_shift_transition_gap(self) -> int:
+        lo = int(self.cfg.get("min_shift_transition_gap_tiles", 2))
+        hi = int(self.cfg.get("max_shift_transition_gap_tiles", max(lo, 4)))
+        return self.rng.randint(lo, max(lo, hi))
 
     def _step(
         self,
@@ -266,7 +271,11 @@ class ProceduralPlatformingGenerator:
                     ledged = self._try_delay_ledge(grid, result, clearance)
                     if ledged is not None:
                         return ledged
-                if pick in ("pit", "shift", "switchback") and can_turn(result):
+                if (
+                    pick in ("pit", "shift", "switchback")
+                    and can_turn(result)
+                    and float(self.cfg.POST_CLIMB_TURN_ODDS) > 0.0
+                ):
                     if self.rng.random() < float(self.cfg.POST_CLIMB_TURN_ODDS):
                         turned = try_turn(result)
                         if turned is not None:
@@ -339,7 +348,7 @@ class ProceduralPlatformingGenerator:
                 length=self._sample_width(),
                 clearance_h=next_h,
                 span_clearance_h=span_h,
-                span_edge_overlap=overlap,
+                span_edge_overlap=self._sample_shift_transition_gap(),
             )
         if kind == "turn":
             turned = try_turn(head)

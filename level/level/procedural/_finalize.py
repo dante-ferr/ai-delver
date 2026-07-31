@@ -68,12 +68,33 @@ def finalize_sketch_dict(
         elif kind == CellKind.CLEARANCE:
             playable_air.add((lx, ly))
 
-    # Standing cell immediately above every platform floor stays empty.
+    delver_size = world_object_size("delver")
+    goal_size = world_object_size("goal")
+    reserve_h = max(delver_size[1], goal_size[1], 3)
+
+    # Reserve full standing height for Delver and Goal above every exposed platform floor.
     for px, py in list(platforms):
-        above = (px, py - 1)
-        if 0 < above[0] < width - 1 and 0 < above[1] < height - 1:
-            if above not in platforms:
-                playable_air.add(above)
+        if (px, py - 1) not in platforms:
+            for dh in range(1, reserve_h + 1):
+                air_y = py - dh
+                if 0 < air_y < height - 1:
+                    if (px, air_y) not in platforms:
+                        playable_air.add((px, air_y))
+
+    # Pit gaps (columns with clearance at or below floor level with no platform below)
+    # propagate open air down to the bottom boundary wall so pits stay open.
+    pit_columns = {x for (x, y) in playable_air if (x, y) not in platforms}
+    for x in pit_columns:
+        clearance_ys = [y for (cx, y) in playable_air if cx == x]
+        if clearance_ys:
+            max_clearance_y = max(clearance_ys)
+            has_platform_below = any(
+                (x, cy) in platforms for cy in range(max_clearance_y + 1, height - 1)
+            )
+            if not has_platform_below:
+                for dy in range(max_clearance_y + 1, height - 1):
+                    if (x, dy) not in platforms:
+                        playable_air.add((x, dy))
 
     # Fill every interior cell that is not part of the carved corridor.
     for y in range(1, height - 1):

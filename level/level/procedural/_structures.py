@@ -151,7 +151,7 @@ def try_pit(
     landing_width: int,
     clearance_h: int,
     span_clearance_h: int,
-    span_edge_overlap: int = 1,
+    span_edge_overlap: int = 2,
 ) -> PathHead | None:
     """Place a gap then a landing platform with surface delta ``delta_h`` (climb +)."""
     if gap < 1 or landing_width < 1:
@@ -159,7 +159,7 @@ def try_pit(
     takeoff_y = head.floor_y
     landing_y = takeoff_y - delta_h  # climb → smaller sketch y
     tip = head.tip_x
-    overlap = max(1, int(span_edge_overlap))
+    overlap = max(1, min(head.segment.width, landing_width, int(span_edge_overlap)))
     if head.direction > 0:
         gap_x0 = tip
         gap_x1 = tip + gap
@@ -230,7 +230,7 @@ def try_floor_height_shift(
     length: int,
     clearance_h: int,
     span_clearance_h: int,
-    span_edge_overlap: int = 1,
+    span_edge_overlap: int = 2,
 ) -> PathHead | None:
     """Contiguous floor height change (no gap).
 
@@ -242,7 +242,7 @@ def try_floor_height_shift(
     takeoff_y = head.floor_y
     landing_y = takeoff_y - delta_h
     tip = head.tip_x
-    overlap = max(1, int(span_edge_overlap))
+    overlap = max(1, min(head.segment.width, length, int(span_edge_overlap)))
     if head.direction > 0:
         x0, x1 = tip, tip + length
         face_x = tip
@@ -259,7 +259,7 @@ def try_floor_height_shift(
 
     # Vertical step face between the two surfaces at the transition column.
     lo_y, hi_y = sorted((takeoff_y, landing_y))
-    for y in range(lo_y + 1, hi_y):
+    for y in range(lo_y, hi_y + 1):
         if grid.is_blocked_for_platform(face_x, y):
             return None
         if not grid.paint_platform(face_x, y):

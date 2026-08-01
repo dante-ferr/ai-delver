@@ -175,8 +175,16 @@ def try_pit(
         takeoff_span_x0 = head.segment.x0
         takeoff_span_x1 = min(head.segment.x1, head.segment.x0 + overlap)
 
-    if not can_place_floor_run(grid, x0=land_x0, x1=land_x1, floor_y=landing_y):
-        return None
+    higher_y = min(takeoff_y, landing_y)
+    from level.sketch.platforming_limits import compute_platforming_limits
+    import math
+
+    limits = compute_platforming_limits()
+    min_pit_depth = max(5, math.ceil(limits.max_jump_height_tiles) + 1)
+    for x in range(gap_x0, gap_x1):
+        for y in range(higher_y, higher_y + min_pit_depth + 1):
+            if grid.is_platform(x, y):
+                return None
 
     # Platforms first so span clearance never has to fight missing floors.
     for x in range(land_x0, land_x1):
@@ -212,6 +220,8 @@ def try_pit(
             ),
         ),
     )
+    for x in range(gap_x0, gap_x1):
+        grid.pit_columns.add(x)
     seg = FloorSeg(land_x0, land_x1, landing_y)
     return PathHead(
         head.direction,

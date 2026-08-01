@@ -39,7 +39,8 @@ Physics TOMLs (delver.toml + world.toml)
 ### B. Clearance-Aware Vaulting (`_clearance.py`)
 - **Higher Edge Anchoring**: Jump vault ceilings across pits and height shifts are measured relative to $\text{higher\_y} = \min(y_{\text{takeoff}}, y_{\text{landing}})$.
 - **Vault Height**: Vault clearance equals at least $(JH + DH)$ tiles above $\text{higher\_y}$, spanning across gap columns and edge overlap bands on both takeoff and landing platforms.
-- **Full Drop Chasm Volume Clearance**: For drops ($\Delta h < 0$), `paint_span_clearance` dynamically paints the entire 3D volume $x \in [\text{takeoff\_x0}, \text{land\_x0} + \Delta h]$, $y \in [\text{ceiling}, \text{land\_y}]$ as `CLEARANCE`. This extends the upper floor's ceiling across the full parabolic fall trajectory and prevents `_finalize.py` interior fill from placing solid platform blocks under takeoff edges.
+- **Drop Chasm Clearance Scoping**: `paint_span_clearance` scopes drop chasm volume to columns past the takeoff edge (`chasm_x0 = takeoff_x1`), preventing solid rock under takeoff platforms from being cleared into empty un-filled rectangles.
+- **Chasm Bottom Clamped to Landing Surface**: The chasm volume never clears at or below the landing surface ($y < y_{\text{landing}}$). For climbs the landing slab sits above the takeoff, so clearing down to the takeoff level used to leave hidden air pockets under climb slabs after exterior fill.
 
 ### C. Structure Placement & Enforced Empty Areas (`_structures.py`)
 - **Static EEA Enforcement**: `can_place_floor_run` checks that no candidate platform tile overlaps existing `CLEARANCE` (EEA) or `PLATFORM` cells. Overlapping candidates are rejected immediately (structure choice weight drops to 0).
@@ -47,16 +48,20 @@ Physics TOMLs (delver.toml + world.toml)
 - **Climb Shift Clearance Simplification**: In `try_floor_height_shift`, contiguous climbs ($\Delta h > 0$) set `requires_jump = False` and use ambient `clearance_h`, removing unneeded $JH + DH$ vault ceilings above upper landing edges while maintaining the transition gap required for reaching the upper floor.
 - **Drop Landing Runway Guarantee**: `try_floor_height_shift` enforces `length = max(length, drop_depth + 1)` for drops, ensuring the landing platform provides enough horizontal runway before subsequent structures can generate.
 - **Configurable Transition Gap Wideness**: Height shifts sample transition gap wideness in range `[min_shift_transition_gap_tiles, max_shift_transition_gap_tiles]`, dynamically providing 1 to 3 tiles of open transition corridor.
+- **Bidirectional Travel**: All structures (`try_continue`, `try_pit`, `try_floor_height_shift`, `try_switchback`) are direction-agnostic and grow the path along `PathHead.direction` ($+1$ right, $-1$ left). The generator samples the initial travel direction per level and mirrors the spawn platform, so levels can run left-to-right or right-to-left.
 
 ### D. Finalization & Actor Anchoring (`_finalize.py`)
 - **Solid Perimeter Sealing**: Outer boundary walls seal the entire level grid.
+- **Un-escapable Pit Depth Enforcement**: In `finalize_sketch_dict`, pit gap columns propagate open air for at least `min_pit_depth = math.ceil(JH) + 1` (5 tiles) below the floor edge, preventing the Delver from jumping out of pit voids.
+- **Pit Span Translation Alignment**: Registered pit columns are translated with the same `+1` wall offset as `to_local`. The previous off-by-one shifted every pit span one column left, carving open air under the takeoff lip (1-tile cut keeping the upper floor tile) and leaving the last gap column plugged at the pit's right edge.
+- **Bottom Margin Protection**: `finalize_sketch_dict` reserves `bottom_margin_tiles = min_pit_depth` below the lowest platform, ensuring pits near the bottom of the sketch maintain full 5-tile depth above the bottom boundary wall.
 - **Headroom Protection**: `finalize_sketch_dict` reserves `reserve_h = max(delver_h, goal_h, 3)` tiles of standing air above every exposed platform floor before running the interior fill loop.
-- **Pit Void Preservation**: Pit gap columns with clearance below floor height propagate open air down to the bottom perimeter wall, preventing the fill algorithm from closing pit chasms.
-- **Extremity Anchoring**: Delver (spawn) is placed on the left extremity platform, and Goal is placed on the right extremity platform.
+- **Extremity Anchoring**: Delver (spawn) and Goal are anchored at the trailing edges of travel on the start / goal segments — left/right extremities for left-to-right levels, flipped for right-to-left levels (`travel_direction` selects the anchor polarity).
 
 ### E. Configuration & Testing
 - **Centralized TOML**: Configured via `level/level/procedural_platforming.toml`.
-- **Test Suite**: 20 automated unit tests in `level/level/procedural/test_platforming_generator.py` covering delta gap caching, seed reproducibility, solid perimeters, unblocked headroom, and pit void preservation.
+- **Travel Direction Bias**: `ltr_direction_bias` in $[-1, 1]$ controls level orientation: $+1$ always left-to-right, $-1$ always right-to-left, $0$ equal odds ($P(\text{LTR}) = (1 + \text{bias}) / 2$). Extremes short-circuit without drawing RNG, so $\text{bias} = \pm 1$ keeps seeds exactly mirrored between orientations.
+- **Test Suite**: 27 automated unit tests in `level/level/procedural/test_platforming_generator.py` covering delta gap caching, seed reproducibility, solid perimeters, unblocked headroom, pit void preservation, pit span alignment, solid fill under climb landings, floating platform tile detection, and travel direction bias orientation/invariants.
 
 ---
 

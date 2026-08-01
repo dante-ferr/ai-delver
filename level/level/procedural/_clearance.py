@@ -245,12 +245,19 @@ def paint_span_clearance(
             land_x1=land_x1,
             overlap=effective_landing_overlap,
         )
-        # Paint the full drop chasm volume from ceiling down to max(takeoff_y, land_y)
-        drop_lo = min(takeoff_x0, land_x0)
-        drop_hi = max(takeoff_x1, land_x1, land_x0 + effective_landing_overlap)
-        drop_bottom = max(takeoff_y, land_y)
-        for x in range(drop_lo, drop_hi):
-            for y in range(ceiling, drop_bottom):
+        # Drop chasm volume only extends past the takeoff edge (not under takeoff platform)
+        if takeoff_x1 <= land_x0:
+            chasm_x0 = takeoff_x1
+            chasm_x1 = max(land_x1, land_x0 + effective_landing_overlap)
+        else:
+            chasm_x0 = min(land_x0, land_x1 - effective_landing_overlap)
+            chasm_x1 = takeoff_x0
+
+        # Never clear at or below the landing surface: for climbs the landing
+        # slab is above the takeoff, and carving down to the takeoff level would
+        # leave a hidden air pocket under the slab after exterior fill.
+        for x in range(chasm_x0, chasm_x1):
+            for y in range(ceiling, land_y):
                 grid.paint_clearance(x, y)
 
         lip_h = max(
@@ -284,7 +291,12 @@ def paint_span_clearance(
     else:
         gap_lo, gap_hi = 0, 0
 
-    pit_floor = max(takeoff_y, land_y)
+    from level.sketch.platforming_limits import compute_platforming_limits
+    import math
+
+    limits = compute_platforming_limits()
+    min_pit_depth = max(5, math.ceil(limits.max_jump_height_tiles) + 1)
+    pit_floor = max(takeoff_y, land_y) + min_pit_depth
     for x in range(gap_lo, gap_hi):
         for y in range(ceiling, pit_floor + 1):
             grid.paint_clearance(x, y)

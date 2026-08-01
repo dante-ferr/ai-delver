@@ -19,15 +19,18 @@ switchback_weight = 0.0
 # Prefer continuing in the current heading vs turning (turns also require
 # the current floor to sit higher than the previous one).
 forward_bias = 1.2
+# Horizontal travel direction bias in [-1, 1]: +1 = always left-to-right,
+# -1 = always right-to-left, 0 = equal odds. P(left-to-right) = (1 + bias) / 2.
+ltr_direction_bias = 0.0
 # After a successful climb, chance to immediately reverse direction.
 post_climb_turn_odds = 0.0
 # Multiplier applied to turn_weight while standing above the previous floor.
 post_climb_turn_boost = 3.0
 
 # Floor / platform sizing
-min_platform_width = 3
+min_platform_width = 4
 max_platform_width = 6
-min_continue_length = 3
+min_continue_length = 4
 max_continue_length = 6
 spawn_platform_width = 4
 spawn_platform_thickness = 1

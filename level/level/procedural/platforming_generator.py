@@ -139,10 +139,15 @@ class ProceduralPlatformingGenerator:
         )
         spawn_w = int(self.cfg.SPAWN_PLATFORM_WIDTH)
         spawn_clearance = clearance.current
+        direction = self._sample_travel_direction()
+        if direction > 0:
+            spawn_x0, spawn_x1 = 0, spawn_w
+        else:
+            spawn_x0, spawn_x1 = -spawn_w, 0
         start = paint_floor_run(
             grid,
-            x0=0,
-            x1=spawn_w,
+            x0=spawn_x0,
+            x1=spawn_x1,
             floor_y=0,
             clearance_h=spawn_clearance,
         )
@@ -150,7 +155,7 @@ class ProceduralPlatformingGenerator:
             raise ValueError("Failed to paint spawn platform.")
 
         head = PathHead(
-            direction=1,
+            direction=direction,
             segment=start,
             prev_floor_y=None,
             clearance_h=spawn_clearance,
@@ -219,6 +224,7 @@ class ProceduralPlatformingGenerator:
             end_seg=goal_seg,
             pad_tiles=int(self.cfg.FINALIZE_PAD_TILES),
             top_margin_tiles=int(self.cfg.TOP_MARGIN_TILES),
+            travel_direction=direction,
         )
 
     def generate_sketch(self, name: str, difficulty: float = 0.5) -> LevelSketch:
@@ -317,6 +323,9 @@ class ProceduralPlatformingGenerator:
             if not self.phase.allow_pits:
                 return None
             delta_h = self._sample_delta_h()
+            min_depth = max(5, math.ceil(self.limits.max_jump_height_tiles) + 1)
+            if delta_h < 0 and abs(delta_h) < min_depth:
+                delta_h = -min_depth
             gap = self._sample_gap(delta_h)
             if gap is None:
                 return None
@@ -476,6 +485,19 @@ class ProceduralPlatformingGenerator:
         lo = int(self.cfg.MIN_CONTINUE_LENGTH)
         hi = int(self.cfg.MAX_CONTINUE_LENGTH)
         return self.rng.randint(lo, max(lo, hi))
+
+    def _sample_travel_direction(self) -> int:
+        """+1 left-to-right, -1 right-to-left; P(LTR) = (1 + bias) / 2.
+
+        Extremes short-circuit without drawing from the RNG so bias=1 keeps
+        legacy seeds reproducible.
+        """
+        bias = _clamp(float(self.cfg.get("ltr_direction_bias", 1.0)), -1.0, 1.0)
+        if bias >= 1.0:
+            return 1
+        if bias <= -1.0:
+            return -1
+        return 1 if self.rng.random() < (1.0 + bias) / 2.0 else -1
 
     def _try_neighbor_pit_bridge(
         self,

@@ -16,6 +16,7 @@ class SketchGrid:
 
     def __init__(self) -> None:
         self._cells: dict[tuple[int, int], CellKind] = {}
+        self.pit_columns: set[int] = set()
         self.min_x = 0
         self.max_x = -1
         self.min_y = 0

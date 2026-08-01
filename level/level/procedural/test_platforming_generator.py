@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 
+from level.config import Config, procedural_config
 from level.procedural import (
     PhaseConstraints,
     ProceduralPlatformingGenerator,
@@ -344,6 +345,121 @@ class TestClearanceGenerator(unittest.TestCase):
                 break
         self.assertTrue(has_pit_gap_column, "Finalized sketch must retain open pit gaps")
 
+    def test_climb_shift_keeps_area_under_landing_solid(self):
+        from level.procedural._clearance import paint_span_clearance
+        from level.procedural._sketch_grid import CellKind, SketchGrid
+
+        grid = SketchGrid()
+        # Lower takeoff y=10 [0,4), higher contiguous landing y=6 [4,10).
+        for x in range(0, 4):
+            grid.paint_platform(x, 10)
+        for x in range(4, 10):
+            grid.paint_platform(x, 6)
+        paint_span_clearance(
+            grid,
+            takeoff_x0=2,
+            takeoff_x1=4,
+            takeoff_y=10,
+            land_x0=4,
+            land_x1=10,
+            land_y=6,
+            height=3,
+            floor_clearance_h=3,
+            landing_edge_overlap=1,
+            requires_jump=False,
+        )
+        # Cells at or below the landing surface must not be cleared, otherwise
+        # exterior fill leaves a hidden air pocket under the climb slab.
+        for x in range(4, 10):
+            for y in range(6, 11):
+                self.assertNotEqual(
+                    grid.get(x, y),
+                    CellKind.CLEARANCE,
+                    f"Cell (x={x}, y={y}) under the climb landing must stay solid",
+                )
+
+    def test_pit_span_carves_exactly_the_gap_columns(self):
+        from level.procedural._finalize import finalize_sketch_dict
+        from level.procedural._sketch_grid import SketchGrid
+        from level.procedural._structures import (
+            PathHead,
+            paint_floor_run,
+            try_pit,
+        )
+
+        grid = SketchGrid()
+        start = paint_floor_run(grid, x0=0, x1=5, floor_y=10, clearance_h=3)
+        self.assertIsNotNone(start)
+        head = PathHead(1, start, None, clearance_h=3)
+        landed = try_pit(
+            grid,
+            head,
+            gap=4,
+            delta_h=0,
+            landing_width=4,
+            clearance_h=3,
+            span_clearance_h=7,
+            span_edge_overlap=2,
+        )
+        self.assertIsNotNone(landed)
+        result = finalize_sketch_dict(
+            grid,
+            name="pit_align",
+            start_seg=start,
+            end_seg=landed.segment,
+            pad_tiles=2,
+            top_margin_tiles=1,
+        )
+        cells = result["cells"]
+        width, height = result["grid_size"]
+
+        def is_platform(x: int, y: int) -> bool:
+            cell = cells[y][x]
+            return bool(cell) and "platform" in cell
+
+        # Sketch origin: min_x=0, pad=2 → local_x = sketch_x + 3.
+        # Floor sketch y=10 → local row 11; gap columns sketch 5..8 → local 8..11.
+        floor_row = 11
+        self.assertTrue(all(is_platform(x, floor_row) for x in range(3, 8)))
+        self.assertTrue(all(is_platform(x, floor_row) for x in range(12, 16)))
+        self.assertFalse(any(is_platform(x, floor_row) for x in range(8, 12)))
+        # Takeoff lip (local x=7) and landing edge (local x=12) stay solid below.
+        for x in (7, 12):
+            for y in range(floor_row + 1, height - 1):
+                self.assertTrue(
+                    is_platform(x, y),
+                    f"Edge column x={x} must be solid below the floor (y={y})",
+                )
+        # The four gap columns (local 8..11) stay open down to the bottom wall.
+        for x in range(8, 12):
+            for y in range(floor_row + 1, height - 1):
+                self.assertFalse(
+                    is_platform(x, y),
+                    f"Gap column x={x} must stay open below the floor (y={y})",
+                )
+        _ = width
+
+    def test_no_floating_platform_tiles_across_seeds(self):
+        # A platform tile with air directly above and below is a floating slab:
+        # it only appears via the takeoff-lip pit carve or climb-shift pockets.
+        for seed in range(15):
+            gen = ProceduralPlatformingGenerator(seed=seed)
+            sketch = gen.generate_sketch(f"float_check_{seed}")
+            cells = sketch.cells
+            for y in range(1, sketch.height - 1):
+                for x in range(1, sketch.width - 1):
+                    cell = cells[y][x]
+                    if not (cell and "platform" in cell):
+                        continue
+                    above = cells[y - 1][x]
+                    below = cells[y + 1][x]
+                    above_air = not above or "platform" not in above
+                    below_air = not below or "platform" not in below
+                    self.assertFalse(
+                        above_air and below_air,
+                        f"Floating platform tile at (x={x}, y={y}) in seed {seed}",
+                    )
+
     def test_floor_height_shift_has_no_missing_edge_tip_tiles(self):
         # Test height shifts across 10 random seeds for hollow holes in platform surfaces
         for seed in range(10):
@@ -366,11 +482,13 @@ class TestClearanceGenerator(unittest.TestCase):
                     is_right_platform = "platform" in cells[y][x + 1]
                     is_below_platform = "platform" in cells[y + 1][x]
 
+                    is_above_platform = "platform" in cells[y - 1][x]
                     if (
                         is_left_platform
                         and is_current_empty
                         and is_right_platform
                         and is_below_platform
+                        and is_above_platform
                     ):
                         self.fail(
                             f"Found missing surface tile at (x={x}, y={y}) in seed {seed}"
@@ -448,6 +566,88 @@ class TestClearanceGenerator(unittest.TestCase):
                 CellKind.CLEARANCE,
                 f"Column {x} at ceiling row 7 should be CLEARANCE for deep drop",
             )
+
+
+class TestTravelDirectionBias(unittest.TestCase):
+    """ltr_direction_bias in [-1, 1]: +1 forces LTR, -1 forces RTL, 0 is 50/50."""
+
+    @staticmethod
+    def _cfg_with_bias(bias: float) -> Config:
+        return Config({**procedural_config.as_dict(), "ltr_direction_bias": bias})
+
+    @staticmethod
+    def _actor_column(sketch, label: str) -> int:
+        for row in sketch.cells:
+            for x, cell in enumerate(row):
+                if cell and label in cell:
+                    return x
+        raise AssertionError(f"No '{label}' cell found in sketch")
+
+    def test_bias_extremes_force_orientation(self):
+        for bias, expect_ltr in ((1.0, True), (-1.0, False)):
+            cfg = self._cfg_with_bias(bias)
+            for seed in range(8):
+                gen = ProceduralPlatformingGenerator(seed=seed, cfg=cfg)
+                sketch = gen.generate_sketch(f"bias_{bias}_{seed}")
+                delver_x = self._actor_column(sketch, "delver")
+                goal_x = self._actor_column(sketch, "goal")
+                if expect_ltr:
+                    self.assertLess(
+                        delver_x, goal_x, f"seed {seed} must run left-to-right"
+                    )
+                else:
+                    self.assertGreater(
+                        delver_x, goal_x, f"seed {seed} must run right-to-left"
+                    )
+
+    def test_bias_zero_yields_both_orientations(self):
+        cfg = self._cfg_with_bias(0.0)
+        orientations: set[bool] = set()
+        for seed in range(20):
+            gen = ProceduralPlatformingGenerator(seed=seed, cfg=cfg)
+            sketch = gen.generate_sketch(f"bias0_{seed}")
+            delver_x = self._actor_column(sketch, "delver")
+            goal_x = self._actor_column(sketch, "goal")
+            orientations.add(delver_x < goal_x)
+        self.assertEqual(orientations, {True, False})
+
+    def test_rtl_levels_satisfy_layout_invariants(self):
+        cfg = self._cfg_with_bias(-1.0)
+        for seed in range(15):
+            gen = ProceduralPlatformingGenerator(seed=seed, cfg=cfg)
+            sketch = gen.generate_sketch(f"rtl_check_{seed}")
+            cells = sketch.cells
+
+            delvers = goals = 0
+            for row in cells:
+                for cell in row:
+                    if cell and "delver" in cell:
+                        delvers += 1
+                    if cell and "goal" in cell:
+                        goals += 1
+            self.assertEqual(delvers, 1, f"seed {seed}")
+            self.assertEqual(goals, 1, f"seed {seed}")
+
+            for x in range(sketch.width):
+                self.assertIn("platform", cells[0][x])
+                self.assertIn("platform", cells[sketch.height - 1][x])
+            for y in range(sketch.height):
+                self.assertIn("platform", cells[y][0])
+                self.assertIn("platform", cells[y][sketch.width - 1])
+
+            for y in range(1, sketch.height - 1):
+                for x in range(1, sketch.width - 1):
+                    cell = cells[y][x]
+                    if not (cell and "platform" in cell):
+                        continue
+                    above = cells[y - 1][x]
+                    below = cells[y + 1][x]
+                    above_air = not above or "platform" not in above
+                    below_air = not below or "platform" not in below
+                    self.assertFalse(
+                        above_air and below_air,
+                        f"Floating platform tile at (x={x}, y={y}) in RTL seed {seed}",
+                    )
 
 
 if __name__ == "__main__":

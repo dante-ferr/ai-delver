@@ -4,7 +4,12 @@ from typing import TYPE_CHECKING, Optional
 import math
 from PIL import Image, ImageTk
 from loaders import level_loader
-from pytiling import footprint_positions, top_left_position, preview_autotile_displays
+from pytiling import (
+    AttachedTile,
+    footprint_positions,
+    top_left_position,
+    preview_autotile_displays,
+)
 from src.utils import brush_bottom_left, brush_cells, brush_pivot
 from ..level_editor_manager import level_editor_manager
 
@@ -163,6 +168,9 @@ class CanvasPlacementGhost:
     def _is_platform_layer(self) -> bool:
         return self._selected_layer_name() == "platforms"
 
+    def _is_attached_tile_layer(self) -> bool:
+        return self._selected_layer_name() == "traps"
+
     def _footprint_is_valid(
         self,
         world_pos: tuple[int, int],
@@ -235,6 +243,11 @@ class CanvasPlacementGhost:
             math.floor(continuous_world_pos[0]),
             math.floor(continuous_world_pos[1]),
         )
+
+        if self._is_attached_tile_layer():
+            self._draw_attached_tile_ghost(canvas_object, world_pos)
+            return
+
         size = canvas_object.size
         layer_name = self._selected_layer_name()
         if not self._footprint_is_valid(world_pos, size, layer_name):
@@ -310,6 +323,62 @@ class CanvasPlacementGhost:
 
         color = self.VALID_OUTLINE if valid else self.INVALID_OUTLINE
         self._draw_outline(bottom_left, (brush_size, brush_size), color)
+        self.canvas.tag_raise(self.GHOST_TAG)
+
+    def _draw_attached_tile_ghost(
+        self, canvas_object: "CanvasObject", world_pos: tuple[int, int]
+    ):
+        """Ghost for attached tiles (spike traps): shows the sprite oriented by the
+        master it would attach to; red outline when no master is 4-adjacent."""
+        size = (1, 1)
+        layer_name = self._selected_layer_name()
+        tilemap = level_loader.level.map.tilemap
+        master_name = canvas_object.world_object_args.get("master_name", "platform")
+
+        orientation = AttachedTile.find_master_orientation(
+            world_pos, tilemap, master_name
+        )
+        if orientation is None or not self._footprint_is_valid(
+            world_pos, size, layer_name
+        ):
+            self._draw_invalid_outline(world_pos, size)
+            self.canvas.tag_raise(self.GHOST_TAG)
+            return
+
+        display = AttachedTile.DEFAULT_ORIENTATION_DISPLAYS[orientation]
+        traps = tilemap.get_layer(layer_name)
+        tileset_image = self.canvas.grid_element_renderer.tileset_images[
+            traps.tileset
+        ]
+        pil_image = tileset_image.get_tile_image(display)
+
+        if pil_image is not None:
+            ghost_pil = pil_image.convert("RGBA")
+            alpha = ghost_pil.split()[3].point(lambda p: min(p, self.ALPHA))
+            ghost_pil.putalpha(alpha)
+
+            zoom = self.canvas.camera.zoom_level
+            tile_w, tile_h = level_loader.level.map.tile_size
+            scaled = (max(1, int(tile_w * zoom)), max(1, int(tile_h * zoom)))
+            cache_key = ("attached", display, scaled[0], scaled[1])
+            photo = self._photo_cache.get(cache_key)
+            if photo is None:
+                resized = ghost_pil.resize(scaled, Image.NEAREST)  # type: ignore
+                photo = ImageTk.PhotoImage(resized)
+                self._photo_cache[cache_key] = photo
+            self._ghost_image_refs.append(photo)
+
+            canvas_grid = self.canvas.camera.world_to_canvas_grid_pos(world_pos)
+            screen_tile_w, screen_tile_h = self.canvas.tile_size
+            self.canvas.create_image(
+                canvas_grid[0] * screen_tile_w,
+                canvas_grid[1] * screen_tile_h,
+                image=photo,
+                anchor="nw",
+                tags=(self.GHOST_TAG,),
+            )
+
+        self._draw_outline(world_pos, size, self.VALID_OUTLINE)
         self.canvas.tag_raise(self.GHOST_TAG)
 
     def _draw_object_image_ghost(

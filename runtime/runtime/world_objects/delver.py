@@ -132,9 +132,15 @@ class Delver(SkeletalEntity):
         self.pending_run = 0.0
         self.pending_jump = False
 
+        s = self._state()
+
+        if s.is_dead:
+            # The skeleton freezes at its last pose; visual clients may replace
+            # the corpse with their own effect (e.g. detached flying parts).
+            return
+
         # Skeleton advance happens here; pose + locomotion sync after physics.step
         # so takeoff velocity is visible before JUMP can be cleared.
-        s = self._state()
         if self.skeleton:
             self.skeleton.position = (s.x, s.y - 3.0)
             self.skeleton.update(dt)
@@ -147,6 +153,8 @@ class Delver(SkeletalEntity):
         if self.in_replay:
             return
         s = self._state()
+        if s.is_dead:
+            return
         if self.skeleton:
             self.skeleton.position = (s.x, s.y - 3.0)
         self._update_locomotion(s, self._locomotion_is_moving)

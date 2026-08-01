@@ -29,4 +29,10 @@ impl PhysicsEntity {
             PhysicsEntity::Delver(delver) => delver.body_handle,
         }
     }
+
+    pub fn is_dead(&self) -> bool {
+        match self {
+            PhysicsEntity::Delver(delver) => delver.is_dead,
+        }
+    }
 }

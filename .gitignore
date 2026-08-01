@@ -8,3 +8,4 @@ target/
 *.so
 .cursor
 delver_run_previews
+assets/dragonbones/delver/library/

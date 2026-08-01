@@ -18,6 +18,8 @@ pub struct Level {
     pub height: usize,
     pub tile_size: f32,
     pub solid_tiles: Vec<(usize, usize)>,
+    /// Non-solid hazard cells (spike traps) that kill on contact.
+    pub spike_tiles: Vec<(usize, usize)>,
     /// Bottom-left anchor of the Delver footprint.
     pub delver: (usize, usize),
     pub delver_size: (usize, usize),
@@ -91,6 +93,7 @@ impl Level {
         }
 
         let mut solid_tiles = Vec::new();
+        let mut spike_tiles = Vec::new();
         for element in root
             .map
             .tilemap
@@ -99,8 +102,10 @@ impl Level {
             .flat_map(|layer| &layer.elements)
         {
             validate_position(element.position, width, height)?;
-            if element.name == "platform" {
-                solid_tiles.push((element.position[0], element.position[1]));
+            match element.name.as_str() {
+                "platform" => solid_tiles.push((element.position[0], element.position[1])),
+                "spike_trap" => spike_tiles.push((element.position[0], element.position[1])),
+                _ => {}
             }
         }
 
@@ -140,6 +145,7 @@ impl Level {
             height,
             tile_size: tile_width,
             solid_tiles,
+            spike_tiles,
             delver: (dx, dy),
             delver_size: dsize,
             goal: (gx, gy),
@@ -291,11 +297,23 @@ mod tests {
         assert_eq!(level.name, "test");
         assert_eq!((level.width, level.height), (5, 4));
         assert_eq!(level.solid_tiles, vec![(1, 3)]);
+        assert!(level.spike_tiles.is_empty());
         assert_eq!(level.delver, (1, 2));
         assert_eq!(level.delver_size, (1, 1));
         assert_eq!(level.goal, (3, 2));
         assert_eq!(level.goal_size, (1, 1));
         assert_eq!(level.tile_center(level.goal), (56.0, 24.0));
+    }
+
+    #[test]
+    fn collects_spike_trap_tiles() {
+        let json = VALID_LEVEL.replace(
+            r#"{"name":"decoration","position":[2,2]}"#,
+            r#"{"name":"spike_trap","position":[2,2]}"#,
+        );
+        let level = Level::from_json(&json).unwrap();
+        assert_eq!(level.spike_tiles, vec![(2, 2)]);
+        assert!(level.solid_tiles == vec![(1, 3)]);
     }
 
     #[test]

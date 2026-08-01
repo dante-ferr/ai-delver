@@ -33,6 +33,10 @@ class CanvasObjectsManager:
         platform_co.create_element_callback = self._create_platform_callback
         platform_co.remove_element_callback = self._remove_platform_callback
 
+        spike_trap_co = self.get_canvas_object("spike_trap")
+        spike_trap_co.create_element_callback = self._create_spike_trap_callback
+        spike_trap_co.remove_element_callback = self._remove_spike_trap_callback
+
         self._assign_layer_to_world_canvas_object("delver")
         self._assign_layer_to_variated_world_canvas_object("goal")
 
@@ -57,6 +61,18 @@ class CanvasObjectsManager:
             ),
             apply_formatting=True,
         )
+
+    def _create_spike_trap_callback(self, position: tuple[int, int]):
+        spike_trap_co = self.get_canvas_object("spike_trap")
+        master_name = spike_trap_co.world_object_args.get("master_name", "platform")
+        self.level.map.tilemap.create_spike_trap_at(
+            position,
+            master_name=master_name,
+            apply_formatting=True,
+        )
+
+    def _remove_spike_trap_callback(self, position: tuple[int, int]):
+        self.level.map.tilemap.remove_spike_trap_at(position, apply_formatting=True)
 
     def _assign_layer_to_world_canvas_object(self, object_name: str):
         canvas_object = self.get_canvas_object(object_name)

@@ -302,6 +302,7 @@ fn create_physics(level: &Level, spawn_offset: (f32, f32)) -> RustPhysicsEngine 
         level.height,
         &level.solid_tiles,
         &goal_tiles,
+        &level.spike_tiles,
         start_x + spawn_offset.0,
         start_y + spawn_offset.1,
         level.tile_size,

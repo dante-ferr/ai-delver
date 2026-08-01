@@ -3,6 +3,7 @@
 /// Tile values:
 ///   0 = empty
 ///   1 = solid platform
+///   2 = spike trap (hazard, non-solid)
 ///   3 = goal
 pub struct TileGrid {
     pub width: usize,

@@ -57,6 +57,12 @@ class MixedMap(GridMap):
 
         instance.populate_layers()
 
+        # Add layers introduced after the save was written before wiring
+        # concurrences, which may already reference the new layers.
+        from ..level_bootstrap._level_factory import ensure_configured_layers
+
+        ensure_configured_layers(instance)
+
         # After all layers are loaded into the sub-maps and populated into the
         # main map, establish the concurrences.
         all_layers_data = (

@@ -47,6 +47,7 @@ impl RustPhysicsEngine {
         height: usize,
         solid_tiles: Vec<(usize, usize)>,
         goal_tiles: Vec<(usize, usize)>,
+        spike_tiles: Vec<(usize, usize)>,
         start_x: f32,
         start_y: f32,
         tile_size: f32,
@@ -56,6 +57,7 @@ impl RustPhysicsEngine {
             height,
             &solid_tiles,
             &goal_tiles,
+            &spike_tiles,
             start_x,
             start_y,
             tile_size,
@@ -68,6 +70,7 @@ impl RustPhysicsEngine {
         height: usize,
         solid_tiles: &[(usize, usize)],
         goal_tiles: &[(usize, usize)],
+        spike_tiles: &[(usize, usize)],
         start_x: f32,
         start_y: f32,
         tile_size: f32,
@@ -166,6 +169,14 @@ impl RustPhysicsEngine {
             goal_y = (height as f32 - (min_y as f32 + max_y as f32 + 1.0) * 0.5) * tile_size;
         }
 
+        // Spikes are non-solid hazard cells: no colliders, only a grid marker so
+        // contact checks can kill the delver. Goal cells always win over spikes.
+        for &(x, y) in spike_tiles {
+            if grid.get(x as i32, y as i32) == 0 {
+                grid.set(x, y, 2);
+            }
+        }
+
         let mut entities = HashMap::new();
         let mut delver = BaseDelver::new("delver".to_string(), start_x, start_y, delver_config);
         delver.body_handle = player_body_handle;
@@ -186,6 +197,7 @@ impl RustPhysicsEngine {
         height: usize,
         solid_tiles: Vec<(usize, usize)>,
         goal_tiles: Vec<(usize, usize)>,
+        spike_tiles: Vec<(usize, usize)>,
         start_x: f32,
         start_y: f32,
         tile_size: f32,
@@ -195,6 +207,7 @@ impl RustPhysicsEngine {
             height,
             solid_tiles,
             goal_tiles,
+            spike_tiles,
             start_x,
             start_y,
             tile_size,
@@ -203,13 +216,11 @@ impl RustPhysicsEngine {
 
     /// Advances the simulation using the same fixed-size substeps as Python.
     pub fn step_native(&mut self, dt: f32) -> RuntimeResult<BaseDelver> {
-        let is_delver_dead = if let Some(PhysicsEntity::Delver(ref d)) = self.entities.get("delver")
-        {
-            d.is_dead
-        } else {
-            false
-        };
+        let is_delver_dead =
+            matches!(self.entities.get("delver"), Some(PhysicsEntity::Delver(ref d)) if d.is_dead);
 
+        // Death freezes the world: the corpse stays where it died. Visual
+        // clients replace it with their own effects (e.g. detached parts).
         if is_delver_dead {
             return self.get_delver_native();
         }
@@ -343,6 +354,7 @@ impl RustPhysicsEngine {
         height: usize,
         solid_tiles: Vec<(usize, usize)>,
         goal_tiles: Vec<(usize, usize)>,
+        spike_tiles: Vec<(usize, usize)>,
         start_x: f32,
         start_y: f32,
         tile_size: f32,
@@ -352,6 +364,7 @@ impl RustPhysicsEngine {
             height,
             solid_tiles,
             goal_tiles,
+            spike_tiles,
             start_x,
             start_y,
             tile_size,
@@ -412,6 +425,9 @@ impl RustPhysicsEngine {
         let entity_ids: Vec<String> = self.entities.keys().cloned().collect();
         for id in &entity_ids {
             let entity = self.entities.get_mut(id).unwrap();
+            if entity.is_dead() {
+                continue;
+            }
             entity.pre_step(dt, &mut self.world);
         }
 
@@ -427,6 +443,9 @@ impl RustPhysicsEngine {
         // 3. Delegate post-step updates
         for id in &entity_ids {
             let entity = self.entities.get_mut(id).unwrap();
+            if entity.is_dead() {
+                continue;
+            }
             entity.post_step(&mut self.world, &self.grid);
         }
     }
@@ -435,13 +454,14 @@ impl RustPhysicsEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::world_objects::delver::DeathCause;
 
     #[test]
     fn native_api_constructs_without_python() {
         let solids = [(0, 4), (1, 4), (2, 4), (3, 4), (4, 4)];
         let goals = [(3, 3)];
         let mut engine =
-            RustPhysicsEngine::from_geometry_ref(5, 5, &solids, &goals, 24.0, 40.0, 16.0);
+            RustPhysicsEngine::from_geometry_ref(5, 5, &solids, &goals, &[], 24.0, 40.0, 16.0);
 
         engine.set_delver_action(1.0, false).unwrap();
         assert_eq!(engine.goal_position(), (56.0, 24.0));
@@ -456,9 +476,80 @@ mod tests {
         // Bottom-left (2, 3), size 2x2 → cells (2,2),(3,2),(2,3),(3,3)
         let goals = [(2, 2), (3, 2), (2, 3), (3, 3)];
         let engine =
-            RustPhysicsEngine::from_geometry_ref(6, 5, &[], &goals, 24.0, 40.0, 16.0);
+            RustPhysicsEngine::from_geometry_ref(6, 5, &[], &goals, &[], 24.0, 40.0, 16.0);
         // Footprint center: x midpoint of tiles 2..3 → 48; y midpoint → 32
         assert_eq!(engine.goal_position(), (48.0, 32.0));
+    }
+
+    #[test]
+    fn spike_contact_kills_delver() {
+        let tile = 16.0_f32;
+        let floor_row = 5_usize;
+        let solids: Vec<(usize, usize)> = (0..8).map(|x| (x, floor_row)).collect();
+        // Spike sits on the floor surface ahead of the delver.
+        let spikes = [(4, floor_row - 1)];
+
+        let half_h = DelverConfig::default().player_height / 2.0;
+        let floor_top = 1.0 * tile;
+        let start_x = 1.5 * tile;
+        let start_y = floor_top + half_h + 1.0;
+
+        let mut engine = RustPhysicsEngine::from_geometry_ref(
+            8,
+            6,
+            &solids,
+            &[],
+            &spikes,
+            start_x,
+            start_y,
+            tile,
+        );
+
+        engine.set_delver_action(1.0, false).unwrap();
+        let mut died = None;
+        for _ in 0..600 {
+            let d = engine.step_native(1.0 / 60.0).unwrap();
+            if d.is_dead {
+                died = Some(d);
+                break;
+            }
+        }
+
+        let died = died.expect("delver must die on the spike");
+        assert_eq!(died.death_cause, Some(DeathCause::Hazard));
+
+        // Death freezes the world: the corpse no longer moves.
+        let mut state = engine.step_native(1.0 / 60.0).unwrap();
+        let frozen = (state.x, state.y);
+        for _ in 0..30 {
+            state = engine.step_native(1.0 / 60.0).unwrap();
+        }
+        assert_eq!(
+            (state.x, state.y),
+            frozen,
+            "dead delver must stay frozen in place"
+        );
+    }
+
+    #[test]
+    fn fall_death_freezes_world() {
+        let mut engine =
+            RustPhysicsEngine::from_geometry_ref(4, 4, &[], &[], &[], 24.0, 40.0, 16.0);
+
+        let mut died = None;
+        for _ in 0..600 {
+            let d = engine.step_native(1.0 / 60.0).unwrap();
+            if d.is_dead {
+                died = Some(d);
+                break;
+            }
+        }
+
+        let died = died.expect("delver must fall out of the world");
+        assert_eq!(died.death_cause, Some(DeathCause::Fall));
+
+        let state = engine.step_native(1.0 / 60.0).unwrap();
+        assert_eq!((state.x, state.y), (died.x, died.y));
     }
 
     /// Empirical jump envelope vs tile surfaces (y-up world, row 0 = top of grid).
@@ -499,6 +590,7 @@ mod tests {
             width,
             height,
             &solids,
+            &[],
             &[],
             start_x,
             start_y,
@@ -611,6 +703,7 @@ mod tests {
                 width,
                 height,
                 &solids,
+                &[],
                 &[],
                 start_x,
                 start_y,

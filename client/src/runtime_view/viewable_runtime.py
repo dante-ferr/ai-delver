@@ -1,5 +1,6 @@
 from runtime import Runtime
 from .camera import Camera
+from .death_explosion import DeathExplosionEffect
 from pyglet.window import Window
 from .view_controls import ViewControls
 import pyglet
@@ -39,6 +40,7 @@ class ViewableRuntime(Runtime):
             )
         self.tilemap_renderer = self.tilemap_renderer_factory()
         self._setup_camera()
+        self.death_explosion = DeathExplosionEffect(self)
 
     def tilemap_renderer_factory(self):
         tilemap_renderer = TilemapRenderer(self.level.map.tilemap)
@@ -90,6 +92,7 @@ class ViewableRuntime(Runtime):
         # Update logic
         super().update(dt)
         self.controls.update(dt)
+        self.death_explosion.update(dt)
 
         # Drawing
         if self._window:
@@ -98,6 +101,7 @@ class ViewableRuntime(Runtime):
             with self.camera:
                 self.tilemap_renderer.render_all_layers()
                 self.world_objects_controller.draw_world_objects(dt)
+                self.death_explosion.draw()
 
         # Display the new frame
         window.flip()

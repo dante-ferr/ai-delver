@@ -23,7 +23,7 @@ class SkeletalEntity(WorldObject):
     manages locomotion-state transitions and delegates them to skeleton animations.
     """
 
-    LAND_ANIMATION_REQUIRED_FALLING_SPEED = -250.0
+    LAND_ANIMATION_REQUIRED_FALLING_SPEED = -300.0
 
     def __init__(
         self,

@@ -13,6 +13,12 @@ use crate::engine::physics_world::PhysicsWorld;
 use crate::world_objects::components::ground_detector::GroundDetector;
 use crate::world_objects::components::locomotion_motor::LocomotionMotor;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DeathCause {
+    Fall,
+    Hazard,
+}
+
 #[cfg_attr(feature = "python", pyclass)]
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BaseDelver {
@@ -24,6 +30,7 @@ pub struct BaseDelver {
     pub is_on_ground: bool,
     pub is_dead: bool,
     pub is_victory: bool,
+    pub death_cause: Option<DeathCause>,
 
     pub action_run: f32,
     pub action_jump: bool,
@@ -55,6 +62,7 @@ impl BaseDelver {
             is_on_ground: false,
             is_dead: false,
             is_victory: false,
+            death_cause: None,
             action_run: 0.0,
             action_jump: false,
             config,
@@ -151,6 +159,14 @@ impl BaseDelver {
     #[setter]
     fn set_is_victory(&mut self, value: bool) {
         self.is_victory = value;
+    }
+
+    #[getter]
+    fn death_cause(&self) -> Option<String> {
+        self.death_cause.map(|cause| match cause {
+            DeathCause::Fall => "fall".to_string(),
+            DeathCause::Hazard => "hazard".to_string(),
+        })
     }
 
     #[getter]
@@ -267,14 +283,24 @@ impl BaseDelver {
         let (min_tx, max_tx, min_ty, max_ty) = grid.tile_coords_for_aabb(left, right, bottom, top);
         for ty in min_ty..=max_ty {
             for tx in min_tx..=max_tx {
-                if grid.get(tx as i32, ty as i32) == 3 {
-                    self.is_victory = true;
+                match grid.get(tx as i32, ty as i32) {
+                    2 => {
+                        self.is_dead = true;
+                        self.death_cause = Some(DeathCause::Hazard);
+                    }
+                    3 => {
+                        self.is_victory = true;
+                    }
+                    _ => {}
                 }
             }
         }
 
         if self.y + half_h < 0.0 {
             self.is_dead = true;
+            if self.death_cause.is_none() {
+                self.death_cause = Some(DeathCause::Fall);
+            }
         }
     }
 }

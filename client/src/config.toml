@@ -1,4 +1,4 @@
-tilemap_layer_names = ["platforms"]
+tilemap_layer_names = ["platforms", "traps"]
 window_width = 1280
 window_height = 720
 window_title = "AI Delver"
@@ -111,6 +111,41 @@ regen_pack_button_label = "Regen pack (30)"
 [dragonbones.delver]
 representation_animation = "idle"
 representation_frame = 0
+
+# Hazard death explosion (visual only): detached skeleton parts flung by a
+# client-side pymunk simulation in viewing mode. Gravity matches the world.
+[death_explosion]
+# Outward velocity scale applied to each part (px/s).
+speed = 280.0
+# Extra upward kick so parts burst off the floor (px/s).
+upward_bias = 160.0
+# Parts spin with a random angular velocity up to this (rad/s).
+max_spin = 6.0
+# Mass per px² of part area.
+part_density = 0.001
+part_friction = 0.6
+part_restitution = 0.45
+# Static floor/wall material for the parts to bounce and slide on.
+# Tile restitution is 1.0 so the part's own restitution governs the bounce
+# (pymunk combines restitution multiplicatively).
+tile_friction = 1.2
+tile_restitution = 1.0
+# Velocity retention per second (pymunk space damping; lower = more drag).
+# Keeps the pile near the death spot instead of skittering off level edges.
+air_damping = 0.5
+# Parts below this depth under y=0 are removed.
+despawn_depth = 64.0
+# Per-frame physics dt clamp (tab-focus spikes must not explode the sim).
+max_dt = 0.05
+# Death animation played once at the death spot (path relative to assets/).
+gif_path = "img/sprites/delver/delver_death.gif"
+gif_scale = 1.0
+
+# Debris display overrides: slot name -> subtexture name from delver_tex.json.
+# Slots not listed keep the frame playing at death time.
+[death_explosion.part_displays]
+head = "head13"
+torso = "torso9"
 
 # Delver sprite animation shown next to the training log (and GIF export knobs).
 [delver_gif]

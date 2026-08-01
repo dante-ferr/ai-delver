@@ -1,7 +1,7 @@
 # Level package knobs (tile sizes, saves, grid bounds, bootstrap defaults).
 
-tilemap_layer_names = ["platforms"]
-layer_order = ["platforms", "essentials"]
+tilemap_layer_names = ["platforms", "traps"]
+layer_order = ["platforms", "traps", "essentials"]
 
 start_map_width = 10
 start_map_height = 10

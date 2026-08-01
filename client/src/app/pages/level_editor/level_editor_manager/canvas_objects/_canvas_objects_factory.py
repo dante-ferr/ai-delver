@@ -13,6 +13,11 @@ class CanvasObjectsFactory:
         platforms = CanvasObjectsLayer("platforms")
         platforms.add_canvas_object(self._create_canvas_object("platform"))
 
+        traps = CanvasObjectsLayer("traps")
+        traps.add_canvas_object(
+            self._create_canvas_object("spike_trap", master_name="platform")
+        )
+
         essentials = CanvasObjectsLayer("essentials")
         essentials.add_canvas_object(
             self._create_canvas_object(
@@ -25,7 +30,7 @@ class CanvasObjectsFactory:
         for canvas_object in self._create_variated_canvas_objects("goal", unique=True):
             essentials.add_canvas_object(canvas_object)
 
-        return [platforms, essentials]
+        return [platforms, traps, essentials]
 
     def _create_variated_canvas_objects(
         self, world_object_name: str, **world_object_args

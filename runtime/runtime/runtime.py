@@ -51,6 +51,13 @@ class Runtime:
             if platforms_layer.grid[y, x] is not None
         ]
 
+        spike_tiles: list[tuple[int, int]] = []
+        if level.map.tilemap.has_layer("traps"):
+            traps_layer = level.map.tilemap.get_layer("traps")
+            spike_tiles = [
+                tile.position for tile in traps_layer.get_elements("spike_trap")
+            ]
+
         essentials = level.map.world_objects_map.get_layer("essentials")
         goal_tiles: list[tuple[int, int]] = []
         delver_element = None
@@ -81,6 +88,7 @@ class Runtime:
             height,
             solid_tiles,
             goal_tiles,
+            spike_tiles,
             start_x,
             start_y,
             tile_w,

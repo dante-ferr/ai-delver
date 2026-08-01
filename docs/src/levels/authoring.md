@@ -59,7 +59,14 @@ Perimeter must be `platform` (`import-level-sketch` seals missing border cells).
 
 - `delver` / `goal` in empty **interior** cells (usually above a floor). Never share a cell with `platform`.
 - Anchors are **bottom-left**. Delver **1×3**, Goal **2×2** — whole footprint interior and clear of platforms.
-- No open map edges as a design crutch; falling below the world kills.
+- No open map edges as a design crutch; falling below the world kills. Any death (spikes, falls) bursts the body into physics-driven pieces in the visual client.
+
+### Spike traps (traps layer)
+
+- `spike_trap` tiles live on the **traps** tilemap layer and must occupy an empty cell **cardinally adjacent** to a `platform` (their master). Orientation (up / right / left / down) is derived from the master side automatically; the editor ghost previews the resolved orientation and marks master-less cells red.
+- Touching a spike cell kills the Delver on contact. Spikes are **non-solid** — they never block movement, so a floor spike still allows the cell to be crossed only by jumping over it.
+- Erasing or covering a master platform removes / reorients its spikes automatically.
+- Sketch import does not support spikes yet; place them in the level editor.
 
 ---
 

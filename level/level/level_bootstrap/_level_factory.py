@@ -10,6 +10,47 @@ MAP_SIZE = (START_MAP_WIDTH, START_MAP_HEIGHT)
 TILE_SIZE = (TILE_WIDTH, TILE_HEIGHT)
 
 
+def default_tilemap_layers() -> dict[str, EditorTilemapLayer]:
+    """Tilemap layers every level must have, keyed by layer name."""
+    return {
+        "platforms": EditorTilemapLayer(
+            "platforms",
+            Tileset(str(ASSETS_PATH / "img/tilesets/dungeon/platforms.png")),
+            str(ASSETS_PATH / "svg/wall.svg"),
+        ),
+        "traps": EditorTilemapLayer(
+            "traps",
+            Tileset(str(ASSETS_PATH / "img/tilesets/dungeon/spike_trap.png")),
+            str(ASSETS_PATH / "svg/spike_trap.svg"),
+        ),
+    }
+
+
+def ensure_configured_layers(mixed_map: MixedMap):
+    """Add tilemap layers introduced after a level was saved (e.g. traps in old saves)."""
+    missing = [
+        layer_name
+        for layer_name in TILEMAP_LAYER_NAMES
+        if not mixed_map.tilemap.has_layer(layer_name)
+    ]
+    if not missing:
+        return
+
+    layers = default_tilemap_layers()
+    for layer_name in missing:
+        layer = layers[layer_name]
+        mixed_map.tilemap.add_layer(layer)
+        position = sum(
+            1
+            for existing in mixed_map.layers
+            if LAYER_ORDER.index(existing.name) < LAYER_ORDER.index(layer_name)
+        )
+        mixed_map.add_layer(layer, position=position)
+
+    if "traps" in missing and mixed_map.has_layer("essentials"):
+        mixed_map.add_layer_concurrence("traps", "essentials")
+
+
 class LevelFactory:
 
     def create_level(self):
@@ -30,16 +71,11 @@ class LevelFactory:
 
         level = Level(mixed_map)
         level.map.add_layer_concurrence("platforms", "essentials")
+        level.map.add_layer_concurrence("traps", "essentials")
         return level
 
     def _configure_tilemap(self):
-        layers = {
-            "platforms": EditorTilemapLayer(
-                "platforms",
-                Tileset(str(ASSETS_PATH / "img/tilesets/dungeon/platforms.png")),
-                str(ASSETS_PATH / "svg/wall.svg"),
-            ),
-        }
+        layers = default_tilemap_layers()
 
         for layer_name in LAYER_ORDER:
             if layer_name in TILEMAP_LAYER_NAMES:

@@ -106,6 +106,23 @@ class EditorTilemap(Tilemap):
 
         return removed_tile
 
+    def create_spike_trap_at(
+        self, position: tuple[int, int], master_name="platform", **args
+    ):
+        """Create a spike trap attached to an adjacent master tile. Returns None
+        when no master tile is 4-adjacent to the position."""
+        traps = self.get_layer("traps")
+        return traps.create_attached_tile_at(
+            position,
+            master_name,
+            "spike_trap",
+            **args,
+        )
+
+    def remove_spike_trap_at(self, position: tuple[int, int], apply_formatting=False):
+        traps = self.get_layer("traps")
+        return traps.remove_tile_at(position, apply_formatting)
+
     def _dynamic_reduce_grid(self, new_tile: "Tile"):
         if self._is_semiedge(new_tile.position) is False:
             return

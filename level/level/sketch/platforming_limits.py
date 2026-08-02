@@ -118,8 +118,8 @@ def compute_platforming_limits(
     gravity = params["gravity"]
     abs_g = abs(gravity)
     jump_tolerance = params["jump_tolerance"]
-    player_width = params["player_width"]
-    player_height = params["player_height"]
+    player_width = params["physics_width"]
+    player_height = params["physics_height"]
     ray_offset_inward = params["ray_offset_inward"]
 
     # Ballistic height — matches Rapier empirical apex (~70px / 4.4 tiles).
@@ -253,7 +253,7 @@ def max_gap_tiles_for_delta_height(
         round(params["steady_run"], 6),
         round(params["jump_tolerance"], 6),
         round(params["dt"], 9),
-        round(params["player_width"], 6),
+        round(params["physics_width"], 6),
         round(params["ray_offset_inward"], 6),
         int(delta_h),
     )
@@ -324,8 +324,8 @@ def _physics_params(
     max_vx = float(delver["max_vx"])
     physics_fps = float(world["physics_fps"])
     jump_tolerance = float(delver["jump_tolerance_max"])
-    player_width = float(delver["player_width"])
-    player_height = float(delver["player_height"])
+    player_width = float(delver["physics_width"])
+    player_height = float(delver["physics_height"])
     ray_offset_inward = float(delver["ray_offset_inward"])
 
     if jump_impulse <= 0:
@@ -350,8 +350,8 @@ def _physics_params(
         "max_vx": max_vx,
         "physics_fps": physics_fps,
         "jump_tolerance": jump_tolerance,
-        "player_width": player_width,
-        "player_height": player_height,
+        "physics_width": player_width,
+        "physics_height": player_height,
         "ray_offset_inward": ray_offset_inward,
         "steady_run": steady_run,
         "dt": dt,

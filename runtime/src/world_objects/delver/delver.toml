@@ -1,7 +1,21 @@
 # Delver archetype physics / locomotion tunables.
 
-player_width = 10.0
-player_height = 38.0
+# Physics AABB (solid collider, goal, fall) — size + Y offset from body center.
+physics_width = 10.0
+physics_height = 38.0
+physics_offset_y = 0.0
+
+# Hazard AABB (spikes) — same shape: size + Y offset from body center.
+#
+# DragonBones bind-pose edges (skeleton at body_y-3, root Y-flip), then shifted
+# into physics space so art feet (−3) line up with physics feet (−19): Δy = −16.
+#   art head top 34.015 → aligned 18.015; hazard top = aligned − 1 = 17.015
+#   art torso bottom 6.3796 → aligned −9.6204
+# height = 17.015 − (−9.6204) = 26.6354; offset_y = (17.015 − 9.6204) / 2 = 3.6973
+# Top stays below physics top (no ceiling false hits); bottom reaches floor spikes.
+hazard_width = 10.0
+hazard_height = 26.6354
+hazard_offset_y = 3.6973
 
 max_vx = 500.0
 max_vy = 1000.0

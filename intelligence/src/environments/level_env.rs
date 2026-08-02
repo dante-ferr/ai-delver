@@ -166,7 +166,7 @@ impl LevelEnvironment {
             self.frame >= self.config.max_seconds_per_episode * self.config.actions_per_second;
         let done = delver.is_victory || delver.is_dead || timed_out;
         let (x, y) = (delver.x, delver.y);
-        let player_height = runtime_core::DelverConfig::default().player_height;
+        let player_height = runtime_core::DelverConfig::default().physics_height;
         let jump_impulse = runtime_core::DelverConfig::default().jump_impulse;
         let half_h = player_height / 2.0;
         let (tx, ty) = self.grid_position(x, y);
@@ -294,7 +294,7 @@ impl LevelEnvironment {
 }
 
 fn create_physics(level: &Level, spawn_offset: (f32, f32)) -> RustPhysicsEngine {
-    let player_height = runtime_core::DelverConfig::default().player_height;
+    let player_height = runtime_core::DelverConfig::default().physics_height;
     let (start_x, start_y) = level.delver_spawn_center(player_height);
     let goal_tiles = level.goal_tiles();
     RustPhysicsEngine::from_geometry_ref(

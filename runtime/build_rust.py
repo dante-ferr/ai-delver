@@ -15,60 +15,66 @@ def _collect_rust_sources(src_root: str) -> list[str]:
     return source_files
 
 
-def _is_rebuild_needed(output_binary: str, source_paths: list[str]) -> bool:
-    if not os.path.exists(output_binary):
-        return True
-    output_mtime = os.path.getmtime(output_binary)
-    return any(os.path.getmtime(path) > output_mtime for path in source_paths if os.path.exists(path))
+def _resolve_cargo_release_lib(script_dir: str) -> str:
+    candidates = []
+    cargo_target_dir = os.environ.get("CARGO_TARGET_DIR")
+    if cargo_target_dir:
+        candidates.append(os.path.join(cargo_target_dir, "release", "libruntime_core.so"))
+    candidates.extend(
+        [
+            os.path.join(script_dir, "target", "release", "libruntime_core.so"),
+            os.path.join(script_dir, "target", "release", "libruntime_core.dylib"),
+            os.path.join(script_dir, "target", "release", "runtime_core.dll"),
+        ]
+    )
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return candidates[0]
 
 
 def build():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     cargo_toml = os.path.join(script_dir, "Cargo.toml")
-    cargo_lock = os.path.join(script_dir, "Cargo.lock")
     src_root = os.path.join(script_dir, "src")
 
     suffix = sysconfig.get_config_var("EXT_SUFFIX")
     if not suffix:
         suffix = ".so"
 
-    src = os.path.join(script_dir, "target", "release", "libruntime_core.so")
-    cargo_target_dir = os.environ.get("CARGO_TARGET_DIR")
-    if cargo_target_dir:
-        src = os.path.join(cargo_target_dir, "release", "libruntime_core.so")
-    if not os.path.exists(src):
-        src = os.path.join(script_dir, "target", "release", "libruntime_core.so")
-    if not os.path.exists(src):
-        src = os.path.join(script_dir, "target", "release", "libruntime_core.dylib")
-    if not os.path.exists(src):
-        src = os.path.join(script_dir, "target", "release", "runtime_core.dll")
-
     dst = os.path.join(script_dir, "runtime", f"runtime_core{suffix}")
 
-    source_paths = [cargo_toml, cargo_lock, *_collect_rust_sources(src_root)]
-    if _is_rebuild_needed(dst, source_paths):
-        cargo_jobs = os.getenv("RUNTIME_CARGO_JOBS", "1")
-        env = os.environ.copy()
-        env["PYO3_PYTHON"] = os.path.realpath(sys.executable)
-        print(f"Compiling Rust core (jobs={cargo_jobs})...")
-        subprocess.run(
-            [
-                "cargo",
-                "build",
-                "--release",
-                "--jobs",
-                cargo_jobs,
-                "--manifest-path",
-                cargo_toml,
-            ],
-            check=True,
-            env=env,
-        )
-    else:
-        print(f"Rust core already up-to-date: {dst}")
+    # Always ask Cargo to build. Skipping based on the copied .so mtime previously
+    # left a stale release artifact in place after source edits (dst mtime refreshed
+    # by copy while cargo thought release was already up to date).
+    cargo_jobs = os.getenv("RUNTIME_CARGO_JOBS", "1")
+    env = os.environ.copy()
+    env["PYO3_PYTHON"] = os.path.realpath(sys.executable)
+    print(f"Compiling Rust core (jobs={cargo_jobs})...")
+    print(f"  sources under {src_root} ({len(_collect_rust_sources(src_root))} files)")
+    subprocess.run(
+        [
+            "cargo",
+            "build",
+            "--release",
+            "--jobs",
+            cargo_jobs,
+            "--manifest-path",
+            cargo_toml,
+        ],
+        check=True,
+        env=env,
+    )
+
+    src = _resolve_cargo_release_lib(script_dir)
+    if not os.path.exists(src):
+        raise FileNotFoundError(f"cargo release library not found (looked for {src})")
 
     shutil.copy(src, dst)
-    print(f"✅ Successfully copied {src} to {dst}")
+    src_mtime = os.path.getmtime(src)
+    print(f"✅ Copied {src}")
+    print(f"   → {dst}")
+    print(f"   artifact mtime={src_mtime:.0f} size={os.path.getsize(dst)} bytes")
 
 
 if __name__ == "__main__":

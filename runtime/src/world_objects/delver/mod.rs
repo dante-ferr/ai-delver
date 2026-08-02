@@ -10,6 +10,7 @@ use pyo3::prelude::*;
 
 use crate::engine::grid::TileGrid;
 use crate::engine::physics_world::PhysicsWorld;
+use crate::world_objects::components::aabb_mask::AabbMask;
 use crate::world_objects::components::ground_detector::GroundDetector;
 use crate::world_objects::components::locomotion_motor::LocomotionMotor;
 
@@ -233,8 +234,8 @@ impl BaseDelver {
     ) {
         self.is_on_ground = self.ground_detector.check_grounded(
             player_pos,
-            self.config.player_width,
-            self.config.player_height,
+            self.config.physics_width,
+            self.config.physics_height,
             rigid_bodies,
             colliders,
             query_pipeline,
@@ -273,30 +274,33 @@ impl BaseDelver {
     }
 
     fn check_victory_and_death_conditions(&mut self, grid: &TileGrid) {
-        let half_w = self.config.player_width / 2.0;
-        let half_h = self.config.player_height / 2.0;
-        let left = self.x - half_w;
-        let right = self.x + half_w;
-        let bottom = self.y - half_h;
-        let top = self.y + half_h;
+        // Rebuild from config each tick so on-disk TOML tweaks (via Default reload
+        // at spawn) stay authoritative; masks are cheap AABB structs.
+        let physics = AabbMask::with_offsets(
+            self.config.physics_width,
+            self.config.physics_height,
+            0.0,
+            self.config.physics_offset_y,
+        )
+        .bounds(self.x, self.y);
+        let hazard = AabbMask::with_offsets(
+            self.config.hazard_width,
+            self.config.hazard_height,
+            0.0,
+            self.config.hazard_offset_y,
+        )
+        .bounds(self.x, self.y);
 
-        let (min_tx, max_tx, min_ty, max_ty) = grid.tile_coords_for_aabb(left, right, bottom, top);
-        for ty in min_ty..=max_ty {
-            for tx in min_tx..=max_tx {
-                match grid.get(tx as i32, ty as i32) {
-                    2 => {
-                        self.is_dead = true;
-                        self.death_cause = Some(DeathCause::Hazard);
-                    }
-                    3 => {
-                        self.is_victory = true;
-                    }
-                    _ => {}
-                }
-            }
+        if hazard.overlaps_tile(grid, 2) {
+            self.is_dead = true;
+            self.death_cause = Some(DeathCause::Hazard);
         }
 
-        if self.y + half_h < 0.0 {
+        if physics.overlaps_tile(grid, 3) {
+            self.is_victory = true;
+        }
+
+        if physics.top < 0.0 {
             self.is_dead = true;
             if self.death_cause.is_none() {
                 self.death_cause = Some(DeathCause::Fall);

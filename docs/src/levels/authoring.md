@@ -35,7 +35,7 @@ Use `recommended_max_rise_tiles`, `recommended_max_gap_tiles`, `recommended_min_
 | Steady run speed | `vx_ss = min(move_force / linear_damping, max_vx)` |
 | Jump height (full hold) | `h = jump_impulse² / (2 · \|gravity\|)` |
 | Short hop | Early Jump release multiplies upward `vy` by `jump_cut_multiplier` (see `delver.toml`) |
-| Max gap | Coyote edge jump + ray-inset overhang (`player_width − 2·ray_offset_inward`) |
+| Max gap | Coyote edge jump + ray-inset overhang (`physics_width − 2·ray_offset_inward`) |
 | Tiles | divide by 16px |
 
 ### Counting rise / gap
@@ -65,7 +65,7 @@ Perimeter must be `platform` (`import-level-sketch` seals missing border cells).
 ### Spike traps (traps layer)
 
 - `spike_trap` tiles live on the **traps** tilemap layer and must occupy an empty cell **cardinally adjacent** to a `platform` (their master). Orientation (up / right / left / down) is derived from the master side automatically; the editor ghost previews the resolved orientation and marks master-less cells red.
-- Touching a spike cell kills the Delver on contact. Spikes are **non-solid** — they never block movement, so a floor spike still allows the cell to be crossed only by jumping over it.
+- A spike cell kills when it overlaps an entity **hazard mask** (`hazard_width` × `hazard_height` at `hazard_offset_y` in `delver.toml` — physics-aligned head−1 through torso bottom; top stays inside the physics AABB). Spikes are **non-solid** — they never block movement.
 - Erasing or covering a master platform removes / reorients its spikes automatically.
 - Sketch import does not support spikes yet; place them in the level editor.
 

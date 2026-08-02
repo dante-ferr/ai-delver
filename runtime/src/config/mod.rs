@@ -1,11 +1,14 @@
 //! Shared TOML config loading for entity and world archetypes.
 
-/// Defines a config struct whose values come from an embedded TOML file.
+/// Defines a config struct whose values come from a TOML file.
 ///
 /// Each invocation only declares field names and types. Deserialize, `from_toml_str`,
-/// `load`, and `Default` (from the embedded file) are generated automatically.
+/// `load`, and `Default` are generated automatically.
 ///
 /// The `file:` path is relative to the crate root (`CARGO_MANIFEST_DIR`).
+/// `Default` prefers the on-disk file when present (so local TOML edits apply on
+/// process restart without a Rust rebuild), and falls back to the compile-time
+/// embedded copy when the path is missing (packaged / CI runs).
 #[macro_export]
 macro_rules! define_config {
     (
@@ -45,12 +48,27 @@ macro_rules! define_config {
                 })
             }
 
+            /// Path used by [`Default`] when the crate source tree is available.
+            pub fn source_toml_path() -> std::path::PathBuf {
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join($file)
+            }
+
             const EMBEDDED_TOML: &'static str =
                 include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", $file));
         }
 
         impl Default for $name {
             fn default() -> Self {
+                let path = Self::source_toml_path();
+                if path.is_file() {
+                    match Self::load(&path) {
+                        Ok(cfg) => return cfg,
+                        Err(err) => eprintln!(
+                            "warning: failed to load {} ({err}); using embedded defaults",
+                            path.display()
+                        ),
+                    }
+                }
                 Self::from_toml_str(Self::EMBEDDED_TOML)
                     .unwrap_or_else(|err| panic!("invalid embedded config {}: {err}", $file))
             }

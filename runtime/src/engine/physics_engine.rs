@@ -75,8 +75,33 @@ impl RustPhysicsEngine {
         start_y: f32,
         tile_size: f32,
     ) -> Self {
-        let delver_config = DelverConfig::default();
-        let world_config = WorldConfig::default();
+        Self::from_geometry_ref_with_config(
+            width,
+            height,
+            solid_tiles,
+            goal_tiles,
+            spike_tiles,
+            start_x,
+            start_y,
+            tile_size,
+            DelverConfig::default(),
+            WorldConfig::default(),
+        )
+    }
+
+    /// Like [`from_geometry_ref`], but with explicit archetype configs.
+    pub fn from_geometry_ref_with_config(
+        width: usize,
+        height: usize,
+        solid_tiles: &[(usize, usize)],
+        goal_tiles: &[(usize, usize)],
+        spike_tiles: &[(usize, usize)],
+        start_x: f32,
+        start_y: f32,
+        tile_size: f32,
+        delver_config: DelverConfig,
+        world_config: WorldConfig,
+    ) -> Self {
         let mut grid = TileGrid::new(width, height, tile_size);
         let mut world = PhysicsWorld::new();
 
@@ -89,8 +114,8 @@ impl RustPhysicsEngine {
             .build();
         let player_body_handle = world.rigid_bodies.insert(player_body);
 
-        let half_w = delver_config.player_width / 2.0;
-        let half_h = delver_config.player_height / 2.0;
+        let half_w = delver_config.physics_width / 2.0;
+        let half_h = delver_config.physics_height / 2.0;
         let border_radius = delver_config.border_radius;
         let player_collider = ColliderBuilder::round_cuboid(
             half_w - border_radius,
@@ -349,6 +374,17 @@ fn runtime_error_to_py(error: RuntimeError) -> pyo3::PyErr {
 #[pyo3::pymethods]
 impl RustPhysicsEngine {
     #[new]
+    #[pyo3(signature = (
+        width,
+        height,
+        solid_tiles,
+        goal_tiles,
+        spike_tiles,
+        start_x,
+        start_y,
+        tile_size,
+        delver_config_path = None,
+    ))]
     fn py_new(
         width: usize,
         height: usize,
@@ -358,16 +394,42 @@ impl RustPhysicsEngine {
         start_x: f32,
         start_y: f32,
         tile_size: f32,
+        delver_config_path: Option<String>,
     ) -> Self {
-        Self::new(
+        let delver_config = match delver_config_path.as_deref() {
+            Some(path) => {
+                let path = std::path::Path::new(path);
+                match DelverConfig::load(path) {
+                    Ok(cfg) => {
+                        eprintln!(
+                            "delver config: {} (hazard_offset_y={})",
+                            path.display(),
+                            cfg.hazard_offset_y
+                        );
+                        cfg
+                    }
+                    Err(err) => {
+                        eprintln!(
+                            "warning: failed to load delver config {} ({err}); using defaults",
+                            path.display()
+                        );
+                        DelverConfig::default()
+                    }
+                }
+            }
+            None => DelverConfig::default(),
+        };
+        Self::from_geometry_ref_with_config(
             width,
             height,
-            solid_tiles,
-            goal_tiles,
-            spike_tiles,
+            &solid_tiles,
+            &goal_tiles,
+            &spike_tiles,
             start_x,
             start_y,
             tile_size,
+            delver_config,
+            WorldConfig::default(),
         )
     }
 
@@ -486,10 +548,11 @@ mod tests {
         let tile = 16.0_f32;
         let floor_row = 5_usize;
         let solids: Vec<(usize, usize)> = (0..8).map(|x| (x, floor_row)).collect();
-        // Spike sits on the floor surface ahead of the delver.
-        let spikes = [(4, floor_row - 1)];
+        // Spike at torso height (not floor surface): feet-only contact must not kill.
+        // Standing COM ≈ floor_top + half_h; hazard mask is width×height at offset_y.
+        let spikes = [(4, floor_row - 2)];
 
-        let half_h = DelverConfig::default().player_height / 2.0;
+        let half_h = DelverConfig::default().physics_height / 2.0;
         let floor_top = 1.0 * tile;
         let start_x = 1.5 * tile;
         let start_y = floor_top + half_h + 1.0;
@@ -515,7 +578,7 @@ mod tests {
             }
         }
 
-        let died = died.expect("delver must die on the spike");
+        let died = died.expect("delver must die when hazard mask hits the spike");
         assert_eq!(died.death_cause, Some(DeathCause::Hazard));
 
         // Death freezes the world: the corpse no longer moves.
@@ -528,6 +591,67 @@ mod tests {
             (state.x, state.y),
             frozen,
             "dead delver must stay frozen in place"
+        );
+    }
+
+    #[test]
+    fn floor_spike_standing_kills_delver() {
+        let tile = 16.0_f32;
+        let floor_row = 5_usize;
+        let solids: Vec<(usize, usize)> = (0..8).map(|x| (x, floor_row)).collect();
+        let spikes = [(4, floor_row - 1)];
+
+        let cfg = DelverConfig::default();
+        let half_h = cfg.physics_height / 2.0;
+        let floor_top = 1.0 * tile;
+        let start_x = 4.5 * tile;
+        let start_y = floor_top + half_h + 1.0;
+
+        let mut engine = RustPhysicsEngine::from_geometry_ref(
+            8,
+            6,
+            &solids,
+            &[],
+            &spikes,
+            start_x,
+            start_y,
+            tile,
+        );
+
+        engine.set_delver_action(0.0, false).unwrap();
+        let mut died = None;
+        for _ in 0..180 {
+            let d = engine.step_native(1.0 / 60.0).unwrap();
+            if d.is_dead {
+                died = Some(d);
+                break;
+            }
+        }
+        let died = died.expect("standing on floor spikes must kill (aligned torso bottom)");
+        assert_eq!(died.death_cause, Some(DeathCause::Hazard));
+    }
+
+    #[test]
+    fn hazard_mask_stays_within_physics_top() {
+        let cfg = DelverConfig::default();
+        let hazard = crate::world_objects::components::aabb_mask::AabbMask::with_offsets(
+            cfg.hazard_width,
+            cfg.hazard_height,
+            0.0,
+            cfg.hazard_offset_y,
+        )
+        .bounds(0.0, 0.0);
+        let phys_top = cfg.physics_height / 2.0;
+        assert!(
+            hazard.top <= phys_top + 1e-3,
+            "hazard top {} must stay at/below physics top {} (ceiling false positives)",
+            hazard.top,
+            phys_top
+        );
+        assert!(
+            hazard.bottom < -3.0,
+            "hazard bottom {} must reach into the floor-spike band when standing",
+            hazard.bottom
         );
     }
 
@@ -562,8 +686,8 @@ mod tests {
         let width = 16_usize;
         let height = 14_usize;
         let floor_row = height - 1; // bottom row
-        let half_h = DelverConfig::default().player_height / 2.0;
-        let half_w = DelverConfig::default().player_width / 2.0;
+        let half_h = DelverConfig::default().physics_height / 2.0;
+        let half_w = DelverConfig::default().physics_width / 2.0;
 
         // Continuous floor on the bottom row.
         let mut solids: Vec<(usize, usize)> = (0..width).map(|x| (x, floor_row)).collect();
@@ -677,7 +801,7 @@ mod tests {
         let width = 12_usize;
         let height = 12_usize;
         let floor_row = height - 1;
-        let half_h = DelverConfig::default().player_height / 2.0;
+        let half_h = DelverConfig::default().physics_height / 2.0;
         let solids: Vec<(usize, usize)> = (0..width).map(|x| (x, floor_row)).collect();
         let floor_top = (height - floor_row) as f32 * tile;
         let start_x = 4.0 * tile;
@@ -736,8 +860,8 @@ mod tests {
         let tile = 16.0_f32;
         let height = 8_usize;
         let floor_row = height - 1;
-        let half_h = DelverConfig::default().player_height / 2.0;
-        let half_w = DelverConfig::default().player_width / 2.0;
+        let half_h = DelverConfig::default().physics_height / 2.0;
+        let half_w = DelverConfig::default().physics_width / 2.0;
         let floor_top = (height - floor_row) as f32 * tile;
         let inward = DelverConfig::default().ray_offset_inward;
         let coyote_frames =

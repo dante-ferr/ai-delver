@@ -4,8 +4,13 @@ define_config! {
     pub struct DelverConfig,
     file: "src/world_objects/delver/delver.toml",
     {
-        pub player_width: f32,
-        pub player_height: f32,
+        pub physics_width: f32,
+        pub physics_height: f32,
+        pub physics_offset_y: f32,
+
+        pub hazard_width: f32,
+        pub hazard_height: f32,
+        pub hazard_offset_y: f32,
 
         pub max_vx: f32,
         pub max_vy: f32,

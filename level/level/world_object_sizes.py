@@ -51,8 +51,8 @@ def _delver_size_tiles_cached(
 
     with Path(delver_toml).open("rb") as handle:
         data = tomllib.load(handle)
-    width_px = float(data["player_width"])
-    height_px = float(data["player_height"])
+    width_px = float(data["physics_width"])
+    height_px = float(data["physics_height"])
     return (
         max(1, math.ceil(width_px / tile_width)),
         max(1, math.ceil(height_px / tile_height)),

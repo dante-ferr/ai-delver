@@ -20,7 +20,7 @@ def _delver_player_height_px() -> float:
     from level.world_object_sizes import default_delver_toml
 
     with default_delver_toml().open("rb") as handle:
-        return float(tomllib.load(handle)["player_height"])
+        return float(tomllib.load(handle)["physics_height"])
 
 
 def _element_footprint_size(element) -> tuple[int, int]:
@@ -83,6 +83,8 @@ class Runtime:
         cell_bottom = (height - by - 1) * tile_h
         start_y = cell_bottom + player_height / 2.0
 
+        from level.world_object_sizes import default_delver_toml
+
         self.physics_engine = runtime_core.RustPhysicsEngine(
             width,
             height,
@@ -92,6 +94,7 @@ class Runtime:
             start_x,
             start_y,
             tile_w,
+            str(default_delver_toml()),
         )
 
         self.world_objects_controller = WorldObjectsController()

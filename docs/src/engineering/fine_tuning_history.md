@@ -33,7 +33,7 @@ Inspection of `intelligence/src/environments/exploration.rs` revealed that tile 
 
 ### Engineering Resolution
 Implemented the **3-Tile Vertical Span Exploration Brush** (`step_on_vertical_span`) in `exploration.rs` and `level_env.rs`:
-- Sweeps the Delver's full 3-tile physical height footprint (`feet_ty` to `head_ty` based on `player_height = 38.0px`).
+- Sweeps the Delver's full 3-tile physical height footprint (`feet_ty` to `head_ty` based on `physics_height = 38.0px`).
 - Walking on flat ground automatically marks the air tiles directly above the path as visited.
 - Subsequent jumps in place over previously walked flat ground produce `newly_explored = false` ($\implies 0$ exploration reward), mathematically eliminating the jump-farming exploit.
 

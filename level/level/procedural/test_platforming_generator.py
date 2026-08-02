@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import unittest
 
 from level.config import Config, procedural_config
@@ -181,6 +182,164 @@ class TestClearanceGenerator(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result.direction, -1)
 
+    def test_neighbor_pits_leave_exact_bridge_width(self):
+        from level.procedural._clearance import ClearanceHeightState
+        from level.procedural._sketch_grid import CellKind, SketchGrid
+        from level.procedural._structures import PathHead, paint_floor_run
+
+        gen = ProceduralPlatformingGenerator(seed=0)
+        bridge_w = int(gen.cfg.NEIGHBOR_PIT_BRIDGE_WIDTH)
+        grid = SketchGrid()
+        start = paint_floor_run(grid, x0=0, x1=6, floor_y=12, clearance_h=3)
+        head = PathHead(1, start, None)
+        clearance = ClearanceHeightState(
+            current=3, min_h=3, max_h=3, max_step=0, stay_weight=1.0, change_weight=0.0
+        )
+        result = gen._try_neighbor_pits(grid, head, clearance)
+        self.assertIsNotNone(result)
+        pit_xs = sorted(grid.pit_columns)
+        self.assertGreaterEqual(len(pit_xs), 2 * int(gen.cfg.MIN_GAP_TILES))
+        runs: list[list[int]] = []
+        for x in pit_xs:
+            if not runs or x > runs[-1][-1] + 1:
+                runs.append([x])
+            else:
+                runs[-1].append(x)
+        self.assertGreaterEqual(len(runs), 2)
+        left, right = runs[0], runs[1]
+        self.assertEqual(right[0] - left[-1] - 1, bridge_w)
+        bridge_floors = [
+            y
+            for y in range(grid.min_y, grid.max_y + 1)
+            if all(
+                grid.get(x, y) == CellKind.PLATFORM
+                for x in range(left[-1] + 1, right[0])
+            )
+        ]
+        self.assertTrue(
+            bridge_floors,
+            "Expected a solid bridge platform between the two pit gaps",
+        )
+
+    def test_delay_ledge_is_short_bump_then_drop(self):
+        from level.procedural._clearance import ClearanceHeightState
+        from level.procedural._sketch_grid import CellKind, SketchGrid
+        from level.procedural._structures import PathHead, paint_floor_run
+
+        gen = ProceduralPlatformingGenerator(seed=1)
+        ledge_w = int(gen.cfg.DELAY_LEDGE_WIDTH)
+        frac = float(gen.cfg.DELAY_LEDGE_JUMP_HEIGHT_FRACTION)
+        max_rise = max(1, int(math.floor(gen.jump_height * frac)))
+        min_rise = max(1, int(gen.cfg.get("delay_ledge_min_height_tiles", 1)))
+        radius = gen._delay_clear_radius(ledge_w)
+        approach_y = 20
+        # Wide approach so the clear-radius runway fits.
+        grid = SketchGrid()
+        start = paint_floor_run(
+            grid, x0=0, x1=max(8, radius + 2), floor_y=approach_y, clearance_h=3
+        )
+        head = PathHead(1, start, None)
+        clearance = ClearanceHeightState(
+            current=3, min_h=3, max_h=3, max_step=0, stay_weight=1.0, change_weight=0.0
+        )
+        result = gen._try_delay_ledge(grid, head, clearance)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.floor_y, approach_y)
+
+        # Find the raised bump: a ledge_w run somewhere between min and max rise.
+        short = None
+        bump_y = None
+        for rise in range(min_rise, max_rise + 1):
+            ledge_y = approach_y - rise
+            ledge_cols = [
+                x
+                for x in range(grid.min_x, grid.max_x + 1)
+                if grid.get(x, ledge_y) == CellKind.PLATFORM
+                and grid.get(x, ledge_y - 1) != CellKind.PLATFORM
+            ]
+            runs: list[list[int]] = []
+            for x in sorted(ledge_cols):
+                if not runs or x > runs[-1][-1] + 1:
+                    runs.append([x])
+                else:
+                    runs[-1].append(x)
+            short = next((r for r in runs if len(r) == ledge_w), None)
+            if short is not None:
+                bump_y = ledge_y
+                break
+        self.assertIsNotNone(
+            short, f"Expected a {ledge_w}-wide bump between rises {min_rise}..{max_rise}"
+        )
+        self.assertFalse(grid.pit_columns)
+
+        bump_x0, bump_x1 = short[0], short[-1] + 1
+        # Clear runway columns on each side stay free of foreign platforms in the
+        # air band above the approach floor (clearance may occupy them).
+        for x in list(range(bump_x0 - radius, bump_x0)) + list(
+            range(bump_x1, bump_x1 + radius)
+        ):
+            for y in range(bump_y - 1, approach_y):
+                kind = grid.get(x, y)
+                self.assertNotEqual(
+                    kind,
+                    CellKind.PLATFORM,
+                    f"Clear radius cell ({x},{y}) must not be a platform",
+                )
+        # Approach / landing floors cover the radius.
+        for x in range(bump_x0 - radius, bump_x0):
+            self.assertEqual(grid.get(x, approach_y), CellKind.PLATFORM)
+        for x in range(bump_x1, bump_x1 + radius):
+            self.assertEqual(grid.get(x, approach_y), CellKind.PLATFORM)
+
+    def test_delay_ledge_height_samples_within_configured_range(self):
+        from level.procedural._clearance import ClearanceHeightState
+        from level.procedural._sketch_grid import CellKind, SketchGrid
+        from level.procedural._structures import PathHead, paint_floor_run
+
+        gen = ProceduralPlatformingGenerator(seed=0)
+        frac = float(gen.cfg.DELAY_LEDGE_JUMP_HEIGHT_FRACTION)
+        max_rise = max(1, int(math.floor(gen.jump_height * frac)))
+        min_rise = max(1, int(gen.cfg.get("delay_ledge_min_height_tiles", 1)))
+        radius = gen._delay_clear_radius(int(gen.cfg.DELAY_LEDGE_WIDTH))
+        heights: set[int] = set()
+        for seed in range(40):
+            gen = ProceduralPlatformingGenerator(seed=seed)
+            # Force the helper by calling it directly with a fresh grid.
+            approach_y = 24
+            grid = SketchGrid()
+            start = paint_floor_run(
+                grid, x0=0, x1=max(10, radius + 4), floor_y=approach_y, clearance_h=3
+            )
+            head = PathHead(1, start, None)
+            clearance = ClearanceHeightState(
+                current=3, min_h=3, max_h=3, max_step=0, stay_weight=1.0, change_weight=0.0
+            )
+            # Re-seed the generator rng from seed already done; call helper.
+            result = gen._try_delay_ledge(grid, head, clearance)
+            if result is None:
+                continue
+            for rise in range(min_rise, max_rise + 1):
+                y = approach_y - rise
+                cols = [
+                    x
+                    for x in range(grid.min_x, grid.max_x + 1)
+                    if grid.get(x, y) == CellKind.PLATFORM
+                    and grid.get(x, y - 1) != CellKind.PLATFORM
+                ]
+                runs: list[list[int]] = []
+                for x in sorted(cols):
+                    if not runs or x > runs[-1][-1] + 1:
+                        runs.append([x])
+                    else:
+                        runs[-1].append(x)
+                if any(len(r) == int(gen.cfg.DELAY_LEDGE_WIDTH) for r in runs):
+                    heights.add(rise)
+                    break
+        self.assertTrue(heights)
+        self.assertTrue(all(min_rise <= h <= max_rise for h in heights))
+        # With enough seeds we should see more than one height when the range allows.
+        if max_rise > min_rise:
+            self.assertGreaterEqual(len(heights), 2)
 
     def test_span_clearance_is_takeoff_anchored(self):
         from level.procedural._clearance import paint_span_clearance, span_ceiling_y

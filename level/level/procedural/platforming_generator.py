@@ -11,10 +11,11 @@ from level.config import procedural_config
 from level.procedural._clearance import (
     ClearanceHeightState,
     floor_clearance_height,
+    paint_floor_clearance,
     span_clearance_height,
 )
 from level.procedural._finalize import finalize_sketch_dict
-from level.procedural._sketch_grid import SketchGrid
+from level.procedural._sketch_grid import CellKind, SketchGrid
 from level.procedural._structures import (
     FloorSeg,
     PathHead,
@@ -276,16 +277,20 @@ class ProceduralPlatformingGenerator:
                 if k == "continue":
                     probs[i] *= float(self.cfg.FORWARD_BIAS)
             pick = self.rng.choices(keys, weights=probs, k=1)[0]
+            # Neighbor-pit pairs must be planned before the first pit lands: the
+            # bridge between gaps is exactly ``neighbor_pit_bridge_width`` tiles,
+            # not a normal landing plus a short continue.
+            if (
+                pick == "pit"
+                and self.rng.random() < float(self.cfg.NEIGHBOR_PIT_BRIDGE_ODDS)
+            ):
+                paired = self._try_neighbor_pits(grid, head, clearance)
+                if paired is not None:
+                    return paired
             result = self._apply_structure(grid, head, pick, clearance)
             if result is not None:
                 # Continuity tracks ambient floor clearance only (already sampled).
-                if pick == "pit" and self.rng.random() < float(
-                    self.cfg.NEIGHBOR_PIT_BRIDGE_ODDS
-                ):
-                    bridged = self._try_neighbor_pit_bridge(grid, result, clearance)
-                    if bridged is not None:
-                        return bridged
-                if pick in ("continue", "shift") and self.rng.random() < float(
+                if pick in ("continue", "shift", "pit") and self.rng.random() < float(
                     self.cfg.DELAY_LEDGE_ODDS
                 ):
                     ledged = self._try_delay_ledge(grid, result, clearance)
@@ -513,36 +518,70 @@ class ProceduralPlatformingGenerator:
             return -1
         return 1 if self.rng.random() < (1.0 + bias) / 2.0 else -1
 
-    def _try_neighbor_pit_bridge(
+    def _try_neighbor_pits(
         self,
         grid: SketchGrid,
         head: PathHead,
         clearance: ClearanceHeightState,
     ) -> PathHead | None:
-        """Optional: short bridge then a second pit."""
-        bridge_w = int(self.cfg.NEIGHBOR_PIT_BRIDGE_WIDTH)
-        bridge_h = clearance.sample_next(self.rng)
-        bridged = try_continue(
-            grid, head, length=bridge_w, clearance_h=bridge_h
-        )
-        if bridged is None:
+        """Two pits separated by exactly ``neighbor_pit_bridge_width`` tiles.
+
+        The first pit lands on a bridge-width platform; the second pit follows
+        immediately so the solid between the two gaps stays that short.
+        """
+        if not self.phase.allow_pits:
             return None
-        delta_h = self._sample_delta_h()
-        gap = self._sample_gap(delta_h)
-        if gap is None:
-            return bridged
-        next_h = clearance.sample_next(self.rng)
+        bridge_w = max(1, int(self.cfg.NEIGHBOR_PIT_BRIDGE_WIDTH))
+        overlap = self._span_edge_overlap()
+
+        delta1 = self._sample_delta_h()
+        min_depth = max(5, math.ceil(self.limits.max_jump_height_tiles) + 1)
+        if delta1 < 0 and abs(delta1) < min_depth:
+            delta1 = -min_depth
+        gap1 = self._sample_gap(delta1)
+        if gap1 is None:
+            return None
+        h1 = clearance.sample_next(self.rng)
+        first = try_pit(
+            grid,
+            head,
+            gap=gap1,
+            delta_h=delta1,
+            landing_width=bridge_w,
+            clearance_h=h1,
+            span_clearance_h=self._span_height_for(h1),
+            span_edge_overlap=overlap,
+        )
+        if first is None:
+            return None
+
+        delta2 = self._sample_delta_h()
+        if delta2 < 0 and abs(delta2) < min_depth:
+            delta2 = -min_depth
+        gap2 = self._sample_gap(delta2)
+        if gap2 is None:
+            return first
+        h2 = clearance.sample_next(self.rng)
         second = try_pit(
             grid,
-            bridged,
-            gap=gap,
-            delta_h=delta_h,
+            first,
+            gap=gap2,
+            delta_h=delta2,
             landing_width=self._sample_width(),
-            clearance_h=next_h,
-            span_clearance_h=self._span_height_for(next_h),
-            span_edge_overlap=self._span_edge_overlap(),
+            clearance_h=h2,
+            span_clearance_h=self._span_height_for(h2),
+            span_edge_overlap=overlap,
         )
-        return second if second is not None else bridged
+        return second if second is not None else first
+
+    def _delay_clear_radius(self, ledge_w: int) -> int:
+        """Horizontal clear runway on each side of a delay bump.
+
+        ``(same-height max gap − ledge width) / 2`` so the bump sits in the
+        middle of a window as wide as the recommended same-height pit gap.
+        """
+        max_gap = max(1, int(self.limits.recommended_max_gap_tiles))
+        return max(0, (max_gap - max(1, int(ledge_w))) // 2)
 
     def _try_delay_ledge(
         self,
@@ -550,19 +589,109 @@ class ProceduralPlatformingGenerator:
         head: PathHead,
         clearance: ClearanceHeightState,
     ) -> PathHead | None:
-        """Optional short ledge at ~¾ jump height (delay platform)."""
+        """Short bump of sampled height, with clear runways on both sides.
+
+        Climbs ``delay_ledge_width`` tiles by a height in
+        ``[delay_ledge_min_height_tiles, ⌊JH · fraction⌋]``, then drops back.
+        Enforces a clear air/floor window of radius
+        ``(recommended_max_gap − width) / 2`` on each side of the bump.
+        """
+        if not self.phase.allow_floor_height_shifts:
+            return None
+        if self.rise_budget() < 1:
+            return None
+
         frac = float(self.cfg.DELAY_LEDGE_JUMP_HEIGHT_FRACTION)
-        rise = max(1, int(math.floor(self.jump_height * frac)))
-        next_h = clearance.sample_next(self.rng)
-        return try_floor_height_shift(
+        max_rise = min(
+            max(1, int(math.floor(self.jump_height * frac))),
+            self.rise_budget(),
+        )
+        min_rise = max(1, int(self.cfg.get("delay_ledge_min_height_tiles", 1)))
+        min_rise = min(min_rise, max_rise)
+        rise = self.rng.randint(min_rise, max_rise)
+
+        ledge_w = max(1, int(self.cfg.DELAY_LEDGE_WIDTH))
+        radius = self._delay_clear_radius(ledge_w)
+        overlap = self._span_edge_overlap()
+        approach_y = head.floor_y
+
+        # Approach runway: need ``radius`` floor tiles behind the tip.
+        if radius > 0 and head.segment.width < radius:
+            ext_h = clearance.sample_next(self.rng)
+            extended = try_continue(
+                grid,
+                head,
+                length=radius - head.segment.width,
+                clearance_h=ext_h,
+            )
+            if extended is None:
+                return None
+            head = extended
+
+        tip_before = head.tip_x
+        climb_h = clearance.sample_next(self.rng)
+        # Drop face paints one more top tile; climb places width-1, face completes width.
+        climb_length = max(1, ledge_w - 1)
+        ledged = try_floor_height_shift(
             grid,
             head,
             delta_h=rise,
-            length=int(self.cfg.DELAY_LEDGE_WIDTH),
-            clearance_h=next_h,
-            span_clearance_h=self._span_height_for(next_h),
-            span_edge_overlap=self._span_edge_overlap(),
+            length=climb_length,
+            clearance_h=climb_h,
+            span_clearance_h=self._span_height_for(climb_h),
+            span_edge_overlap=overlap,
         )
+        if ledged is None:
+            return None
+
+        if head.direction > 0:
+            bump_x0, bump_x1 = tip_before, tip_before + ledge_w
+        else:
+            bump_x0, bump_x1 = tip_before - ledge_w + 1, tip_before + 1
+
+        drop_h = clearance.sample_next(self.rng)
+        # Landing must cover the far clear runway (drop also expands to rise+1).
+        land_len = max(self._sample_width(), radius, rise + 1)
+        dropped = try_floor_height_shift(
+            grid,
+            ledged,
+            delta_h=-rise,
+            length=land_len,
+            clearance_h=drop_h,
+            span_clearance_h=self._span_height_for(drop_h),
+            span_edge_overlap=self._sample_shift_transition_gap(),
+        )
+        if dropped is None:
+            return ledged
+
+        # Clear air window: radius past each bump edge, from above the bump top
+        # down to the approach floor (exclusive), skipping the bump platforms.
+        clear_h = max(climb_h, drop_h, head.clearance_h, rise + 1)
+        clear_x0 = bump_x0 - radius
+        clear_x1 = bump_x1 + radius
+        top_y = approach_y - rise - clear_h
+        for x in range(clear_x0, clear_x1):
+            for y in range(top_y, approach_y):
+                if grid.get(x, y) == CellKind.PLATFORM:
+                    continue
+                grid.paint_clearance(x, y)
+        # Standing clearance on the flat runways themselves.
+        if radius > 0:
+            paint_floor_clearance(
+                grid,
+                x0=bump_x0 - radius,
+                x1=bump_x0,
+                floor_y=approach_y,
+                height=clear_h,
+            )
+            paint_floor_clearance(
+                grid,
+                x0=bump_x1,
+                x1=bump_x1 + radius,
+                floor_y=approach_y,
+                height=clear_h,
+            )
+        return dropped
 
 
 def _segment_dist(origin: FloorSeg, seg: FloorSeg) -> int:

@@ -31,7 +31,7 @@ Physics TOMLs (delver.toml + world.toml)
 ## 2. What We Have Accomplished
 
 ### A. Programmatic Locomotion Envelope (`platforming_limits.py`)
-- **Physics Derivation**: Delver Height ($DH$) and Jump Height ($JH$) are dynamically calculated from physics constants (`delver.toml` and `world.toml`).
+- **Physics Derivation**: Delver Height ($DH$) and Jump Height ($JH$) are dynamically calculated from physics constants (`delver.toml` and `world.toml`). Full held jump is the authoring envelope; early Jump release cuts upward velocity (`jump_cut_multiplier`) for short hops and is not required for solvability budgets.
 - **Delta-Height Gap Lookups**: `max_gap_tiles_for_delta_height(delta_h)` simulates semi-implicit Euler coyote jumps for any height delta $\Delta h = y_{\text{landing}} - y_{\text{takeoff}}$ (positive = climb, negative = fall). Out-of-reach climbs return $0$.
 - **0.5 Tile Human Safety Margin**: Deducts `0.5` tiles from effective gap reach before flooring (`math.floor((sim_gap_tiles - 0.5) + 1e-6)`), preventing procedural pits from requiring frame-perfect coyote jumps.
 - **CLI Tooling**: `python src/cli/main.py platforming-limits --delta-height N` exposes physics budgets via JSON stdout.
@@ -62,7 +62,7 @@ Physics TOMLs (delver.toml + world.toml)
 ### E. Configuration & Testing
 - **Centralized TOML**: Configured via `level/level/procedural_platforming.toml`.
 - **Travel Direction Bias**: `ltr_direction_bias` in $[-1, 1]$ controls level orientation: $+1$ always left-to-right, $-1$ always right-to-left, $0$ equal odds ($P(\text{LTR}) = (1 + \text{bias}) / 2$). Extremes short-circuit without drawing RNG, so $\text{bias} = \pm 1$ keeps seeds exactly mirrored between orientations.
-- **Test Suite**: 34 automated unit tests in `level/level/procedural/test_platforming_generator.py` covering delta gap caching, seed reproducibility, solid perimeters, unblocked headroom, spike-floored pit depth/alignment, full-width pit strips, clean pit internal walls, single-orientation constraint for adjacent spikes (no corner clashes), grouped ceiling strips raised above the movement envelope, importer hazard placement, solid fill under climb landings, floating platform tile detection, and travel direction bias orientation/invariants.
+- **Test Suite**: 37 automated unit tests in `level/level/procedural/test_platforming_generator.py` covering delta gap caching, seed reproducibility, solid perimeters, unblocked headroom, spike-floored pit depth/alignment, full-width pit strips, clean pit internal walls, single-orientation constraint for adjacent spikes (no corner clashes), grouped ceiling strips raised above the movement envelope, neighbor-pit bridge width, delay-ledge short bump (variable height + clear radius), importer hazard placement, solid fill under climb landings, floating platform tile detection, and travel direction bias orientation/invariants.
 
 ---
 
@@ -73,7 +73,7 @@ Physics TOMLs (delver.toml + world.toml)
    - Implement path merging logic (joining a sub-path back into its parent corridor).
 
 2. **Pattern Overlays**:
-   - Re-enable and fine-tune optional structures: neighbor pits with short platform bridges (`neighbor_pit_bridge_odds`), and delay ledges at $\frac{3}{4} JH$ (`delay_ledge_odds`).
+   - Neighbor pits and delay ledges are active overlays (not stubs). Neighbor pits are planned as a pair before the first gap so the solid between shafts is exactly `neighbor_pit_bridge_width` (default 2). Delay ledges are a short floor-height bump whose rise is sampled between `delay_ledge_min_height_tiles` and ~¾ JH; a clear runway of radius `(recommended_max_gap − delay_ledge_width) / 2` is enforced on each side so the bump sits in a same-height-max-gap-wide window. Tuned via `neighbor_pit_bridge_odds` / `delay_ledge_odds` with plain `pit_weight` kept near continue so the patterns get room to fire.
 
 3. **Curriculum Training Integration**:
    - Integrate `curriculum.py` phases into the RL training server so Delvers train progressively across obstacle-specific phases (`flat_run` $\rightarrow$ `same_height_pits` $\rightarrow$ `rises` $\rightarrow$ `falls` $\rightarrow$ `mixed`).

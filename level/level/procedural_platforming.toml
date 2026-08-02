@@ -9,9 +9,11 @@ pack_level_max_attempts = 8
 use_curriculum = false
 
 # Structure selection weights (reweighted at runtime; clearance conflicts → 0).
-continue_weight = 2.5
-pit_weight = 4.0
-floor_height_shift_weight = 2.0
+# Pit weight sits near continue so optional patterns (neighbor pits, delay
+# ledges) get room to fire instead of drowning under plain pits.
+continue_weight = 2.8
+pit_weight = 2.2
+floor_height_shift_weight = 2.2
 turn_weight = 0.0
 # Climb → reverse → extend the other way (creates switchbacks).
 switchback_weight = 0.0
@@ -28,8 +30,8 @@ post_climb_turn_odds = 0.0
 post_climb_turn_boost = 3.0
 
 # Floor / platform sizing
-min_platform_width = 1
-max_platform_width = 18
+min_platform_width = 4
+max_platform_width = 6
 min_continue_length = 4
 max_continue_length = 6
 spawn_platform_width = 4
@@ -74,11 +76,18 @@ clearance_height_start_raise_odds = 0.25
 span_clearance_jump_heights = 1.0
 span_clearance_delver_heights = 1.0
 
-# Optional patterns (odds in [0, 1])
-neighbor_pit_bridge_odds = 0.12
+# Optional patterns (odds in [0, 1]). Neighbor pits are planned as a pair
+# before the first gap (bridge width = solid tiles between the two gaps).
+# Delay ledges are a short floor-height bump: climb a height sampled between
+# ``delay_ledge_min_height_tiles`` and ~¾ JH for ``delay_ledge_width`` tiles,
+# then drop back. A clear runway of radius
+# (same-height max gap − delay_ledge_width) / 2 is enforced on each side so the
+# bump sits in the middle of a max-gap-wide approach window.
+neighbor_pit_bridge_odds = 0.35
 neighbor_pit_bridge_width = 2
-delay_ledge_odds = 0.08
+delay_ledge_odds = 0.35
 delay_ledge_width = 2
+delay_ledge_min_height_tiles = 1
 delay_ledge_jump_height_fraction = 0.75
 # Spike trap decoration. Pit floors always carry a full spike strip (extremity
 # corner cells included — they point up like the rest of the row), and pit

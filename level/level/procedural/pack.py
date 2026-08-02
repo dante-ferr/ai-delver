@@ -79,7 +79,7 @@ def generate_platforming_pack(
             min_path_steps=int(proc.get("min_path_steps", 8)),
             max_path_steps=int(proc.get("max_path_steps", 14)),
             continue_weight=float(proc.get("continue_weight", 2.5)),
-            pit_weight=float(proc.get("pit_weight", 4.0)),
+            pit_weight=float(proc.get("pit_weight", 2.2)),
             floor_height_shift_weight=float(
                 proc.get("floor_height_shift_weight", 2.0)
             ),

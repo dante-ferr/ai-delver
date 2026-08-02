@@ -16,6 +16,7 @@ define_config! {
         pub idle_stop_speed: f32,
 
         pub jump_impulse: f32,
+        pub jump_cut_multiplier: f32,
         pub jump_tolerance_max: f32,
         pub jump_cooldown_max: f32,
 

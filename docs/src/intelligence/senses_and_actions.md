@@ -24,14 +24,16 @@ Two categorical heads (see `ActorCritic` in `agent/model.rs`):
 | Head | Choices | Meaning |
 | :--- | :--- | :--- |
 | **Run** | 3 | Left / idle / right (encoded as indices; CLI trajectories map to signed run) |
-| **Jump** | 2 | Hold-jump pressed or not |
+| **Jump** | 2 | Hold-jump pressed or not (hold through ascent for full height; early release = short hop) |
 
-Physics still owns coyote time, impulse, gravity. RL only chooses *intent* at `actions_per_second` (default 10 Hz).
+Physics still owns coyote time, impulse, gravity, and jump-cut on release. RL only chooses *intent* at `actions_per_second` (default 10 Hz).
 
 ## Takeoff vs held jump
 
 Reward and neatness metrics care about **takeoff impulses**, not every air frame while Jump is held.
 
 The env marks `jump_takeoff` when Jump is pressed *and* vertical velocity increases from the impulse (see `level_env`). That prevents “hold Jump across a gap” from looking like dozens of jumps.
+
+**Variable height:** takeoff is rising-edge only. Holding Jump after takeoff preserves upward velocity; releasing while `vy > 0` multiplies `vy` by `jump_cut_multiplier` (short hop). Gap / rise authoring budgets assume a **full hold**.
 
 Next: [Rewards](rewards.md).

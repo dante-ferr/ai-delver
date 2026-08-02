@@ -4,6 +4,10 @@ use crate::world_objects::delver::DelverConfig;
 pub struct LocomotionMotor {
     pub jump_tolerance_timer: f32,
     pub jump_cooldown_timer: f32,
+    /// Previous frame's Jump hold — takeoff is rising-edge only (no hold-to-bunnyhop).
+    jump_held_prev: bool,
+    /// True after takeoff until Jump is released (cut) or ascent ends (vy <= 0).
+    jump_cut_armed: bool,
 }
 
 impl LocomotionMotor {
@@ -48,6 +52,7 @@ impl LocomotionMotor {
         new_vx.clamp(-config.max_vx, config.max_vx)
     }
 
+    /// Rising-edge takeoff; early Jump release cuts upward velocity for short hops.
     pub fn try_jump(
         &mut self,
         action_jump: bool,
@@ -55,14 +60,26 @@ impl LocomotionMotor {
         current_vy: &mut f32,
         config: &DelverConfig,
     ) -> bool {
+        let jump_pressed = action_jump && !self.jump_held_prev;
         let can_jump = is_on_ground || self.jump_tolerance_timer > 0.0;
-        if action_jump && self.jump_cooldown_timer <= 0.0 && can_jump {
+        let mut took_off = false;
+
+        if jump_pressed && self.jump_cooldown_timer <= 0.0 && can_jump {
             *current_vy = config.jump_impulse;
             self.jump_cooldown_timer = config.jump_cooldown_max;
             self.jump_tolerance_timer = 0.0;
-            true
-        } else {
-            false
+            self.jump_cut_armed = true;
+            took_off = true;
+        } else if self.jump_cut_armed && !action_jump && *current_vy > 0.0 {
+            *current_vy *= config.jump_cut_multiplier;
+            self.jump_cut_armed = false;
         }
+
+        if *current_vy <= 0.0 {
+            self.jump_cut_armed = false;
+        }
+
+        self.jump_held_prev = action_jump;
+        took_off
     }
 }

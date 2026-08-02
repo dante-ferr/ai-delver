@@ -23,7 +23,7 @@ class Delver(SkeletalEntity):
 
     Physics are driven entirely by the Rust engine exposed through `runtime.physics_engine`.
     This class is responsible for:
-      - Buffering pending input (`pending_run`, `pending_jump`)
+      - Buffering pending input (`pending_run`, `pending_jump` hold across the frame)
       - Driving DragonBones skeleton animation from physics state
       - Air-tilt visual effect
     """
@@ -112,10 +112,12 @@ class Delver(SkeletalEntity):
             self.move_angle = vector_to_angle((direction, 0))
             self.apply_move_visuals()
 
-    def jump(self, dt: float):
+    def jump(self, dt: float, just_pressed: bool = True):
+        """Hold Jump while Space is down; animation starts only on the press edge."""
         self.pending_jump = True
-        self.locomotion_state = DelverLocomotionState.JUMP
-        self.play_locomotion_animation()
+        if just_pressed:
+            self.locomotion_state = DelverLocomotionState.JUMP
+            self.play_locomotion_animation()
 
     def update(self, dt: float):
         if self.in_replay:

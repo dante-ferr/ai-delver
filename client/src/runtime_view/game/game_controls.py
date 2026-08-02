@@ -18,8 +18,8 @@ class GameControls(ViewControls):
             run_direction -= 1
 
         space_is_down = self.keys[window.key.SPACE]
-        if space_is_down and not self._space_was_down:
-            self.delver.jump(dt)
+        if space_is_down:
+            self.delver.jump(dt, just_pressed=not self._space_was_down)
         self._space_was_down = space_is_down
 
         if run_direction != 0:

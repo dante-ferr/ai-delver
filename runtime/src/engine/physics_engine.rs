@@ -611,18 +611,19 @@ mod tests {
         );
 
         // Jump while holding run into the ledge face (wall-kiss ascent).
+        // Hold Jump for a fixed ascent window (full height); never re-press after.
         engine.set_delver_action(1.0, true).unwrap();
         let mut max_y = stand_y;
         let mut max_feet = stand_feet;
         let mut landed_on_4 = false;
         let mut landed_on_5 = false;
+        let hold_jump_frames = 40_usize;
 
         for i in 0..300 {
-            if i == 4 {
-                // Release jump after takeoff; keep pressing into the ledge.
-                engine.set_delver_action(1.0, false).unwrap();
-            }
             let d = engine.step_native(1.0 / 60.0).unwrap();
+            engine
+                .set_delver_action(1.0, i + 1 < hold_jump_frames)
+                .unwrap();
             max_y = max_y.max(d.y);
             max_feet = max_feet.max(d.y - half_h);
             if d.is_on_ground {
@@ -666,6 +667,63 @@ mod tests {
         assert!(
             !landed_on_5,
             "must not land on a +5 surface rise (80px); feet apex was {max_feet}"
+        );
+    }
+
+    /// Early Jump release cuts upward velocity → short hop below full held apex.
+    #[test]
+    fn early_jump_release_shortens_apex() {
+        let tile = 16.0_f32;
+        let width = 12_usize;
+        let height = 12_usize;
+        let floor_row = height - 1;
+        let half_h = DelverConfig::default().player_height / 2.0;
+        let solids: Vec<(usize, usize)> = (0..width).map(|x| (x, floor_row)).collect();
+        let floor_top = (height - floor_row) as f32 * tile;
+        let start_x = 4.0 * tile;
+        let start_y = floor_top + half_h + 1.0;
+
+        let measure_apex = |hold_frames: usize| -> f32 {
+            let mut engine = RustPhysicsEngine::from_geometry_ref(
+                width,
+                height,
+                &solids,
+                &[],
+                &[],
+                start_x,
+                start_y,
+                tile,
+            );
+            engine.set_delver_action(0.0, false).unwrap();
+            for _ in 0..120 {
+                let _ = engine.step_native(1.0 / 60.0).unwrap();
+            }
+            let stand_y = engine.delver().unwrap().y;
+            let mut max_y = stand_y;
+            for i in 0..180 {
+                let hold = i < hold_frames;
+                engine.set_delver_action(0.0, hold).unwrap();
+                let d = engine.step_native(1.0 / 60.0).unwrap();
+                max_y = max_y.max(d.y);
+            }
+            max_y - stand_y
+        };
+
+        // Hold for many frames → full apex; tap for 2 frames → short hop.
+        let full_rise = measure_apex(60);
+        let short_rise = measure_apex(2);
+        eprintln!("jump_cut full_rise={full_rise:.3} short_rise={short_rise:.3}");
+        assert!(
+            (67.0..=73.0).contains(&full_rise),
+            "held jump should reach ~70px COM rise, got {full_rise}"
+        );
+        assert!(
+            short_rise < full_rise * 0.75,
+            "early release should cut apex well below full; short={short_rise} full={full_rise}"
+        );
+        assert!(
+            short_rise > 15.0,
+            "short hop should still leave the ground; got {short_rise}"
         );
     }
 
@@ -720,6 +778,7 @@ mod tests {
             let mut max_x = start_x;
             let mut airborne_frames = -1_i32;
             let mut jumped = false;
+            let mut holding_jump = false;
             for _ in 0..500 {
                 let peek = engine.delver().unwrap();
                 if peek.is_on_ground {
@@ -729,13 +788,14 @@ mod tests {
                 } else {
                     airborne_frames += 1;
                 }
-                let want_jump =
-                    !jumped && airborne_frames >= coyote_delay_frames && airborne_frames >= 0;
-                engine.set_delver_action(1.0, want_jump).unwrap();
-                let d = engine.step_native(1.0 / 60.0).unwrap();
-                if want_jump {
+                if !jumped && airborne_frames >= coyote_delay_frames && airborne_frames >= 0 {
                     jumped = true;
-                    engine.set_delver_action(1.0, false).unwrap();
+                    holding_jump = true;
+                }
+                engine.set_delver_action(1.0, holding_jump).unwrap();
+                let d = engine.step_native(1.0 / 60.0).unwrap();
+                if holding_jump && d.vy <= 0.0 {
+                    holding_jump = false;
                 }
                 max_x = max_x.max(d.x);
                 if d.is_dead {

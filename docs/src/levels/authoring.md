@@ -33,7 +33,8 @@ Use `recommended_max_rise_tiles`, `recommended_max_gap_tiles`, `recommended_min_
 | Quantity | How it is computed |
 | :--- | :--- |
 | Steady run speed | `vx_ss = min(move_force / linear_damping, max_vx)` |
-| Jump height | `h = jump_impulse² / (2 · \|gravity\|)` |
+| Jump height (full hold) | `h = jump_impulse² / (2 · \|gravity\|)` |
+| Short hop | Early Jump release multiplies upward `vy` by `jump_cut_multiplier` (see `delver.toml`) |
 | Max gap | Coyote edge jump + ray-inset overhang (`player_width − 2·ray_offset_inward`) |
 | Tiles | divide by 16px |
 

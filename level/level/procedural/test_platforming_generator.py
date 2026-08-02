@@ -323,7 +323,7 @@ class TestClearanceGenerator(unittest.TestCase):
                 self.assertIn("platform", parsed.cells[y][0])
                 self.assertIn("platform", parsed.cells[y][parsed.width - 1])
 
-    def test_pit_gaps_stay_open_in_finalized_sketch(self):
+    def test_pit_gaps_have_spike_trap_floors(self):
         gen = ProceduralPlatformingGenerator(
             seed=5,
             phase=PhaseConstraints(
@@ -335,15 +335,17 @@ class TestClearanceGenerator(unittest.TestCase):
                 max_path_steps=8,
             ),
         )
-        sketch = gen.generate_sketch("pit_open_check")
-        # Ensure there exists at least one column with a pit gap (air down to near bottom wall)
-        has_pit_gap_column = False
-        for x in range(1, sketch.width - 1):
-            # Check if column x is a pit gap: empty air extending to bottom inner row
-            if "platform" not in sketch.cells[sketch.height - 2][x]:
-                has_pit_gap_column = True
-                break
-        self.assertTrue(has_pit_gap_column, "Finalized sketch must retain open pit gaps")
+        sketch = gen.generate_sketch("pit_spike_check")
+        # Pits are no longer bottomless: each pit shaft ends in a spike row.
+        spike_cells = [
+            (x, y)
+            for y, row in enumerate(sketch.cells)
+            for x, cell in enumerate(row)
+            if cell and "spike_trap" in cell
+        ]
+        self.assertTrue(
+            spike_cells, "Finalized sketch must line pit floors with spike traps"
+        )
 
     def test_climb_shift_keeps_area_under_landing_solid(self):
         from level.procedural._clearance import paint_span_clearance
@@ -378,7 +380,7 @@ class TestClearanceGenerator(unittest.TestCase):
                     f"Cell (x={x}, y={y}) under the climb landing must stay solid",
                 )
 
-    def test_pit_span_carves_exactly_the_gap_columns(self):
+    def test_pit_span_has_spike_floor_at_sampled_depth(self):
         from level.procedural._finalize import finalize_sketch_dict
         from level.procedural._sketch_grid import SketchGrid
         from level.procedural._structures import (
@@ -409,33 +411,48 @@ class TestClearanceGenerator(unittest.TestCase):
             end_seg=landed.segment,
             pad_tiles=2,
             top_margin_tiles=1,
+            pit_depth_range=(3, 3),
+            wall_spike_odds=0.0,
+            ceiling_spike_odds=0.0,
         )
         cells = result["cells"]
         width, height = result["grid_size"]
 
-        def is_platform(x: int, y: int) -> bool:
+        def cell_is(x: int, y: int, label: str) -> bool:
             cell = cells[y][x]
-            return bool(cell) and "platform" in cell
+            return bool(cell) and label in cell
 
         # Sketch origin: min_x=0, pad=2 → local_x = sketch_x + 3.
         # Floor sketch y=10 → local row 11; gap columns sketch 5..8 → local 8..11.
         floor_row = 11
-        self.assertTrue(all(is_platform(x, floor_row) for x in range(3, 8)))
-        self.assertTrue(all(is_platform(x, floor_row) for x in range(12, 16)))
-        self.assertFalse(any(is_platform(x, floor_row) for x in range(8, 12)))
+        self.assertTrue(all(cell_is(x, floor_row, "platform") for x in range(3, 8)))
+        self.assertTrue(all(cell_is(x, floor_row, "platform") for x in range(12, 16)))
+        self.assertFalse(any(cell_is(x, floor_row, "platform") for x in range(8, 12)))
         # Takeoff lip (local x=7) and landing edge (local x=12) stay solid below.
         for x in (7, 12):
             for y in range(floor_row + 1, height - 1):
                 self.assertTrue(
-                    is_platform(x, y),
+                    cell_is(x, y, "platform"),
                     f"Edge column x={x} must be solid below the floor (y={y})",
                 )
-        # The four gap columns (local 8..11) stay open down to the bottom wall.
+        # The four gap columns (local 8..11) are open air for 2 tiles below the
+        # edge, then a full-width flat spike row at the sampled depth (3 tiles)
+        # — extremity corner cells included (they point up with the row).
         for x in range(8, 12):
-            for y in range(floor_row + 1, height - 1):
+            for y in range(floor_row + 1, floor_row + 3):
                 self.assertFalse(
-                    is_platform(x, y),
+                    cell_is(x, y, "platform"),
                     f"Gap column x={x} must stay open below the floor (y={y})",
+                )
+                self.assertFalse(cell_is(x, y, "spike_trap"))
+            self.assertTrue(
+                cell_is(x, floor_row + 3, "spike_trap"),
+                f"Gap column x={x} must have a spike trap at the pit floor",
+            )
+            for y in range(floor_row + 4, height - 1):
+                self.assertTrue(
+                    cell_is(x, y, "platform"),
+                    f"Gap column x={x} must be solid below the spike row (y={y})",
                 )
         _ = width
 
@@ -648,6 +665,270 @@ class TestTravelDirectionBias(unittest.TestCase):
                         above_air and below_air,
                         f"Floating platform tile at (x={x}, y={y}) in RTL seed {seed}",
                     )
+
+
+class TestSpikeTraps(unittest.TestCase):
+    """Pit floors are spike rows at a configured depth; decoration stays safe."""
+
+    @staticmethod
+    def _cells_by_label(sketch, label: str) -> list[tuple[int, int]]:
+        return [
+            (x, y)
+            for y, row in enumerate(sketch.cells)
+            for x, cell in enumerate(row)
+            if cell and label in cell
+        ]
+
+    def test_pit_spike_rows_within_configured_depth(self):
+        from level.config import procedural_config
+
+        min_d = int(procedural_config.get("pit_min_depth_tiles", 1))
+        max_d = int(procedural_config.get("pit_max_depth_tiles", 5))
+        checked = 0
+        for seed in range(10):
+            gen = ProceduralPlatformingGenerator(seed=seed)
+            sketch = gen.generate_sketch(f"spike_depth_{seed}")
+            cells = sketch.cells
+
+            def is_platform(x: int, y: int) -> bool:
+                if not (0 <= x < sketch.width and 0 <= y < sketch.height):
+                    return False
+                cell = cells[y][x]
+                return bool(cell) and "platform" in cell
+
+            def is_air(x: int, y: int) -> bool:
+                if not (0 <= x < sketch.width and 0 <= y < sketch.height):
+                    return False
+                cell = cells[y][x]
+                return not cell or ("platform" not in cell and "spike_trap" not in cell)
+
+            for sx, sy in self._cells_by_label(sketch, "spike_trap"):
+                if not is_air(sx, sy - 1) or not is_platform(sx, sy + 1):
+                    continue  # gallery ceiling / wall spike, not a pit floor
+                # Nearby exposed floor lips above the spike (pit edge rows).
+                # The window spans the widest pit gap so mid-span columns still
+                # find the lower lip the pit depth is measured from.
+                edge_ys = [
+                    py
+                    for px in range(sx - 10, sx + 11)
+                    for py in range(1, sy)
+                    if is_platform(px, py) and is_air(px, py - 1)
+                ]
+                if not edge_ys:
+                    continue
+                depth = sy - max(edge_ys)
+                self.assertGreaterEqual(depth, min_d, f"seed {seed} spike ({sx},{sy})")
+                self.assertLessEqual(depth, max_d, f"seed {seed} spike ({sx},{sy})")
+                checked += 1
+        self.assertGreater(checked, 0, "no pit spike rows were found across seeds")
+
+    def test_every_spike_has_platform_master_and_is_safe(self):
+        for seed in range(10):
+            gen = ProceduralPlatformingGenerator(seed=seed)
+            sketch = gen.generate_sketch(f"spike_master_{seed}")
+            cells = sketch.cells
+
+            def is_platform(x: int, y: int) -> bool:
+                if not (0 <= x < sketch.width and 0 <= y < sketch.height):
+                    return False
+                cell = cells[y][x]
+                return bool(cell) and "platform" in cell
+
+            actor_cells = set(self._cells_by_label(sketch, "delver")) | set(
+                self._cells_by_label(sketch, "goal")
+            )
+
+            def resolve_orientation(sx: int, sy: int) -> str | None:
+                # Mirror pytiling AttachedTile priority: orientation points away
+                # from the master; first match wins (top, right, left, bottom).
+                for orientation, master in (
+                    ("top", (0, 1)),
+                    ("right", (-1, 0)),
+                    ("left", (1, 0)),
+                    ("bottom", (0, -1)),
+                ):
+                    if is_platform(sx + master[0], sy + master[1]):
+                        return orientation
+                return None
+
+            spike_cells = self._cells_by_label(sketch, "spike_trap")
+            spike_set = set(spike_cells)
+            for sx, sy in spike_cells:
+                self.assertGreater(sx, 0)
+                self.assertGreater(sy, 0)
+                self.assertLess(sx, sketch.width - 1)
+                self.assertLess(sy, sketch.height - 1)
+                self.assertNotIn((sx, sy), actor_cells)
+                orientation = resolve_orientation(sx, sy)
+                self.assertIsNotNone(
+                    orientation,
+                    f"Spike at ({sx},{sy}) in seed {seed} has no platform master",
+                )
+                # Internal corners never show spikes on both adjoining surfaces:
+                # 4-adjacent spikes always share one resolved orientation.
+                for dx, dy in ((0, -1), (0, 1), (1, 0), (-1, 0)):
+                    neighbor = (sx + dx, sy + dy)
+                    if neighbor in spike_set:
+                        self.assertEqual(
+                            resolve_orientation(*neighbor),
+                            orientation,
+                            f"Adjacent spikes ({sx},{sy}) and {neighbor} in seed "
+                            f"{seed} clash orientations at an internal corner",
+                        )
+
+    def test_pit_internal_walls_have_no_spikes(self):
+        # Pit floors are flat spike strips; the shaft cells above them (the
+        # pit's internal walls) must stay clean all the way up to the rock.
+        for seed in range(10):
+            gen = ProceduralPlatformingGenerator(seed=seed)
+            sketch = gen.generate_sketch(f"pit_walls_{seed}")
+            cells = sketch.cells
+
+            def is_platform(x: int, y: int) -> bool:
+                if not (0 <= x < sketch.width and 0 <= y < sketch.height):
+                    return False
+                cell = cells[y][x]
+                return bool(cell) and "platform" in cell
+
+            def is_spike(x: int, y: int) -> bool:
+                if not (0 <= x < sketch.width and 0 <= y < sketch.height):
+                    return False
+                cell = cells[y][x]
+                return bool(cell) and "spike_trap" in cell
+
+            def is_air(x: int, y: int) -> bool:
+                if not (0 <= x < sketch.width and 0 <= y < sketch.height):
+                    return False
+                return not is_platform(x, y) and not is_spike(x, y)
+
+            pit_columns = [
+                (sx, sy)
+                for sx, sy in self._cells_by_label(sketch, "spike_trap")
+                if is_platform(sx, sy + 1) and is_air(sx, sy - 1)
+            ]
+            for sx, sy in pit_columns:
+                y = sy - 1
+                while y > 0 and not is_platform(sx, y):
+                    self.assertFalse(
+                        is_spike(sx, y),
+                        f"Spike inside pit shaft at ({sx},{y}) in seed {seed} — "
+                        "pit internal walls must stay clean",
+                    )
+                    y -= 1
+
+    def test_ceiling_strips_are_grouped_and_above_headroom(self):
+        from level.config import procedural_config
+
+        raise_rows = int(procedural_config.get("ceiling_gallery_raise_tiles", 2))
+        ambient = 3  # delver height in tiles (walking corridor height)
+        total_ceiling = 0
+        longest_strip = 0
+        for seed in range(10):
+            gen = ProceduralPlatformingGenerator(seed=seed)
+            sketch = gen.generate_sketch(f"ceiling_strip_{seed}")
+            cells = sketch.cells
+
+            def is_platform(x: int, y: int) -> bool:
+                if not (0 <= x < sketch.width and 0 <= y < sketch.height):
+                    return False
+                cell = cells[y][x]
+                return bool(cell) and "platform" in cell
+
+            def is_spike(x: int, y: int) -> bool:
+                if not (0 <= x < sketch.width and 0 <= y < sketch.height):
+                    return False
+                cell = cells[y][x]
+                return bool(cell) and "spike_trap" in cell
+
+            ceiling_spikes = [
+                (sx, sy)
+                for sx, sy in self._cells_by_label(sketch, "spike_trap")
+                if is_platform(sx, sy - 1)
+            ]
+            total_ceiling += len(ceiling_spikes)
+            for sx, sy in ceiling_spikes:
+                # The open corridor below the spike must leave at least the
+                # ambient corridor height plus the gallery raise as headroom.
+                floor_y = sy + 1
+                while floor_y < sketch.height - 1 and not is_platform(sx, floor_y):
+                    floor_y += 1
+                self.assertGreaterEqual(
+                    floor_y - sy,
+                    ambient + raise_rows,
+                    f"Ceiling spike at ({sx},{sy}) in seed {seed} hangs too low "
+                    "over the corridor floor",
+                )
+            # Grouping: ceiling spikes form contiguous horizontal strips.
+            by_row: dict[int, list[int]] = {}
+            for sx, sy in ceiling_spikes:
+                by_row.setdefault(sy, []).append(sx)
+            for xs in by_row.values():
+                run = 1
+                for a, b in zip(sorted(xs), sorted(xs)[1:]):
+                    run = run + 1 if b == a + 1 else 1
+                    longest_strip = max(longest_strip, run)
+        self.assertGreater(total_ceiling, 0, "no ceiling strips across 10 seeds")
+        self.assertGreaterEqual(
+            longest_strip, 2, "ceiling spikes should appear grouped in strips"
+        )
+
+    def test_spike_traps_appear_across_seeds(self):
+        total = 0
+        for seed in range(10):
+            gen = ProceduralPlatformingGenerator(seed=seed)
+            sketch = gen.generate_sketch(f"spike_present_{seed}")
+            total += len(self._cells_by_label(sketch, "spike_trap"))
+        self.assertGreater(total, 0, "expected spike traps across 10 seeds")
+
+    def test_importer_creates_attached_spike_tiles(self):
+        from level import LevelSketchImporter
+
+        width, height = 8, 6
+        cells: list[list[str | None]] = [
+            [None for _ in range(width)] for _ in range(height)
+        ]
+        for x in range(width):
+            cells[0][x] = "platform"
+            cells[height - 1][x] = "platform"
+        for y in range(height):
+            cells[y][0] = "platform"
+            cells[y][width - 1] = "platform"
+        for x in range(1, width - 1):
+            cells[4][x] = "platform"
+        cells[3][3] = "spike_trap"
+        cells[3][1] = "delver"
+        cells[3][5] = "goal"
+
+        level = LevelSketchImporter().import_sketch(
+            {"name": "spike_import", "grid_size": [width, height], "cells": cells}
+        )
+        traps = level.map.tilemap.get_layer("traps")
+        positions = {tile.position for tile in traps.get_elements("spike_trap")}
+        self.assertEqual(positions, {(3, 3)})
+
+    def test_importer_rejects_orphan_spike_trap(self):
+        from level import LevelSketchImporter, LevelSketchError
+
+        width, height = 8, 6
+        cells: list[list[str | None]] = [
+            [None for _ in range(width)] for _ in range(height)
+        ]
+        for x in range(width):
+            cells[0][x] = "platform"
+            cells[height - 1][x] = "platform"
+        for y in range(height):
+            cells[y][0] = "platform"
+            cells[y][width - 1] = "platform"
+        for x in range(1, width - 1):
+            cells[4][x] = "platform"
+        cells[2][3] = "spike_trap"  # floating: no platform 4-adjacent
+        cells[3][1] = "delver"
+        cells[3][5] = "goal"
+
+        with self.assertRaises(LevelSketchError):
+            LevelSketchImporter().import_sketch(
+                {"name": "spike_orphan", "grid_size": [width, height], "cells": cells}
+            )
 
 
 if __name__ == "__main__":

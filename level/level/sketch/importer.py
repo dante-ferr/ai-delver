@@ -37,6 +37,17 @@ class LevelSketchImporter:
                 if "platform" in elements:
                     tilemap.create_basic_platform_at((x, y), apply_formatting=False)
 
+        # 1b) Spike traps attach to adjacent platforms (orientation auto-derived).
+        for y, row in enumerate(sketch.cells):
+            for x, elements in enumerate(row):
+                if "spike_trap" in elements:
+                    tile = tilemap.create_spike_trap_at((x, y))
+                    if tile is None:
+                        raise LevelSketchError(
+                            f"spike_trap at ({x}, {y}) has no adjacent platform "
+                            "to attach to."
+                        )
+
         # 2) World objects (clear any concurrent platform across the footprint).
         for y, row in enumerate(sketch.cells):
             for x, elements in enumerate(row):

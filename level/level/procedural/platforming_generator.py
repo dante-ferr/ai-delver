@@ -225,6 +225,20 @@ class ProceduralPlatformingGenerator:
             pad_tiles=int(self.cfg.FINALIZE_PAD_TILES),
             top_margin_tiles=int(self.cfg.TOP_MARGIN_TILES),
             travel_direction=direction,
+            pit_depth_range=(
+                int(self.cfg.get("pit_min_depth_tiles", 1)),
+                int(self.cfg.get("pit_max_depth_tiles", 5)),
+            ),
+            spike_group_range=(
+                int(self.cfg.get("spike_group_min_tiles", 2)),
+                int(self.cfg.get("spike_group_max_tiles", 6)),
+            ),
+            ceiling_gallery_raise=int(
+                self.cfg.get("ceiling_gallery_raise_tiles", 2)
+            ),
+            ceiling_spike_odds=float(self.cfg.get("ceiling_spike_trap_odds", 0.6)),
+            wall_spike_odds=float(self.cfg.get("wall_spike_trap_odds", 1.0)),
+            rng=self.rng,
         )
 
     def generate_sketch(self, name: str, difficulty: float = 0.5) -> LevelSketch:

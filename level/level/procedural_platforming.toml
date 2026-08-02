@@ -28,8 +28,8 @@ post_climb_turn_odds = 0.0
 post_climb_turn_boost = 3.0
 
 # Floor / platform sizing
-min_platform_width = 4
-max_platform_width = 6
+min_platform_width = 1
+max_platform_width = 18
 min_continue_length = 4
 max_continue_length = 6
 spawn_platform_width = 4
@@ -48,6 +48,10 @@ min_delta_magnitude = 0
 easy_max_gap_tiles = 5
 # Pits must span at least this many empty tiles (horizontal depth).
 min_gap_tiles = 5
+# Pit depth (tiles below the higher floor edge) sampled per pit in this range.
+# A row of spike traps lines the pit floor at the sampled depth.
+pit_min_depth_tiles = 1
+pit_max_depth_tiles = 5
 # How many tiles of each platform edge are included in a pit span.
 span_edge_overlap_tiles = 2
 # Transition gap wideness range (tiles) for height-shifted floors (falls and climbs).
@@ -58,7 +62,7 @@ max_shift_transition_gap_tiles = 3
 # Heights are in Delver-height multiples; absolute tiles = ceil(DH * multiplier).
 # Min (= DH) is common but not exclusive — continuity keeps adjacent segments close.
 min_floor_clearance_delver_heights = 1.0
-max_floor_clearance_delver_heights = 1.0
+max_floor_clearance_delver_heights = 4.0
 # Max |Δheight| in tiles between successive floor corridors.
 clearance_height_max_step = 2
 clearance_height_stay_weight = 3.0
@@ -76,6 +80,23 @@ neighbor_pit_bridge_width = 2
 delay_ledge_odds = 0.08
 delay_ledge_width = 2
 delay_ledge_jump_height_fraction = 0.75
+# Spike trap decoration. Pit floors always carry a full spike strip (extremity
+# corner cells included — they point up like the rest of the row), and pit
+# internal walls stay clean. Spikes never clash on internal corners: two
+# 4-adjacent spikes always share one orientation, so a corner never shows
+# spikes on both adjoining surfaces.
+# Hanging ceiling strips appear in "galleries": stretches of walking corridor
+# whose ceiling is raised (never inside jump envelopes), with the strip length
+# sampled per gallery in this range so spikes appear grouped.
+spike_group_min_tiles = 2
+spike_group_max_tiles = 6
+# Gallery ceilings sit this many rows above the corridor's ambient ceiling, so
+# hanging spikes stay above the Delver's head and outside any required jump.
+ceiling_gallery_raise_tiles = 2
+# Per eligible corridor run, chance to carve one gallery holding a spike strip.
+ceiling_spike_trap_odds = 0.6
+# Per gallery end wall (raised rows above head height), chance of a wall spike.
+wall_spike_trap_odds = 1.0
 
 # Finalize padding around the painted path before sealing walls.
 finalize_pad_tiles = 2

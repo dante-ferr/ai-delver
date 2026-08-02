@@ -8,7 +8,7 @@ from typing import Any
 from level.config import config as level_config
 from level.exceptions import LevelError
 
-ALLOWED_ELEMENT_IDS = frozenset({"platform", "delver", "goal"})
+ALLOWED_ELEMENT_IDS = frozenset({"platform", "delver", "goal", "spike_trap"})
 
 
 class LevelSketchError(LevelError):
@@ -131,6 +131,12 @@ def validate_level_sketch(sketch: LevelSketch) -> None:
                     "(concurrent layers). Place the world object in an empty cell "
                     "above a floor platform."
                 )
+            # Spike traps attach to an adjacent platform: never share a cell.
+            if "spike_trap" in seen_in_cell and len(seen_in_cell) > 1:
+                raise LevelSketchError(
+                    f"Cell ({x}, {y}) cannot combine 'spike_trap' with other "
+                    "elements. Hazards occupy their own cell next to a platform."
+                )
 
             on_perimeter = (
                 x == 0 or y == 0 or x == sketch.width - 1 or y == sketch.height - 1
@@ -139,6 +145,11 @@ def validate_level_sketch(sketch: LevelSketch) -> None:
                 raise LevelSketchError(
                     f"Cell ({x}, {y}) places delver/goal on the perimeter. "
                     "Keep spawns/goals interior so surrounding walls can seal the map."
+                )
+            if on_perimeter and "spike_trap" in seen_in_cell:
+                raise LevelSketchError(
+                    f"Cell ({x}, {y}) places spike_trap on the perimeter. "
+                    "Hazards must sit interior, attached to an adjacent platform."
                 )
 
     if delver_count != 1:

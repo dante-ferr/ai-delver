@@ -1,7 +1,8 @@
-"""Crop, seal, fill unreachable exterior, and place delver / goal."""
+"""Crop, seal, fill unreachable exterior, and place delver / goal / hazards."""
 
 from __future__ import annotations
 
+import random
 from typing import Any
 
 from level.config import config as level_config
@@ -19,16 +20,41 @@ def finalize_sketch_dict(
     pad_tiles: int = 2,
     top_margin_tiles: int = 1,
     travel_direction: int = 1,
+    pit_depth_range: tuple[int, int] = (1, 5),
+    spike_group_range: tuple[int, int] = (2, 6),
+    ceiling_gallery_raise: int = 2,
+    ceiling_spike_odds: float = 0.6,
+    wall_spike_odds: float = 1.0,
+    rng: random.Random | None = None,
 ) -> dict[str, Any]:
-    """Build a dense sketch dict with walls, exterior fill, and actors.
+    """Build a dense sketch dict with walls, exterior fill, actors, and hazards.
 
     Only the carved path corridor stays empty: painted clearance plus the air
     cell immediately above each floor. Every other interior cell becomes a
     platform so dead space around the path is filled solid.
 
+    Pit gaps become spike-floored shafts: open air down to a sampled depth
+    (``pit_depth_range``, measured below the lower floor edge), then a flat
+    full-width row of spike traps on solid ground (extremity corner cells
+    included — they point up with the row). Pit internal walls stay clean.
+
+    Decorative spikes are applied to surfaces in open air — never embedded in
+    rock — and only where the Delver never needs to touch. The painted
+    clearance is the movement envelope: it provably contains the body during
+    required traversal (walking corridors are ≥ Delver height; jump vaults
+    are ≥ jump apex + body). So ceiling strips hang from *gallery* ceilings
+    raised ``ceiling_gallery_raise`` rows strictly above each stretch's own
+    envelope, which keeps spikes untouchable during required movement at any
+    corridor height; only optional jumps can reach them. Strip lengths are
+    sampled from ``spike_group_range`` so spikes appear grouped, and wall
+    spikes may mount the raised gallery end walls above the envelope.
+    Internal corners never show spikes on both adjoining surfaces: 4-adjacent
+    spikes always share one orientation.
+
     ``travel_direction`` is +1 for left-to-right levels, -1 for right-to-left;
     it only selects which end of the start/goal segments the actors anchor at.
     """
+    rng = rng if rng is not None else random.Random(0)
     if not grid:
         raise ValueError("Cannot finalize an empty sketch grid.")
 
@@ -92,16 +118,10 @@ def finalize_sketch_dict(
                     if (px, air_y) not in platforms:
                         playable_air.add((px, air_y))
 
-    from level.sketch.platforming_limits import compute_platforming_limits
-    import math
-
-    limits = compute_platforming_limits()
-    min_pit_depth = max(5, math.ceil(limits.max_jump_height_tiles) + 1)
-
     # Pit gaps (columns explicitly registered by try_pit during generation)
-    # propagate open air down so pits are at least min_pit_depth (JH + 1) tiles deep.
-    # Translate with the same +1 wall offset as to_local, else the span shifts
-    # one column left and carves under the takeoff lip / misses the last gap column.
+    # become spike-floored shafts. Translate with the same +1 wall offset as
+    # to_local, else the span shifts one column left and carves under the
+    # takeoff lip / misses the last gap column.
     sorted_pit_cols = sorted([
         x - origin_x + 1 for x in grid.pit_columns if 0 < (x - origin_x + 1) < width - 1
     ])
@@ -114,8 +134,14 @@ def finalize_sketch_dict(
         else:
             spans[-1].append(x)
 
+    min_depth, max_depth = pit_depth_range
+    min_depth = max(1, int(min_depth))
+    max_depth = max(min_depth, int(max_depth))
+
+    spikes: set[tuple[int, int]] = set()
+
     for span in spans:
-        # Find adjacent upper floor height for the span
+        # Adjacent exposed floor rows on both lips of the span.
         edge_ys = [
             py for x in span
             for (px, py) in platforms
@@ -123,47 +149,42 @@ def finalize_sketch_dict(
         ]
         if not edge_ys:
             continue
-        ref_y = min(edge_ys)
-        min_pit_bottom = min(height - 2, ref_y + min_pit_depth)
+        higher_y = min(edge_ys)
+        lower_y = max(edge_ys)
+        depth = rng.randint(min_depth, max_depth)
 
-        # Enforce min_pit_depth (JH + 1) tiles open air below the edge
+        # One flat spike row per span, below the lower lip (the jump arc never
+        # reaches it) and above the first existing platform below the edge.
+        first_platform_below = min(
+            (
+                y
+                for x in span
+                for y in range(lower_y + 1, height - 1)
+                if (x, y) in platforms
+            ),
+            default=None,
+        )
+        spike_row = min(lower_y + depth, height - 2)
+        if first_platform_below is not None:
+            spike_row = min(spike_row, first_platform_below - 1)
+        if spike_row < lower_y + 1:
+            continue  # blocked immediately below the edge; leave solid
+
         for x in span:
-            for dy in range(ref_y + 1, min_pit_bottom + 1):
-                pos = (x, dy)
-                if pos in platforms:
-                    platforms.remove(pos)
+            for y in range(higher_y + 1, spike_row):
+                pos = (x, y)
+                platforms.discard(pos)
                 playable_air.add(pos)
-
-        # Check if any column in the span has a platform below min_pit_bottom
-        span_platforms_below = [
-            cy for x in span
-            for cy in range(min_pit_bottom + 1, height - 1)
-            if (x, cy) in platforms
-        ]
-
-        if span_platforms_below:
-            pit_floor_y = min(span_platforms_below)
-            # Clear open air down to pit_floor_y - 1 and paint uniform pit floor at pit_floor_y
-            for x in span:
-                for dy in range(min_pit_bottom + 1, pit_floor_y):
-                    pos = (x, dy)
-                    if pos in platforms:
-                        platforms.remove(pos)
-                    playable_air.add(pos)
-                platforms.add((x, pit_floor_y))
-        else:
-            # Clear open air all the way down to bottom perimeter wall
-            for x in span:
-                for dy in range(min_pit_bottom + 1, height - 1):
-                    if (x, dy) in platforms:
-                        platforms.remove((x, dy))
-                    playable_air.add((x, dy))
+            spike = (x, spike_row)
+            platforms.discard(spike)
+            playable_air.discard(spike)
+            spikes.add(spike)
 
     # Fill every interior cell that is not part of the carved corridor.
     for y in range(1, height - 1):
         for x in range(1, width - 1):
             pos = (x, y)
-            if pos in platforms or pos in playable_air:
+            if pos in platforms or pos in playable_air or pos in spikes:
                 continue
             platforms.add(pos)
 
@@ -229,14 +250,45 @@ def finalize_sketch_dict(
         platforms.add(pos)
 
     # Carve platforms out of actor footprints.
+    actor_footprints: set[tuple[int, int]] = set()
     for anchor, size in ((delver_anchor, delver_size), (goal_anchor, goal_size)):
-        for cell in _footprint(anchor, size):
+        footprint = _footprint(anchor, size)
+        actor_footprints |= footprint
+        for cell in footprint:
             platforms.discard(cell)
+
+    # Any spike left without an adjacent platform master (e.g. floating over a
+    # lower corridor passing beneath a pit) collapses into solid rock instead.
+    for spike in list(spikes):
+        if not _master_directions(spike, platforms):
+            spikes.discard(spike)
+            platforms.add(spike)
+
+    _place_spike_galleries(
+        platforms=platforms,
+        playable_air=playable_air,
+        spikes=spikes,
+        width=width,
+        height=height,
+        delver_anchor=delver_anchor,
+        delver_size=delver_size,
+        goal_anchor=goal_anchor,
+        goal_size=goal_size,
+        spike_group_range=spike_group_range,
+        ceiling_gallery_raise=ceiling_gallery_raise,
+        ceiling_spike_odds=ceiling_spike_odds,
+        wall_spike_odds=wall_spike_odds,
+        rng=rng,
+    )
 
     cells: list[list[Any]] = [[None for _ in range(width)] for _ in range(height)]
     for px, py in platforms:
         if 0 <= px < width and 0 <= py < height:
             cells[py][px] = "platform"
+
+    for sx, sy in spikes:
+        if 0 <= sx < width and 0 <= sy < height:
+            cells[sy][sx] = "spike_trap"
 
     for anchor, label in ((delver_anchor, "delver"), (goal_anchor, "goal")):
         ax, ay = anchor
@@ -251,6 +303,163 @@ def finalize_sketch_dict(
         "grid_size": [width, height],
         "cells": cells,
     }
+
+
+def _master_directions(
+    pos: tuple[int, int], platforms: set[tuple[int, int]]
+) -> set[tuple[int, int]]:
+    """Directions of platform cells adjacent to ``pos`` (an AttachedTile's masters)."""
+    x, y = pos
+    return {
+        d
+        for d in ((0, -1), (0, 1), (-1, 0), (1, 0))
+        if (x + d[0], y + d[1]) in platforms
+    }
+
+
+def _place_spike_galleries(
+    *,
+    platforms: set[tuple[int, int]],
+    playable_air: set[tuple[int, int]],
+    spikes: set[tuple[int, int]],
+    width: int,
+    height: int,
+    delver_anchor: tuple[int, int],
+    delver_size: tuple[int, int],
+    goal_anchor: tuple[int, int],
+    goal_size: tuple[int, int],
+    spike_group_range: tuple[int, int],
+    ceiling_gallery_raise: int,
+    ceiling_spike_odds: float,
+    wall_spike_odds: float,
+    rng: random.Random,
+) -> None:
+    """Raise ceilings into galleries above the movement envelope; apply strips.
+
+    The contiguous open air above an exposed floor is the painted movement
+    envelope: by construction it contains the Delver's body during required
+    traversal (walking corridors are ≥ Delver height; jump vaults are ≥ jump
+    apex + body). A gallery therefore carves ``ceiling_gallery_raise`` rows
+    strictly above the *highest* envelope top of its run and hangs a grouped
+    spike strip from the raised ceiling — untouchable during required
+    movement at any corridor height, reachable only by optional jumps. Wall
+    spikes may mount the gallery end walls on the rows between the envelope
+    top and the strip. Internal corners never show spikes on both adjoining
+    surfaces: every placed spike has exactly one platform master orientation.
+    """
+    if ceiling_spike_odds <= 0.0 and wall_spike_odds <= 0.0:
+        return
+
+    raise_rows = max(1, int(ceiling_gallery_raise))
+    g_min, g_max = spike_group_range
+    g_min = max(1, int(g_min))
+    g_max = max(g_min, int(g_max))
+
+    open_air = playable_air - platforms - spikes
+
+    actor_columns: set[int] = set()
+    for anchor, size in ((delver_anchor, delver_size), (goal_anchor, goal_size)):
+        ax, _ = anchor
+        fw, _ = size
+        actor_columns.update(range(ax - 1, ax + fw + 1))
+
+    # Candidate columns: an exposed floor with its open-air envelope above.
+    # eligible[x] = (floor_y, envelope_top).
+    eligible: dict[int, tuple[int, int]] = {}
+    for x in range(1, width - 1):
+        if x in actor_columns:
+            continue
+        for y in range(1, height - 1):
+            if (x, y) not in platforms or (x, y - 1) not in open_air:
+                continue
+            air_h = 0
+            while (x, y - 1 - air_h) in open_air:
+                air_h += 1
+            eligible[x] = (y, y - air_h)
+            break  # one gallery floor per column
+
+    # Contiguous runs of eligible columns sharing the same floor row.
+    runs: list[list[int]] = []
+    for x in sorted(eligible):
+        if (
+            not runs
+            or x > runs[-1][-1] + 1
+            or eligible[runs[-1][-1]][0] != eligible[x][0]
+        ):
+            runs.append([x])
+        else:
+            runs[-1].append(x)
+
+    # Phase 1: pick galleries and carve their raised ceilings. A gallery spans
+    # its strip plus one end column per side, so halls stay snug and strips
+    # fill the whole raised ceiling.
+    galleries: list[tuple[int, int, int]] = []  # (x0, x1, spike_row)
+    for run in runs:
+        if len(run) < g_min + 2 or rng.random() >= ceiling_spike_odds:
+            continue
+        # The strip row clears the tallest envelope in the run by `raise_rows`.
+        spike_row = min(eligible[x][1] for x in run) - raise_rows
+        if spike_row < 2:
+            continue
+        carve_rows_by_x = {
+            x: range(spike_row, eligible[x][1]) for x in run
+        }
+        # Every carved cell must be solid rock (never other air), the cap
+        # above the strip must be solid, and carving must never steal an
+        # existing spike's master.
+        if any(
+            (x, spike_row - 1) not in platforms
+            or any((x, cy) not in platforms for cy in carve_rows_by_x[x])
+            or any(
+                (nx, ny) in spikes
+                for cy in carve_rows_by_x[x]
+                for nx, ny in ((x, cy - 1), (x, cy + 1), (x - 1, cy), (x + 1, cy))
+            )
+            for x in run
+        ):
+            continue
+        length = min(rng.randint(g_min, g_max), len(run) - 2)
+        start = rng.randint(0, len(run) - (length + 2))
+        gallery = run[start : start + length + 2]
+        for x in gallery:
+            for cy in carve_rows_by_x[x]:
+                platforms.discard((x, cy))
+                playable_air.add((x, cy))
+        galleries.append((gallery[0], gallery[-1], spike_row))
+
+    # Phase 2: apply strips and end-wall spikes against the final platforms.
+    for x0, x1, spike_row in galleries:
+        # Strip cells must hang from a lone ceiling master (end columns touch
+        # an end wall too — internal corners stay empty).
+        strip_cols = [
+            x
+            for x in range(x0, x1 + 1)
+            if _master_directions((x, spike_row), platforms) == {(0, -1)}
+        ]
+        if not strip_cols:
+            continue
+        for x in strip_cols:
+            cell = (x, spike_row)
+            playable_air.discard(cell)
+            spikes.add(cell)
+        if wall_spike_odds > 0.0:
+            for end_x, outward in ((x0, (-1, 0)), (x1, (1, 0))):
+                envelope_top = eligible[end_x][1]
+                for cy in range(spike_row + 1, envelope_top):
+                    cell = (end_x, cy)
+                    if cell not in playable_air:
+                        continue
+                    if _master_directions(cell, platforms) != {outward}:
+                        continue
+                    if rng.random() < wall_spike_odds:
+                        playable_air.discard(cell)
+                        spikes.add(cell)
+
+    # Safety net: any spike whose master vanished collapses into solid rock.
+    for spike in list(spikes):
+        if not _master_directions(spike, platforms):
+            spikes.discard(spike)
+            platforms.add(spike)
 
 
 def _seg_to_local(
